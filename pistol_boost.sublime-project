@@ -2,7 +2,18 @@
 	"folders":
 	[
 		{
-			"path": "."
+			"path": ".",
+		},
+		{
+			"path": "/home/hongphuc/odin-lang/odin/core"
+		},
+	],
+	"build_systems":
+	[
+		{
+			"name": "odin",
+			"cmd": ["odin", "run", "$project_path", "-debug"],
+			"file_regex": "^(.*?)\\(([0-9]+):([0-9]+)\\) (.+)$"
 		}
 	],
 	"settings":
@@ -11,8 +22,8 @@
 		{
 			"odin":
 			{
-				"enabled": true
-			}
-		}
-	}
+				"enabled": true,
+			},
+		},
+	},
 }
