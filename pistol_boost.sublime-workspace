@@ -1,0 +1,532 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"print",
+				"printfln(fmt: string, args: ..any, flush := true) -> (bytes_written: int)"
+			],
+			[
+				"imp",
+				"import"
+			],
+			[
+				"tex",
+				"tex_descs"
+			],
+			[
+				"c",
+				"command"
+			]
+		]
+	},
+	"buffers":
+	[
+		{
+			"file": "pistol_boost.sublime-project",
+			"file_size": 123,
+			"file_write_time": 134360058190605510,
+			"settings":
+			{
+				"buffer_size": 123,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
+				[
+					4,
+					1,
+					"insert",
+					{
+						"characters": "\n"
+					},
+					"AgAAADsAAAAAAAAAPAAAAAAAAAAAAAAAPAAAAAAAAAA+AAAAAAAAAAAAAAA",
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAA7AAAAAAAAADsAAAAAAAAAAAAAAAAga0A"
+				],
+				[
+					5,
+					1,
+					"insert_snippet",
+					{
+						"contents": "\"$0\""
+					},
+					"AQAAAD4AAAAAAAAAQAAAAAAAAAAAAAAA",
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAA+AAAAAAAAAD4AAAAAAAAAAAAAAAAA8L8"
+				],
+				[
+					6,
+					1,
+					"insert",
+					{
+						"characters": "a"
+					},
+					"AQAAAD8AAAAAAAAAQAAAAAAAAAAAAAAA",
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAA/AAAAAAAAAD8AAAAAAAAAAAAAAAAA8L8"
+				],
+				[
+					7,
+					1,
+					"left_delete",
+					null,
+					"AQAAAD8AAAAAAAAAPwAAAAAAAAABAAAAYQ",
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAABAAAAAAAAAAEAAAAAAAAAAAAAAAAAA8L8"
+				],
+				[
+					8,
+					1,
+					"run_macro_file",
+					{
+						"file": "res://Packages/Default/Delete Left Right.sublime-macro"
+					},
+					"AgAAAD4AAAAAAAAAPgAAAAAAAAABAAAAIj4AAAAAAAAAPgAAAAAAAAABAAAAIg",
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAA/AAAAAAAAAD8AAAAAAAAAAAAAAAAA8L8"
+				],
+				[
+					9,
+					3,
+					"left_delete",
+					null,
+					"AwAAAD0AAAAAAAAAPQAAAAAAAAABAAAACTwAAAAAAAAAPAAAAAAAAAABAAAACTsAAAAAAAAAOwAAAAAAAAABAAAACg",
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAA+AAAAAAAAAD4AAAAAAAAAAAAAAAAA8L8"
+				],
+				[
+					10,
+					1,
+					"insert",
+					{
+						"characters": "~"
+					},
+					"AQAAADsAAAAAAAAAPAAAAAAAAAAAAAAA",
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAA7AAAAAAAAADsAAAAAAAAAAAAAAAAA8L8"
+				],
+				[
+					11,
+					1,
+					"left_delete",
+					null,
+					"AQAAADsAAAAAAAAAOwAAAAAAAAABAAAAfg",
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAA8AAAAAAAAADwAAAAAAAAAAAAAAAAA8L8"
+				]
+			]
+		}
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"terminus: Open",
+				"Terminus: Toggle Panel"
+			],
+			[
+				"terminus: open",
+				"Terminus: Open Default Shell in Tab (View)"
+			],
+			[
+				"insta",
+				"Package Control: Install Package"
+			],
+			[
+				"lsp",
+				"LSP: Enable Language Server in Project"
+			],
+			[
+				"package insta",
+				"Package Control: Install Package"
+			],
+			[
+				"enab",
+				"LSP: Enable Language Server Globally"
+			],
+			[
+				"enable",
+				"LSP: Enable Language Server in Project"
+			],
+			[
+				"keyb",
+				"Preferences: Key Bindings"
+			],
+			[
+				"lsp: enab",
+				"LSP: Enable Language Server in Project"
+			],
+			[
+				"pack remve",
+				"Package Control: Remove Package"
+			],
+			[
+				"instal",
+				"Package Control: Install Package"
+			],
+			[
+				"install ",
+				"Package Control: Install Package"
+			],
+			[
+				"remove",
+				"Package Control: Remove Package"
+			],
+			[
+				"package ",
+				"Package Control: Upgrade Package"
+			],
+			[
+				"install",
+				"Package Control: Install Package"
+			],
+			[
+				"settin",
+				"Preferences: Settings"
+			],
+			[
+				"packa",
+				"Package Control: Remove Package"
+			],
+			[
+				"pack",
+				"Package Control: Remove Package"
+			],
+			[
+				"control",
+				"Package Control: Install Package"
+			],
+			[
+				"cust",
+				"UI: Customize Color Scheme"
+			],
+			[
+				"sche",
+				"UI: Customize Color Scheme"
+			],
+			[
+				"custom",
+				"UI: Customize Color Scheme"
+			],
+			[
+				"select color",
+				"UI: Select Color Scheme"
+			],
+			[
+				"theme",
+				"UI: Customize Color Scheme"
+			]
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 142.0,
+		"history":
+		[
+			"q",
+			"quit",
+			"exit",
+			"clear",
+			"odin"
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/mnt/fedora-extra/Personal/pistol_boost"
+	],
+	"file_history":
+	[
+		"/mnt/fedora-extra/Personal/pistol_boost/main.odin",
+		"/mnt/fedora-extra/Personal/cds/src/shaders/skinned.glsl",
+		"/mnt/fedora-extra/Personal/cds/src/audio.odin",
+		"/mnt/fedora-extra/Personal/cds/demo.odin",
+		"/mnt/fedora-extra/Personal/cds/src/ui_sokol/renderer.odin",
+		"/mnt/fedora-extra/Personal/cds/cds.sublime-project",
+		"/home/hongphuc/odin-lang/odin/vendor/box3d/box3d.odin",
+		"/mnt/fedora-extra/Personal/cds/src/ui.odin",
+		"/mnt/fedora-extra/Personal/cds/src_legacy/ui.odin",
+		"/mnt/fedora-extra/Personal/cds/src_legacy/main.odin",
+		"/home/hongphuc/odin-lang/odin/core/image/png/png.odin",
+		"/mnt/fedora-extra/Personal/cds/external/core/image/png/png.odin",
+		"/mnt/fedora-extra/Personal/cds/external/core/image/general.odin",
+		"/mnt/fedora-extra/Personal/cds/src/ui_extra/controls.odin",
+		"/mnt/fedora-extra/Personal/cds/external/core/image/common.odin",
+		"/mnt/fedora-extra/Personal/cds/src/game.odin",
+		"/mnt/fedora-extra/Personal/cds/src/camera.odin",
+		"/mnt/fedora-extra/Personal/cds/src/player.odin",
+		"/mnt/fedora-extra/Personal/cds/src/mouse.odin",
+		"/mnt/fedora-extra/Personal/cds/src/debug.odin",
+		"/mnt/fedora-extra/Personal/cds/src/physics.odin",
+		"/mnt/fedora-extra/Personal/cds/src/mesh.odin",
+		"/mnt/fedora-extra/Personal/cds/src/main.odin",
+		"/home/hongphuc/.config/sublime-text/Packages/User/LimitTabs.sublime-settings",
+		"/mnt/fedora-extra/Personal/cds/src/console.odin",
+		"/home/hongphuc/.config/sublime-text/Packages/LimitTabs/LimitTabs.sublime-settings",
+		"/mnt/fedora-extra/Personal/cds/src/build_shaders.sh",
+		"/mnt/fedora-extra/Personal/cds/src/environment.odin",
+		"/home/hongphuc/.config/sublime-text/Packages/User/ZenTabs.sublime-settings",
+		"/home/hongphuc/.config/sublime-text/Packages/Zen Tabs/ZenTabs.sublime-settings",
+		"/home/hongphuc/.config/sublime-text/Packages/Zen Tabs/TODO.todo"
+	],
+	"find":
+	{
+		"height": 29.0
+	},
+	"find_in_files":
+	{
+		"height": 107.0,
+		"where_history":
+		[
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"scrollbar_highlights": true,
+		"show_context": true,
+		"use_buffer2": true,
+		"use_gitignore": true,
+		"whole_word": true,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "pistol_boost.sublime-project",
+					"selected": true,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 123,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								16,
+								16
+							]
+						],
+						"settings":
+						{
+							"lsp_uri": "file:///mnt/fedora-extra/Personal/pistol_boost/pistol_boost.sublime-project",
+							"syntax": "Packages/JSON/JSON.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 29.0
+	},
+	"input":
+	{
+		"height": 0.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.LSP Log Panel":
+	{
+		"height": 0.0,
+		"history":
+		[
+		]
+	},
+	"output.Terminus":
+	{
+		"height": 142.0,
+		"history":
+		[
+		]
+	},
+	"output.Terminus 2":
+	{
+		"height": 142.0,
+		"history":
+		[
+		]
+	},
+	"output.Terminus 3":
+	{
+		"height": 187.0,
+		"history":
+		[
+		]
+	},
+	"output.diagnostics":
+	{
+		"height": 0.0,
+		"history":
+		[
+		]
+	},
+	"output.exec":
+	{
+		"height": 131.0,
+		"history":
+		[
+		]
+	},
+	"output.find_results":
+	{
+		"height": 142.0,
+		"history":
+		[
+		]
+	},
+	"output.mdpopups":
+	{
+		"height": 0.0,
+		"history":
+		[
+		]
+	},
+	"pinned_build_system": "cds",
+	"project": "pistol_boost.sublime-project",
+	"replace":
+	{
+		"height": 54.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"dem",
+				"demo.odin"
+			],
+			[
+				"ui_sok",
+				"cds/src/ui_sokol/renderer.odin"
+			],
+			[
+				"legacy min",
+				"cds/src_legacy/main.odin"
+			],
+			[
+				"projec",
+				"cds/cds.sublime-project"
+			],
+			[
+				"render",
+				"cds/src/ui_sokol/renderer.odin"
+			],
+			[
+				"ui",
+				"cds/src/ui.odin"
+			],
+			[
+				"png",
+				"core/image/png/png.odin"
+			],
+			[
+				"image.odin",
+				"external/core/image/general.odin"
+			],
+			[
+				"image png",
+				"external/core/image/png/png.odin"
+			],
+			[
+				"pro",
+				"cds.sublime-project"
+			]
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+		"lsp_show_inlay_hints": false
+	},
+	"show_minimap": true,
+	"show_open_files": false,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 234.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}
