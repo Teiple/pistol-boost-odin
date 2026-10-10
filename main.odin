@@ -19,16 +19,18 @@ main :: proc() {
 		width            = 960,
 		height           = 540,
 		disable_vsync    = true,
-		enable_clipboard = true,
-		clipboard_size   = 1024,
 		init_cb    = proc "c" () {
-
+			context = odin_ctx
+			game_init()
 		},
 		frame_cb   = proc "c" () {
-
+			context = odin_ctx
+			dt : = cast(f32)sapp.frame_duration_unfiltered()
+			game_update(dt)
 		},
 		cleanup_cb = proc "c" () {
-
+			context = odin_ctx
+			game_destroy()
 		}
 	})
 
