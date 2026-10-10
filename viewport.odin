@@ -13,12 +13,12 @@ Viewport :: struct {
 	base_size : [2]f32,
 	dest_rect : [4]f32,
 
-	// offscreen and display uses the same unlit pipeline
 	display_pipeline : sg.Pipeline,
 	display_shader   : sg.Shader,
 	
-	offscreen_pass     : sg.Pass,
-	offscreen_img      : sg.Image,
+	offscreen_pass      : sg.Pass,
+	offscreen_color_img : sg.Image,
+	offscreen_depth_img : sg.Image,
 
 	display_pass   : sg.Pass,
 	display_bindings : sg.Bindings,
@@ -29,19 +29,36 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32) {
 
 	// Offscreen pipeline & bindingns
 	{
-		vp.offscreen_img = sg.make_image({
+		offscreen_size := cast([2]i32)vp.base_size
+		vp.offscreen_color_img = sg.make_image({
 			usage  = {
 				color_attachment = true,
 			},
-			width  = i32(vp.base_size.x),
-			height = i32(vp.base_size.y),
+			width  = offscreen_size.x,
+			height = offscreen_size.y,
 			pixel_format = .RGBA8,
 			sample_count = 1,
 		})
 
-		vp.offscreen_pass.attachments.colors[0] = sg.make_view({
+		vp.offscreen_depth_img = sg.make_image({
+			usage  = {
+				depth_stencil_attachment = true,
+			},
+			width  = offscreen_size.x,
+			height =  offscreen_size.y,
+			pixel_format = .DEPTH,
+			sample_count = 1,
+		})
+
+		vp.offscreen_pass.attachments.colors[0]     = sg.make_view({
 			color_attachment = {
-				image = vp.offscreen_img
+				image = vp.offscreen_color_img
+			},
+		})
+
+		vp.offscreen_pass.attachments.depth_stencil = sg.make_view({
+			depth_stencil_attachment = {
+				image = vp.offscreen_depth_img
 			},
 		})
 
@@ -98,16 +115,16 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32) {
 				size = cast(uint)slice.size(vertices), 
 			}	
 		})
-		vp.display_bindings.samplers[shaders.SMP_smp] = sg.make_sampler({
+		vp.display_bindings.samplers[shaders.SMP_unlit_smp] = sg.make_sampler({
 			min_filter = .LINEAR,
 			mag_filter = .LINEAR,
 			wrap_u     = .CLAMP_TO_EDGE,
 			wrap_v     = .CLAMP_TO_EDGE,
 		})
 		
-		vp.display_bindings.views[shaders.VIEW_tex] = sg.make_view({
+		vp.display_bindings.views[shaders.VIEW_unlit_tex] = sg.make_view({
 			texture = {
-				image = vp.offscreen_img
+				image = vp.offscreen_color_img
 			},
 		})
 
@@ -148,8 +165,8 @@ viewport_end :: proc(vp : ^Viewport) {
 	}
 	sg.apply_pipeline(vp.display_pipeline)
 	sg.apply_bindings(vp.display_bindings)
-	viewport_mvp : shaders.Vs_Params = { mvp = linalg.MATRIX4F32_IDENTITY }
-	sg.apply_uniforms(shaders.UB_vs_params, {
+	viewport_mvp : shaders.Unlit_Vs_Params = { mvp = linalg.MATRIX4F32_IDENTITY }
+	sg.apply_uniforms(shaders.UB_unlit_vs_params, {
 		ptr = &viewport_mvp, size = size_of(viewport_mvp)
 	})
 	// Draw viewport triangle
@@ -160,14 +177,20 @@ viewport_end :: proc(vp : ^Viewport) {
 }
 
 viewport_destroy :: proc(vp : ^Viewport) {
-	sg.destroy_image(vp.offscreen_img)
+	sg.destroy_image(vp.offscreen_color_img)
+	sg.destroy_image(vp.offscreen_depth_img)
 	
 	sg.destroy_view(vp.offscreen_pass.attachments.colors[0])
-	sg.destroy_view(vp.display_bindings.views[shaders.VIEW_tex])
+	sg.destroy_view(vp.offscreen_pass.attachments.depth_stencil)
+	sg.destroy_view(vp.display_bindings.views[shaders.VIEW_unlit_tex])
 
 	sg.destroy_buffer(vp.display_bindings.vertex_buffers[0])
-	sg.destroy_sampler(vp.display_bindings.samplers[shaders.SMP_smp])
+	sg.destroy_sampler(vp.display_bindings.samplers[shaders.SMP_unlit_smp])
 	
 	sg.destroy_shader(vp.display_shader)
 	sg.destroy_pipeline(vp.display_pipeline)
+}
+
+viewport_get_aspect :: proc(vp : ^Viewport) -> f32 {
+	return vp.base_size.x / vp.base_size.y
 }
