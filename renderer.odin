@@ -23,7 +23,6 @@ Renderer :: struct {
 	pip_resources : [Pipeline_Type]Pipeline_Resource,
 	shaders       : [Pipeline_Type]sg.Shader,
 	bindings      : sg.Bindings,
-	meshes        : [dynamic]Mesh,
 }
 
 // For .RGBA8 pixel format
@@ -74,11 +73,6 @@ renderer_destroy :: proc(renderer : ^Renderer) {
 		sg.destroy_pipeline(p.pipeline)
 	}
 
-	for &m in renderer.meshes {
-		mesh_destroy(&m)
-	}
-	delete(renderer.meshes)
-
 	// destroy shared resources, seems like the right place
 	sg.destroy_image(shared_white_pixel_image)
 }
@@ -105,10 +99,3 @@ renderer_draw_mesh :: proc(
 
 	sg.draw(0, mesh.index_count, 1)
 }
-
-
-renderer_add_mesh :: proc(renderer : ^Renderer, mesh : Mesh) {
-	append(&renderer.meshes, mesh)
-}
-
-

@@ -21,6 +21,10 @@ camera_init_default :: proc(camera : ^Camera, position : [3]f32, target : [3]f32
 	camera.target       = target
 }
 
+camera_destroy :: proc(camera : ^Camera) {
+	// nothing for now
+}
+
 camera_view_projection_matrix :: proc(camera: ^Camera, vp: ^Viewport) -> matrix[4, 4]f32 {
 	proj := linalg.matrix4_perspective_f32(
 		fovy   = math.to_radians_f32(camera.fovy_degrees),

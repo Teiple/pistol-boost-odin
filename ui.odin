@@ -1,7 +1,6 @@
 package main
 // This is a very mininal anchor based ui system
 
-import "core:fmt"
 import "core:math/linalg"
 import "core:slice"
 import sg "sokol-odin/sokol/gfx"
@@ -20,26 +19,32 @@ Font_Id :: enum {
 }
 
 Font :: struct {
-    atlas_size     : [2]f32,
-    base_size      : f32,
-    font_spacing   : f32,
-    line_spacing   : f32,
-    ascent         : f32,
-    descent        : f32,
-    baked_chars    : [96]tt.bakedchar,
+    atlas_size   : [2]f32,
+    base_size    : f32,
+    font_spacing : f32,
+    line_spacing : f32,
+    ascent       : f32,
+    descent      : f32,
+    baked_chars  : [96]tt.bakedchar,
+    font_img     : sg.Image,
+    font_view    : sg.View, 
 }
 
 Ui_Builder :: struct {
-    current_container : [4]f32
+    current_container : [4]f32,
+    commands          : [dynamic]Ui_Cmd,
 }
 
 Ui :: struct {
-    font_img    : sg.Image,
     pipeline    : sg.Pipeline,
     shader      : sg.Shader,
     bindings    : sg.Bindings,
     
-    fonts       : [Font_Id]Font,
+    // for drawing rects
+    rect_img    : sg.Image,
+    rect_view   : sg.View,
+
+    fonts : [Font_Id]Font,
 
     // These can be used to impl growing buf but for 
     // now they are just for validation
@@ -52,28 +57,30 @@ Ui :: struct {
     builder  : Ui_Builder,
 }
 
-ui_init_default :: proc(ui : ^Ui) {
-    ui.fonts = {
-        .Normal = ui_make_font(ui, #load("assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf")),
-        .Mono   = ui_make_font(ui, #load("assets/fonts/NotoSans_Mono.ttf")),
-    }
+Ui_Cmd :: struct {
+    start_index : int,
+    num_indices : int,
+    view        : sg.View,
+}
 
+ui_init_default :: proc(ui : ^Ui) {
     ui.shader   = sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
-	ui.pipeline = sg.make_pipeline({
-		index_type  = .UINT16,
-		shader      = ui.shader,
-		layout      = {
-			attrs   = {
-				shaders.ATTR_unlit_pos       = { format = .FLOAT3 },
-				shaders.ATTR_unlit_color0    = { format = .FLOAT4 },
-				shaders.ATTR_unlit_texcoord0 = { format = .FLOAT2 },
-			}
-		},
-		cull_mode   = .NONE,
-		depth       = {
-			write_enabled = false,
-			compare       = .ALWAYS
-		},
+    
+    ui.pipeline = sg.make_pipeline({
+        index_type  = .UINT16,
+        shader      = ui.shader,
+        layout      = {
+            attrs   = {
+                shaders.ATTR_unlit_pos       = { format = .FLOAT3 },
+                shaders.ATTR_unlit_color0    = { format = .FLOAT4 },
+                shaders.ATTR_unlit_texcoord0 = { format = .FLOAT2 },
+            }
+        },
+        cull_mode   = .NONE,
+        depth       = {
+            write_enabled = false,
+            compare       = .ALWAYS
+        },
         colors      = {
             0 = {
                 blend = {
@@ -86,7 +93,12 @@ ui_init_default :: proc(ui : ^Ui) {
                 }
             }
         }
-	})
+    })
+    
+    ui.fonts = {
+        .Normal = ui_make_font(ui, #load("assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf")),
+        .Mono   = ui_make_font(ui, #load("assets/fonts/NotoSans_Mono.ttf")),
+    }
 
     ui.cur_ibuf_cap = 1024
     ui.cur_vbuf_cap = 1024
@@ -107,16 +119,34 @@ ui_init_default :: proc(ui : ^Ui) {
     })
 
     ui.bindings.samplers[0] = sg.make_sampler({})
-    ui.bindings.views[0]    = sg.make_view({
-        texture = {
-            image = ui.font_img,
+
+    white_pixel : []u32 = {0xFFFFFFFF}
+    
+    ui.rect_img = sg.make_image({
+        width = 1, height = 1,
+        data = {
+            mip_levels = {
+                0 = {
+                    // copy over
+                    ptr  = &white_pixel,
+                    size = size_of(white_pixel)
+                }
+            }
         }
+    })
+
+    ui.rect_view = sg.make_view({
+        texture = { image = ui.rect_img }
     })
 }
 
 ui_destroy :: proc(ui : ^Ui) {
-    sg.destroy_image(ui.font_img)
-    sg.destroy_view(ui.bindings.views[0])
+    for &f in ui.fonts {
+        sg.destroy_image(f.font_img)
+        sg.destroy_view(f.font_view)
+    } 
+    sg.destroy_image(ui.rect_img)
+    sg.destroy_view(ui.rect_view)
 
     sg.destroy_sampler(ui.bindings.samplers[0])
 
@@ -129,12 +159,6 @@ ui_destroy :: proc(ui : ^Ui) {
     delete(ui.vertices)
     delete(ui.indices)
 }
-
-Glyph :: struct {
-    offset   : [3]f32,
-    xadvance : f32, 
-}
-
 
 ui_make_font :: proc(
     ui           : ^Ui,
@@ -192,7 +216,7 @@ ui_make_font :: proc(
         atlas_rgba8[i * 4 + 3] = p
     }
 
-    ui.font_img = sg.make_image({
+    font.font_img = sg.make_image({
         pixel_format = .RGBA8, 
         width  = atlas_size.x,
         height = atlas_size.y,
@@ -204,6 +228,10 @@ ui_make_font :: proc(
                 }
             }
         }
+    })
+
+    font.font_view = sg.make_view({
+        texture = {image = font.font_img}
     })
 
     return font
@@ -248,11 +276,11 @@ ui_draw_text :: proc(
     ele_rect.xy = pen
     ele_rect.w  = pen.y
 
-    base_index       := u16(len(ui.indices))
-
-    // capture the vertex range to update their position later
-    start_vert_index := len(ui.vertices)
-    end_vert_index   := start_vert_index
+    // capture the index range to update their vertex position later
+    start_index := len(ui.indices)
+    num_indices := 0
+    
+    base_index  := u16(start_index)
 
     for r in text {
         char := i32(r)
@@ -280,8 +308,8 @@ ui_draw_text :: proc(
             color        = color,
         )
 
-        base_index     += len(v)
-        end_vert_index += len(v)
+        base_index  += len(v)
+        num_indices += len(i)
 
         append(&ui.vertices, ..v[:])
         append(&ui.indices,  ..i[:])
@@ -290,14 +318,22 @@ ui_draw_text :: proc(
         ele_rect.z += bchar.xadvance * scale
     }
 
-    assert(start_vert_index < end_vert_index)
+    assert(num_indices > 0)
     
-    for i in start_vert_index..<end_vert_index {
-        v := &ui.vertices[i]
+    for ii in start_index..<start_index+num_indices {
+        v_index := ui.indices[ii]
+        v := &ui.vertices[v_index]
+        
         v.position.xy += anchor.container.xy
         v.position.xy += anchor.parent  * anchor.container.zw
         v.position.xy -= anchor.element * ele_rect.zw
     }
+
+    append(&ui.builder.commands, {
+        view        = font.font_view,
+        start_index = start_index,
+        num_indices = num_indices,
+    })
 
     return ele_rect
 }
@@ -324,7 +360,6 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     })
 
     sg.apply_pipeline(ui.pipeline)
-    sg.apply_bindings(ui.bindings)
     
     // a projection to base size, can be cached but nahh
     mvp : Mvp_Vs_Param = {
@@ -336,13 +371,24 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     }
     sg.apply_uniforms(0, { ptr = &mvp, size = size_of(mvp) })
 
+    for cmd in ui.builder.commands {
+        ui.bindings.views[0] = cmd.view
+        sg.apply_bindings(ui.bindings)
+        sg.draw(cmd.start_index, cmd.num_indices, 1)
+    }
+
     sg.draw(0, len(ui.indices), 1)
 
     clear(&ui.indices)
     clear(&ui.vertices)
 }
 
-ui_update :: proc(ui : ^Ui, viewport : ^Viewport) {
+ui_begin :: proc(ui : ^Ui, viewport : ^Viewport) {
+    clear(&ui.builder.commands)
     ui.builder.current_container = {0, 0, viewport.base_size.x, viewport.base_size.y}
+}
+
+ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
+    // nothing for now
 }
 
