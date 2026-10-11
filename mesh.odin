@@ -9,23 +9,21 @@ Vertex :: struct {
 	uv       : [2]f32,
 }
 
+Mesh_Data :: struct {
+    vertices     : []Vertex,
+    indices      : []u16,
+}
+
 Mesh :: struct {
 	bindings : sg.Bindings,
 	index_count   : i32,
 }
 
-// create a checkerboard image and texture view (from sokol examples)
-CHECKER_BOARD_PATTERN :: []u32 {
-    0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF, 0xFF000000,
-    0xFF000000, 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF,
-    0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF, 0xFF000000,
-    0xFF000000, 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF,
-}
-
-WHITE_PIXEL :: []u32 { 0xFFFFFFFF }
-
-mesh_init_from_data :: proc(mesh : ^Mesh, vertices : []Vertex, indices : []u16) {
-	mesh.bindings.vertex_buffers[0] = sg.make_buffer({
+mesh_create_from_data :: proc(data : Mesh_Data) -> (mesh : Mesh)  {
+    vertices := data.vertices
+    indices  := data.indices
+    
+    mesh.bindings.vertex_buffers[0] = sg.make_buffer({
 		data = { ptr = raw_data(vertices), size = cast(uint)slice.size(vertices)}
 	})
 	mesh.bindings.index_buffer = sg.make_buffer({
@@ -37,24 +35,15 @@ mesh_init_from_data :: proc(mesh : ^Mesh, vertices : []Vertex, indices : []u16) 
     // default views and sample bindings
     mesh.bindings.views[0] = sg.make_view({
         texture = {
-            image = sg.make_image({
-                width = 1,
-                height = 1,
-                data = {
-                    mip_levels = {
-                        0 = {
-                            ptr = raw_data(WHITE_PIXEL),
-                            size = cast(uint)slice.size(WHITE_PIXEL)
-                        }
-                    }
-                }
-            })
+            image = shared_white_pixel_image,
         }
     })
     mesh.bindings.samplers[0] = sg.make_sampler({})
+
+    return mesh
 }
 
-mesh_init_box :: proc(mesh : ^Mesh, half_size : [3]f32) {
+mesh_create_box :: proc(half_size : [3]f32) -> Mesh {
 	// cube vertex buffer
     vertices : []Vertex = {
         {{-1.0, -1.0, -1.0}, 1, { 0, 0 }},  
@@ -98,5 +87,11 @@ mesh_init_box :: proc(mesh : ^Mesh, half_size : [3]f32) {
     	v.position  *= half_size
     }
 
-    mesh_init_from_data(mesh, vertices, indices)
+    return mesh_create_from_data({vertices, indices})
+}
+
+mesh_destroy :: proc(mesh : ^Mesh) {
+    sg.destroy_buffer(mesh.bindings.vertex_buffers[0])
+    sg.destroy_buffer(mesh.bindings.index_buffer)
+    sg.destroy_view(mesh.bindings.views[0])
 }

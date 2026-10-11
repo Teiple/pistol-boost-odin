@@ -6,8 +6,8 @@ import sg "sokol-odin/sokol/gfx"
 import sglue "sokol-odin/sokol/glue"
 import "shaders"
 
-WINDOW_CLEAR_COLOR   : sg.Color : {0, 0, 0, 0}
-VIEWPORT_CLEAR_COLOR : sg.Color : {0.02, 0.078, 0.078, 1}
+WINDOW_CLEAR_COLOR     : sg.Color : {0, 0, 0, 0}
+VIEWPORT_CLEAR_COLOR   : sg.Color : {0.02, 0.078, 0.078, 1}
 
 Viewport :: struct {
 	base_size : [2]f32,
@@ -37,7 +37,6 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32) {
 			width  = offscreen_size.x,
 			height = offscreen_size.y,
 			pixel_format = .RGBA8,
-			sample_count = 1,
 		})
 
 		vp.offscreen_depth_img = sg.make_image({
@@ -47,7 +46,6 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32) {
 			width  = offscreen_size.x,
 			height =  offscreen_size.y,
 			pixel_format = .DEPTH,
-			sample_count = 1,
 		})
 
 		vp.offscreen_pass.attachments.colors[0]     = sg.make_view({

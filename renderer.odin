@@ -1,5 +1,6 @@
 package main
 
+import "core:slice"
 import "core:math/linalg"
 import sg "sokol-odin/sokol/gfx"
 import shaders "shaders"
@@ -25,7 +26,26 @@ Renderer :: struct {
 	meshes        : [dynamic]Mesh,
 }
 
+// For .RGBA8 pixel format
+WHITE_PIXEL :: []u32 { 0xFFFFFFFF }
+// This would be managed by the renderer
+shared_white_pixel_image : sg.Image
+
 renderer_init :: proc(renderer : ^Renderer) {
+	// This is somewhat a shared resource for other graphical module to use
+	shared_white_pixel_image = sg.make_image({
+		width = 1,
+		height = 1,
+		data = {
+			mip_levels = {
+				0 = {
+					ptr = raw_data(WHITE_PIXEL),
+					size = cast(uint)slice.size(WHITE_PIXEL)
+				}
+			}
+		}
+	})
+
 	res := &renderer.pip_resources[.Unlit_Triangles]
 	
 	res.shader   = sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
@@ -53,6 +73,14 @@ renderer_destroy :: proc(renderer : ^Renderer) {
 		sg.destroy_shader(p.shader)
 		sg.destroy_pipeline(p.pipeline)
 	}
+
+	for &m in renderer.meshes {
+		mesh_destroy(&m)
+	}
+	delete(renderer.meshes)
+
+	// destroy shared resources, seems like the right place
+	sg.destroy_image(shared_white_pixel_image)
 }
 
 renderer_draw_mesh :: proc(
@@ -79,7 +107,8 @@ renderer_draw_mesh :: proc(
 }
 
 
-renderer_new_mesh :: proc(renderer : ^Renderer) -> ^Mesh {
-	append(&renderer.meshes, Mesh{})
-	return &renderer.meshes[len(renderer.meshes) - 1]
+renderer_add_mesh :: proc(renderer : ^Renderer, mesh : Mesh) {
+	append(&renderer.meshes, mesh)
 }
+
+
