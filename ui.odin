@@ -158,6 +158,8 @@ ui_destroy :: proc(ui : ^Ui) {
 
     delete(ui.vertices)
     delete(ui.indices)
+    
+    delete(ui.builder.commands)
 }
 
 ui_make_font :: proc(
@@ -392,3 +394,7 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     // nothing for now
 }
 
+// TODO do to dou doo
+ui_is_capturing_input :: proc(ui : ^Ui) -> bool {
+    return false
+}

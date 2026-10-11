@@ -4,6 +4,6 @@ Scene_Title :: struct {
 
 }
 
-SCENE_TITLE_CALLBACKS : Scene_Callbacks : {
+SCENE_TITLE_CALLBACKS : Scene_Callbacks(^Scene_Title) : {
 	
 }

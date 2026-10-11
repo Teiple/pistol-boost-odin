@@ -1,17 +1,13 @@
 package main
 
+import ins "base:intrinsics"
 import "core:fmt"
 
-get_arr :: proc() -> []f32 {
-    @(static, rodata)
-    arr := []f32 {
-        0, 1, 2, 4
-    }
-    arr[0] = 2
-    return arr
+Gen_Struct :: struct($T : typeid) where ins.type_is_pointer(T) {
+    data : T
 }
-
+ 
 main :: proc() {
-    a := get_arr()
+    a : Gen_Struct(^int)
     fmt.println(a)   
 }

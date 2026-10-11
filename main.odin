@@ -28,6 +28,10 @@ main :: proc() {
 			dt : = cast(f32)sapp.frame_duration_unfiltered()
 			game_update(dt)
 		},
+		event_cb   = proc "c" (ev : ^sapp.Event) {
+			context = odin_ctx
+			game_input(ev)
+		},
 		cleanup_cb = proc "c" () {
 			context = odin_ctx
 			game_destroy()

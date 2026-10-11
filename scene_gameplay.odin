@@ -1,22 +1,23 @@
 package main
 
 import "core:math/linalg"
+
 Scene_Gameplay :: struct {
-    meshes : [dynamic]Mesh
+    meshes    : [dynamic]Mesh,
 }
 
-SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks : {
-	init = proc(s : ^Scene) {
-        s := &s.(Scene_Gameplay)
+SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
+	init = proc(scene : ^Scene_Gameplay) {
         
-        s.meshes = make([dynamic]Mesh)
-        append(&s.meshes, mesh_create_box({2, 1, 1}))
+        scene.meshes = make([dynamic]Mesh)
+        append(&scene.meshes, mesh_create_box({2, 1, 1}))
+    
     },
-    draw_3d = proc(s : ^Scene) {
-        s := &s.(Scene_Gameplay)
-
+    draw_3d = proc(scene : ^Scene_Gameplay) {
+    
         ren, cam, vp := &game.renderer, &game.camera, &game.viewport
-        for &m in s.meshes {
+    
+        for &m in scene.meshes {
             renderer_draw_mesh(ren, cam, vp, &m, 
                 {}, linalg.quaternion_from_pitch_yaw_roll(
                     game.frame_time.time,
@@ -25,14 +26,14 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks : {
                 )
             )
         }
+    
     },
-    destroy = proc(s : ^Scene) {
-        s := &s.(Scene_Gameplay)
-
-        for &m in s.meshes {
+    destroy = proc(scene : ^Scene_Gameplay) {
+    
+        for &m in scene.meshes {
             mesh_destroy(&m)
         }
 
-        delete(s.meshes)
+        delete(scene.meshes)
     }
 }

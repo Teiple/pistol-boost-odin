@@ -1,5 +1,6 @@
 package main
 
+import ins "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
 Scene :: union #no_nil {
@@ -8,46 +9,47 @@ Scene :: union #no_nil {
 	Scene_Gameplay,
 }
 
-Scene_Callbacks :: struct {
-	init      : proc(s : ^Scene),
-	update_3d : proc(s : ^Scene, dt : f32),
-	update_ui : proc(s : ^Scene),
-	draw_3d   : proc(s : ^Scene),
-	input     : proc(s : ^Scene, ev : sapp.Event),
-	destroy   : proc(s : ^Scene),
+Scene_Callbacks_Any :: Scene_Callbacks(rawptr)
+
+Scene_Callbacks :: struct($T : typeid) where ins.type_is_pointer(T) {
+	init      : proc(scene : T),
+	update_3d : proc(scene : T, dt : f32),
+	update_ui : proc(scene : T),
+	draw_3d   : proc(scene : T),
+	input_3d  : proc(scene : T, ev : sapp.Event),
+	input_ui  : proc(scene : T, ev : sapp.Event),
+	destroy   : proc(scene : T),
 }
 
-scene_get_callbacks :: proc(scene : ^Scene) -> Scene_Callbacks {
-	switch s in scene^ {
+scene_get_callbacks :: proc(scene : ^Scene) -> Scene_Callbacks_Any {
+	// too long to write
+	Raw :: Scene_Callbacks_Any
+	
+	switch s in scene {
 		case Scene_Title:
-			return SCENE_TITLE_CALLBACKS
+			return transmute(Raw)SCENE_TITLE_CALLBACKS
 		case Scene_Gameplay:
-			return SCENE_GAMEPLAY_CALLBACKS
+			return transmute(Raw)SCENE_GAMEPLAY_CALLBACKS
 		case Scene_Main_Menu:
-			return SCENE_MAIN_MENU_CALLBACKS
+			return transmute(Raw)SCENE_MAIN_MENU_CALLBACKS
 	}
 	panic("Unreachable")
 }
 
-scene_switch :: proc(from_scene : ^Scene, to_scene: ^Scene) -> Scene_Callbacks {
-	from_cbs := scene_get_callbacks(from_scene)
-	to_cbs   := scene_get_callbacks(to_scene)
-
-	from_cbs.destroy(from_scene)
-	to_cbs.init(to_scene)
-
-	return to_cbs
-}
-
 // These two are just for cleaner game shell really
+// you could've just call the callbacks directly
 @require_results
-scene_boot :: proc(scene : ^Scene) -> Scene_Callbacks {
+scene_boot :: proc(scene : ^Scene) -> Scene_Callbacks(rawptr) {
 	cbs := scene_get_callbacks(scene)
-	cbs.init(scene)
+	if cbs.init != nil {
+		cbs.init(scene)
+	}
 	return cbs
 }
 
-scene_shutdown :: proc(scene : ^Scene){
+scene_shutdown :: proc(scene : ^Scene) {
 	cbs := scene_get_callbacks(scene)
-	cbs.destroy(scene)
+	if cbs.destroy != nil {
+		cbs.destroy(scene)
+	}
 }
