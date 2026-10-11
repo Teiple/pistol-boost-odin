@@ -34,7 +34,7 @@ game_init :: proc() {
 	renderer_init(&game.renderer)
 	ui_init_default(&game.ui)
 	
-	game.scene = Scene_Main_Menu{}
+	game.scene = Scene_Gameplay{}
 	game.scene_callbacks = scene_boot(&game.scene)
 }
 

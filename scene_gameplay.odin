@@ -1,6 +1,7 @@
 package main
 
 import "core:math/linalg"
+import sapp "sokol-odin/sokol/app"
 
 Scene_Gameplay :: struct {
     meshes    : [dynamic]Mesh,
@@ -27,6 +28,11 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
             )
         }
     
+    },
+    input_ui = proc(scene : ^Scene_Gameplay, ev : sapp.Event) {
+        if ev.type == .KEY_DOWN && ev.key_code == .ENTER {
+            game_request_switch_scene(Scene_Main_Menu{})
+        }
     },
     destroy = proc(scene : ^Scene_Gameplay) {
     
