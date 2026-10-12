@@ -13,6 +13,8 @@ Viewport :: struct {
 	base_size : [2]f32,
 	dest_rect : [4]f32,
 
+	scale : f32,
+
 	display_pipeline : sg.Pipeline,
 	display_shader   : sg.Shader,
 	
@@ -24,7 +26,7 @@ Viewport :: struct {
 	display_bindings : sg.Bindings,
 }
 
-viewport_init :: proc(vp : ^Viewport, base_size : [2]f32) {
+viewport_init :: proc(vp : ^Viewport, base_size : [2]f32, window_size : [2]f32) {
 	vp.base_size = base_size
 
 	// Offscreen pipeline & bindingns
@@ -131,15 +133,22 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32) {
 			clear_value = WINDOW_CLEAR_COLOR,
 		}
 	}
+
+	// Some system relies on .scale or .dest_rect supper early on
+	viewport_calculate_aspect(vp, window_size)	
+}
+
+viewport_calculate_aspect :: proc(vp : ^Viewport, window_size : [2]f32){
+	// calculate destination rect
+	// scale to the fitter axis
+	vp.scale = min(window_size.x / vp.base_size.x, window_size.y / vp.base_size.y)
+
+	vp.dest_rect.zw = {vp.base_size.x, vp.base_size.y} * vp.scale
+	vp.dest_rect.xy = (window_size - vp.dest_rect.zw) / 2
 }
 
 viewport_begin :: proc(vp : ^Viewport, window_size : [2]f32) {
-	// calculate destination rect
-	// scale to the fitter axis
-	scale := min(window_size.x / vp.base_size.x, window_size.y / vp.base_size.y)
-
-	vp.dest_rect.zw = {vp.base_size.x, vp.base_size.y} * scale
-	vp.dest_rect.xy = (window_size - vp.dest_rect.zw) / 2
+	viewport_calculate_aspect(vp, window_size)
 
 	// Offscreen Pass
 	sg.begin_pass(vp.offscreen_pass)
@@ -191,4 +200,12 @@ viewport_destroy :: proc(vp : ^Viewport) {
 
 viewport_get_aspect :: proc(vp : ^Viewport) -> f32 {
 	return vp.base_size.x / vp.base_size.y
+}
+
+viewport_get_vp_mouse_delta :: proc(vp : ^Viewport, mouse_delta: [2]f32) -> [2]f32 {
+	return mouse_delta / vp.scale
+}
+
+viewport_get_vp_confine_mouse_pos :: proc(vp : ^Viewport, mouse_position: [2]f32) -> [2]f32 {
+	return {clamp(mouse_position.x, 0, vp.base_size.x), clamp(mouse_position.y, 0, vp.base_size.y)}
 }

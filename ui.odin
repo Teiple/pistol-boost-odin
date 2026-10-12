@@ -11,6 +11,7 @@ Anchor :: struct {
     container : [4]f32,
     element   : [2]f32,
     parent    : [2]f32,
+    offset    : [2]f32,
 }
 
 Font_Id :: enum {
@@ -128,8 +129,8 @@ ui_init_default :: proc(ui : ^Ui) {
             mip_levels = {
                 0 = {
                     // copy over
-                    ptr  = &white_pixel,
-                    size = size_of(white_pixel)
+                    ptr  = raw_data(white_pixel),
+                    size = cast(uint)slice.size(white_pixel)
                 }
             }
         }
@@ -243,8 +244,8 @@ ui_get_quad :: proc(
     position     : [2]f32,
     index_offset : u16,
     size         : [2]f32,
-    uv_rect      : [4]f32,
-    color        : [4]f32
+    uv_rect      : [4]f32 = {0 , 0, 1 ,1},
+    color        : [4]f32 = 1,
 ) -> (v: [4]Vertex, i: [6]u16) {
     vertices : [4]Vertex = {
         {{ position.x,          position.y,          0 }, color, { uv_rect.x,             uv_rect.y }},
@@ -265,6 +266,11 @@ ui_draw_text :: proc(
     text      : string,
     font_size : f32 = 32,
     color     : [4]f32 = {0.2, 0.8, 0.2, 1},
+    // interactive
+    interactive : Maybe(struct {
+        mouse         : ^Mouse_Input,
+        hovered_color : [4]f32,
+    }) = nil,
     anchor    : Anchor = {},
 ) -> (ele_rect : [4]f32) {
     // use address here since font struct is quite big
@@ -275,14 +281,13 @@ ui_draw_text :: proc(
     scale := font_size / font.base_size
     pen   := [2]f32{0, font.ascent * scale}
 
-    ele_rect.xy = pen
-    ele_rect.w  = pen.y
+    ele_rect.w  = font_size
 
     // capture the index range to update their vertex position later
     start_index := len(ui.indices)
-    num_indices := 0
+    start_vert  := len(ui.vertices)
     
-    base_index  := u16(start_index)
+    base_index  := u16(start_vert)
 
     for r in text {
         char := i32(r)
@@ -307,11 +312,9 @@ ui_draw_text :: proc(
             index_offset = base_index,
             size         = rect.zw * scale,
             uv_rect      = uv_rect,
-            color        = color,
         )
 
         base_index  += len(v)
-        num_indices += len(i)
 
         append(&ui.vertices, ..v[:])
         append(&ui.indices,  ..i[:])
@@ -320,24 +323,57 @@ ui_draw_text :: proc(
         ele_rect.z += bchar.xadvance * scale
     }
 
-    assert(num_indices > 0)
+    // apply anchor
+    anchor_offset : [2]f32
+    anchor_offset  = anchor.container.xy
+    anchor_offset += anchor.parent  * anchor.container.zw
+    anchor_offset -= anchor.element * ele_rect.zw
+    anchor_offset += anchor.offset
+
+    ele_rect.xy += anchor_offset
+
+    color := color
+    if i, ok := interactive.?; ok {
+        if mouse_is_inside_rect(i.mouse, ele_rect) {
+            color = i.hovered_color
+        }
+    }
     
-    for ii in start_index..<start_index+num_indices {
-        v_index := ui.indices[ii]
-        v := &ui.vertices[v_index]
-        
-        v.position.xy += anchor.container.xy
-        v.position.xy += anchor.parent  * anchor.container.zw
-        v.position.xy -= anchor.element * ele_rect.zw
+    for vi in start_vert..<len(ui.vertices) {
+        v := &ui.vertices[vi]
+        v.position.xy += anchor_offset
+        v.color = color
     }
 
     append(&ui.builder.commands, {
         view        = font.font_view,
         start_index = start_index,
-        num_indices = num_indices,
+        num_indices = len(ui.indices) - start_index,
     })
 
     return ele_rect
+}
+
+ui_draw_cursor :: proc(
+    ui       : ^Ui,
+    position : [2]f32,
+    size     : [2]f32 = 16,
+    tint     : [4]f32 = 1,
+) {
+    start_index := len(ui.indices)
+    start_vert  := len(ui.vertices)
+    base_index  := u16(start_vert)
+
+    v,i := ui_get_quad(position - size * .5, base_index, size, color = tint)
+
+    append(&ui.vertices, ..v[:])
+    append(&ui.indices,  ..i[:])
+
+    append(&ui.builder.commands, {
+        view        = ui.rect_view,
+        start_index = start_index,
+        num_indices = len(ui.indices) - start_index,
+    })
 }
 
 ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
@@ -379,10 +415,9 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
         sg.draw(cmd.start_index, cmd.num_indices, 1)
     }
 
-    sg.draw(0, len(ui.indices), 1)
-
     clear(&ui.indices)
     clear(&ui.vertices)
+    clear(&ui.builder.commands)
 }
 
 ui_begin :: proc(ui : ^Ui, viewport : ^Viewport) {

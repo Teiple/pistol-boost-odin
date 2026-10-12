@@ -12,6 +12,8 @@ Game :: struct {
 	camera     : Camera,
 	renderer   : Renderer,
 	ui         : Ui,
+
+	mouse : Mouse_Input,
 	
 	scene           : Scene,
 	scene_callbacks : Scene_Callbacks_Any,
@@ -29,12 +31,18 @@ game_init :: proc() {
 		}
 	})
 
-	viewport_init(&game.viewport, {800, 480})
+	viewport_init(&game.viewport, {800, 480}, {
+		sapp.widthf(),
+		sapp.heightf(),
+	})
+
 	camera_init_default(&game.camera, {0, 2, 10}, {0, 0, 0})
 	renderer_init(&game.renderer)
 	ui_init_default(&game.ui)
+
+	mouse_init(&game.mouse)
 	
-	game.scene = Scene_Gameplay{}
+	game.scene = Scene_Main_Menu{}
 	game.scene_callbacks = scene_boot(&game.scene)
 }
 
@@ -44,12 +52,18 @@ game_update :: proc(dt : f32) {
 	if game.scene_callbacks.update_3d != nil {
 		game.scene_callbacks.update_3d(&game.scene, dt)
 	}
-	
+
 	ui_begin(&game.ui, &game.viewport)
 	{
 		if game.scene_callbacks.update_ui != nil {
 			game.scene_callbacks.update_ui(&game.scene)
 		}
+		// cursor drawed on top
+		ui_draw_cursor(&game.ui,
+			position = game.mouse.position,
+			size     = 16,
+			tint     = hsv(200)
+		)
 		ui_end(&game.ui, &game.viewport)
 	}
 
@@ -64,6 +78,8 @@ game_update :: proc(dt : f32) {
 		ui_draw(&game.ui, &game.viewport)
 		viewport_end(&game.viewport)
 	}
+
+	mouse_input_endframe(&game.mouse)
 	
 	free_all(context.temp_allocator)
 
@@ -79,6 +95,8 @@ game_update :: proc(dt : f32) {
 }
 
 game_input :: proc(ev : ^sapp.Event) {
+	mouse_input(&game.mouse, &game.viewport, ev^)
+	
 	if game.scene_callbacks.input_ui != nil {
 		game.scene_callbacks.input_ui(&game.scene, ev^)
 	}
@@ -105,4 +123,12 @@ game_destroy :: proc() {
 	renderer_destroy(&game.renderer)
 	camera_destroy(&game.camera)
 	viewport_destroy(&game.viewport)
+}
+
+game_get_ui :: proc() -> ^Ui {
+	return &game.ui
+}
+
+game_get_mouse :: proc() -> ^Mouse_Input {
+	return &game.mouse
 }
