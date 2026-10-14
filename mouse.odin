@@ -68,3 +68,11 @@ mouse_is_inside_rect :: proc(mouse : ^Mouse_Input, rect : [4]f32) -> bool {
     return mouse_pos.x >= rect.x && mouse_pos.x <= rect.x + rect.z &&
         mouse_pos.y >= rect.y && mouse_pos.y <= rect.y + rect.w
 }
+
+mouse_state_inside_rect :: proc(mouse : ^Mouse_Input, rect : [4]f32, mouse_button : Mouse_Button) -> Mouse_Button_State {
+    is_hovered := mouse_is_inside_rect(mouse, rect)
+
+    if !is_hovered do return .None
+
+    return mouse.state[mouse_button]
+}

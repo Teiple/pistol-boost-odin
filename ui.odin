@@ -1,5 +1,9 @@
 package main
-// This is a very mininal anchor based ui system
+// A very mininal anchor based ui system
+import "core:fmt"
+// It must do everything in one pass
+// Mouse input only accounts for explicit ids
+// There will be no implicit ids
 
 import "core:math/linalg"
 import "core:slice"
@@ -12,6 +16,20 @@ Anchor :: struct {
     element   : [2]f32,
     parent    : [2]f32,
     offset    : [2]f32,
+}
+
+Sizing :: union { Fixed, Grow, Percent }
+
+Fixed :: struct {
+    value : f32,
+}
+
+ID_NONE :: ""
+
+Grow :: struct {}
+
+Percent :: struct {
+    value : f32,
 }
 
 Font_Id :: enum {
@@ -31,9 +49,12 @@ Font :: struct {
     font_view    : sg.View, 
 }
 
+// A stateful data container for current frame
 Ui_Builder :: struct {
-    current_container : [4]f32,
-    commands          : [dynamic]Ui_Cmd,
+    container_stack : [dynamic][4]f32,
+    commands        : [dynamic]Ui_Cmd,
+    held_id         : string,
+    mouse           : ^Mouse_Input,
 }
 
 Ui :: struct {
@@ -139,6 +160,9 @@ ui_init_default :: proc(ui : ^Ui) {
     ui.rect_view = sg.make_view({
         texture = { image = ui.rect_img }
     })
+
+    ui.builder.commands        = make([dynamic]Ui_Cmd, 0, 8)
+    ui.builder.container_stack = make([dynamic][4]f32, 0, 8)
 }
 
 ui_destroy :: proc(ui : ^Ui) {
@@ -260,6 +284,109 @@ ui_get_quad :: proc(
     return vertices, indices
 }
 
+ui_draw_rect :: proc(
+    ui    : ^Ui,
+    color : [4]f32,
+    interactive : Maybe(struct {
+        id            : string,
+        hovered_color : Maybe([4]f32),
+        held_color    : Maybe([4]f32),
+    }) = nil,
+    sizing : [2]Sizing    = {},
+    anchor : Anchor       = {},
+) -> (ele_rect : [4]f32, mouse_state : Mouse_Button_State, is_clicked : bool) {
+    switch size in sizing.x {
+        case Fixed:
+            ele_rect.z = size.value
+        case Grow:
+            ele_rect.z = ui_top_container(ui).z
+        case Percent:
+            ele_rect.z = ui_top_container(ui).z * size.value 
+    }
+
+    switch size in sizing.y {
+        case Fixed:
+            ele_rect.w = size.value
+        case Grow:
+            ele_rect.w = ui_top_container(ui).w
+        case Percent:
+            ele_rect.w = ui_top_container(ui).w * size.value 
+    }
+
+    // apply anchor
+    anchor_offset  : [2]f32
+    anchor_offset  = anchor.container.xy
+    anchor_offset += anchor.parent  * anchor.container.zw
+    anchor_offset -= anchor.element * ele_rect.zw
+    anchor_offset += anchor.offset
+
+    ele_rect.xy += anchor_offset
+
+    start_index := len(ui.indices)
+    start_vert  := len(ui.vertices)
+    
+    base_index  := u16(start_vert)
+
+    color := color
+    if i, ok := interactive.?; ok {
+        assert(
+            i.id != ID_NONE,
+            "Empty id on interactive element is not allowed!"
+        )
+
+        mouse := ui.builder.mouse
+        is_inside := mouse_is_inside_rect(mouse, ele_rect)
+
+        if is_inside {
+            if ui.builder.mouse.state[.Left] == .Pressed {
+                ui.builder.held_id = i.id
+            }
+            
+            if  i.hovered_color != nil &&
+                ui.builder.mouse.state[.Left] == .None
+            {
+                color = i.hovered_color.?
+            }
+            else if i.held_color != nil &&
+                mouse.state[.Left] == .Down
+            {
+                color = i.held_color.?
+            }
+            
+            mouse_state = mouse.state[.Left]
+
+            if ui.builder.held_id == i.id {
+                if mouse_state == .None {
+                    ui.builder.held_id = ID_NONE
+                }
+                if mouse_state == .Released {
+                    ui.builder.held_id = ID_NONE
+                    is_clicked = true
+                }
+            } 
+        } else {
+            mouse_state = .None
+
+            if ui.builder.held_id == i.id {
+                ui.builder.held_id = ID_NONE
+            }
+        }
+    }
+
+    v,i := ui_get_quad(ele_rect.xy, base_index, ele_rect.zw, color = color)
+
+    append(&ui.vertices, ..v[:])
+    append(&ui.indices,  ..i[:])
+
+    append(&ui.builder.commands, {
+        view        = ui.rect_view,
+        start_index = start_index,
+        num_indices = len(ui.indices) - start_index,
+    })
+
+    return ele_rect, mouse_state, is_clicked
+}
+
 ui_draw_text :: proc(
     ui        : ^Ui,
     font_id   : Font_Id,
@@ -269,7 +396,7 @@ ui_draw_text :: proc(
     // interactive
     interactive : Maybe(struct {
         mouse         : ^Mouse_Input,
-        hovered_color : [4]f32,
+        hovered_color : Maybe([4]f32),
     }) = nil,
     anchor    : Anchor = {},
 ) -> (ele_rect : [4]f32) {
@@ -334,8 +461,10 @@ ui_draw_text :: proc(
 
     color := color
     if i, ok := interactive.?; ok {
-        if mouse_is_inside_rect(i.mouse, ele_rect) {
-            color = i.hovered_color
+        if i.hovered_color != nil &&
+            i.mouse.state[.Left] == .None &&
+            mouse_is_inside_rect(i.mouse, ele_rect) {
+            color = i.hovered_color.?
         }
     }
     
@@ -418,11 +547,25 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     clear(&ui.indices)
     clear(&ui.vertices)
     clear(&ui.builder.commands)
+    clear(&ui.builder.container_stack)
 }
 
-ui_begin :: proc(ui : ^Ui, viewport : ^Viewport) {
-    clear(&ui.builder.commands)
-    ui.builder.current_container = {0, 0, viewport.base_size.x, viewport.base_size.y}
+ui_begin :: proc(ui : ^Ui, viewport : ^Viewport, mouse : ^Mouse_Input) {
+    ui_push_container(ui, {0, 0, viewport.base_size.x, viewport.base_size.y})
+    ui.builder.mouse = mouse
+}
+
+ui_push_container :: proc(ui : ^Ui, rect : [4]f32){
+    append(&ui.builder.container_stack, rect)
+}
+
+
+ui_pop_container :: proc(ui : ^Ui){
+    pop(&ui.builder.container_stack)
+}
+
+ui_top_container :: proc(ui : ^Ui) -> [4]f32 {
+    return ui.builder.container_stack[len(ui.builder.container_stack) - 1]
 }
 
 ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
@@ -433,3 +576,4 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
 ui_is_capturing_input :: proc(ui : ^Ui) -> bool {
     return false
 }
+

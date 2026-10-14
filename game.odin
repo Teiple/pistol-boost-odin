@@ -53,7 +53,7 @@ game_update :: proc(dt : f32) {
 		game.scene_callbacks.update_3d(&game.scene, dt)
 	}
 
-	ui_begin(&game.ui, &game.viewport)
+	ui_begin(&game.ui, &game.viewport, &game.mouse)
 	{
 		if game.scene_callbacks.update_ui != nil {
 			game.scene_callbacks.update_ui(&game.scene)
