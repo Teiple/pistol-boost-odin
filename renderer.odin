@@ -23,6 +23,8 @@ Renderer :: struct {
 	pip_resources : [Pipeline_Type]Pipeline_Resource,
 	shaders       : [Pipeline_Type]sg.Shader,
 	bindings      : sg.Bindings,
+	viewport      : ^Viewport,
+	camera        : ^Camera,
 }
 
 // For .RGBA8 pixel format
@@ -67,6 +69,15 @@ renderer_init :: proc(renderer : ^Renderer) {
 
 }
 
+renderer_begin :: proc(renderer : ^Renderer, camera : ^Camera, viewport : ^Viewport) {
+	renderer.camera = camera
+	renderer.viewport = viewport
+}
+
+renderer_end :: proc(renderer : ^Renderer) {
+	// nothing for now
+}
+
 renderer_destroy :: proc(renderer : ^Renderer) {
 	for p in renderer.pip_resources {
 		sg.destroy_shader(p.shader)
@@ -79,12 +90,13 @@ renderer_destroy :: proc(renderer : ^Renderer) {
 
 renderer_draw_mesh :: proc(
 	renderer     : ^Renderer,
-	camera       : ^Camera,
-	viewport     : ^Viewport,
 	mesh         : ^Mesh,
 	position     : [3]f32,
 	rotation     : quaternion128,
 ) {
+	camera   := renderer.camera
+	viewport := renderer.viewport
+
 	sg.apply_pipeline(renderer.pip_resources[.Unlit_Triangles].pipeline)
 	
 	model_matrix := linalg.matrix4_translate(position) * linalg.matrix4_from_quaternion(rotation)

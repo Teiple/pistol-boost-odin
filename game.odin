@@ -4,11 +4,11 @@ import sapp "sokol-odin/sokol/app"
 import sg "sokol-odin/sokol/gfx"
 import sglue "sokol-odin/sokol/glue"
 import slog "sokol-odin/sokol/log"
-import ins "base:intrinsics"
 
 Game :: struct {
 	viewport   : Viewport,
 	frame_time : Frame_Time,
+	time       : Game_Time,
 	camera     : Camera,
 	renderer   : Renderer,
 	ui         : Ui,
@@ -21,6 +21,7 @@ Game :: struct {
 	pending_scene : Maybe(Scene), 
 }
 
+@(private = "file")
 game : Game 
 
 game_init :: proc() {
@@ -30,6 +31,8 @@ game_init :: proc() {
 			func    = slog.func
 		}
 	})
+
+	game_time_init(&game.time)
 
 	viewport_init(&game.viewport, {800, 480}, {
 		sapp.widthf(),
@@ -46,20 +49,18 @@ game_init :: proc() {
 	game.scene_callbacks = scene_boot(&game.scene)
 }
 
-game_update :: proc(dt : f32) {
-	frame_time_update(&game.frame_time, dt)
-
-	if game.scene_callbacks.update_3d != nil {
-		game.scene_callbacks.update_3d(&game.scene, dt)
-	}
+game_update :: proc(unscaled_dt : f32) {
+	frame_time_raw_update(&game.frame_time, unscaled_dt)
+	
+	dt : f32 = game_time_raw_update(&game.time, unscaled_dt)
 
 	ui_begin(&game.ui, &game.viewport, &game.mouse)
 	{
 		if game.scene_callbacks.update_ui != nil {
-			game.scene_callbacks.update_ui(&game.scene)
+			game.scene_callbacks.update_ui(&game.scene, &game.ui)
 		}
 		// cursor drawed on top
-		ui_draw_cursor(&game.ui,
+		ui_push_cursor(&game.ui,
 			position = game.mouse.position,
 			size     = 16,
 			tint     = hsv(200)
@@ -67,16 +68,26 @@ game_update :: proc(dt : f32) {
 		ui_end(&game.ui, &game.viewport)
 	}
 
+	if game.scene_callbacks.update_3d != nil {
+		game.scene_callbacks.update_3d(&game.scene, dt)
+	}
+
 	viewport_begin(&game.viewport, {
 		sapp.widthf(),
 		sapp.heightf(),
 	})
 	{
-		if game.scene_callbacks.draw_3d != nil {
-			game.scene_callbacks.draw_3d(&game.scene)
+		defer viewport_end(&game.viewport)
+		
+		renderer_begin(&game.renderer, &game.camera, &game.viewport)
+		{
+			defer renderer_end(&game.renderer)
+
+			if game.scene_callbacks.draw_3d != nil {
+				game.scene_callbacks.draw_3d(&game.scene, &game.renderer)
+			}
 		}
 		ui_draw(&game.ui, &game.viewport)
-		viewport_end(&game.viewport)
 	}
 
 	mouse_input_endframe(&game.mouse)
@@ -91,6 +102,7 @@ game_update :: proc(dt : f32) {
 		game.pending_scene = nil
 		
 		game.scene_callbacks = scene_boot(&game.scene)
+		game_time_reset_time_scale(&game.time)
 	}
 }
 
@@ -98,20 +110,17 @@ game_input :: proc(ev : ^sapp.Event) {
 	mouse_input(&game.mouse, &game.viewport, ev^)
 	
 	if game.scene_callbacks.input_ui != nil {
-		game.scene_callbacks.input_ui(&game.scene, ev^)
+		game.scene_callbacks.input_ui(&game.scene, &game.ui, ev^)
 	}
 
-	if  !ui_is_capturing_input(&game.ui) &&
+	if !ui_is_capturing_input(&game.ui) &&
 		game.scene_callbacks.input_3d != nil {
 		game.scene_callbacks.input_3d(&game.scene, ev^)
 	}
 }
 
-// you should put newly created scene in here, e.g Scene_Gameplay{}, Scene_Main_Menu{}
-// i used #by_ptr here so it don't need to copy when passing as an argument
-// the copy still happens when assigning to game.pending_scene thou,
-// however this is also to make the code more various in syntax,
-// Odin will pass by pointer for large struct argument anyways (> 16 bytes iirc)
+// You should put newly created scene in here, e.g Scene_Gameplay{}, Scene_Main_Menu{}
+// In case scene needs extra initial data you can add some data such as Scene_Gameplay{level = 1} for example   
 game_request_switch_scene :: proc(#by_ptr uninitialized_scene : Scene){
 	game.pending_scene = uninitialized_scene
 }
@@ -125,10 +134,10 @@ game_destroy :: proc() {
 	viewport_destroy(&game.viewport)
 }
 
-game_get_ui :: proc() -> ^Ui {
-	return &game.ui
+game_time :: proc() -> ^Game_Time {
+	return &game.time
 }
 
-game_get_mouse :: proc() -> ^Mouse_Input {
-	return &game.mouse
+game_request_quit :: proc() {
+	sapp.request_quit()
 }

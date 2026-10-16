@@ -1,7 +1,6 @@
 package main
 
 import sapp "sokol-odin/sokol/app"
-import ins "base:intrinsics"
 
 Mouse_Button_State :: enum {
     None,

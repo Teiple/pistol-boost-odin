@@ -20,10 +20,10 @@ Scene_Callbacks :: struct($T: typeid) where ins.type_is_pointer(T) &&
 {
 	init      : proc(scene : T),
 	update_3d : proc(scene : T, dt : f32),
-	update_ui : proc(scene : T),
-	draw_3d   : proc(scene : T),
+	update_ui : proc(scene : T, ui : ^Ui),
+	draw_3d   : proc(scene : T, renderer : ^Renderer),
 	input_3d  : proc(scene : T, ev : sapp.Event),
-	input_ui  : proc(scene : T, ev : sapp.Event),
+	input_ui  : proc(scene : T, ui : ^Ui, ev : sapp.Event),
 	destroy   : proc(scene : T),
 }
 

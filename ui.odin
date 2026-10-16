@@ -1,6 +1,5 @@
 package main
 // A very mininal anchor based ui system
-import "core:fmt"
 // It must do everything in one pass
 // Mouse input only accounts for explicit ids
 // There will be no implicit ids
@@ -10,6 +9,7 @@ import "core:slice"
 import sg "sokol-odin/sokol/gfx"
 import tt "vendor:stb/truetype"
 import shaders "shaders"
+
 
 Anchor :: struct {
     container : [4]f32,
@@ -46,7 +46,7 @@ Font :: struct {
     descent      : f32,
     baked_chars  : [96]tt.bakedchar,
     font_img     : sg.Image,
-    font_view    : sg.View, 
+    font_view    : sg.View,
 }
 
 // A stateful data container for current frame
@@ -55,6 +55,7 @@ Ui_Builder :: struct {
     commands        : [dynamic]Ui_Cmd,
     held_id         : string,
     mouse           : ^Mouse_Input,
+    input_captured  : bool,
 }
 
 Ui :: struct {
@@ -185,6 +186,8 @@ ui_destroy :: proc(ui : ^Ui) {
     delete(ui.indices)
     
     delete(ui.builder.commands)
+    delete(ui.builder.container_stack)
+
 }
 
 ui_make_font :: proc(
@@ -284,7 +287,7 @@ ui_get_quad :: proc(
     return vertices, indices
 }
 
-ui_draw_rect :: proc(
+ui_push_rect :: proc(
     ui    : ^Ui,
     color : [4]f32,
     interactive : Maybe(struct {
@@ -387,7 +390,7 @@ ui_draw_rect :: proc(
     return ele_rect, mouse_state, is_clicked
 }
 
-ui_draw_text :: proc(
+ui_push_text :: proc(
     ui        : ^Ui,
     font_id   : Font_Id,
     text      : string,
@@ -483,7 +486,7 @@ ui_draw_text :: proc(
     return ele_rect
 }
 
-ui_draw_cursor :: proc(
+ui_push_cursor :: proc(
     ui       : ^Ui,
     position : [2]f32,
     size     : [2]f32 = 16,
@@ -506,8 +509,8 @@ ui_draw_cursor :: proc(
 }
 
 ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
-    assert(len(ui.indices)  <= int(ui.cur_ibuf_cap), "Exceed ibuf cap!")
-    assert(len(ui.vertices) <= int(ui.cur_vbuf_cap), "Exceed vbuf cap!")
+    assert(len(ui.indices)  <= int(ui.cur_ibuf_cap), "Exceeded ibuf cap!")
+    assert(len(ui.vertices) <= int(ui.cur_vbuf_cap), "Exceeded vbuf cap!")
 
     sg.write_buffer_transient({
         dst = {
@@ -548,6 +551,8 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     clear(&ui.vertices)
     clear(&ui.builder.commands)
     clear(&ui.builder.container_stack)
+
+    ui.builder.input_captured = false
 }
 
 ui_begin :: proc(ui : ^Ui, viewport : ^Viewport, mouse : ^Mouse_Input) {
@@ -572,8 +577,12 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     // nothing for now
 }
 
-// TODO do to dou doo
+// You should call this inside a input/event callback, not frame callback
+ui_capture_input :: proc(ui: ^Ui) {
+    ui.builder.input_captured = true
+}
+
 ui_is_capturing_input :: proc(ui : ^Ui) -> bool {
-    return false
+    return ui.builder.input_captured
 }
 
