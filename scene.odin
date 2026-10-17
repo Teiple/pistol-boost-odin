@@ -12,10 +12,11 @@ Scene :: union #no_nil {
 // actually this could just be Scene_Callbacks(rawptr)
 Scene_Callbacks_Any :: Scene_Callbacks(^Scene)
 
-Scene_Callbacks :: struct($T: typeid) where ins.type_is_pointer(T) &&
+Scene_Callbacks :: struct($T: typeid) where
+	ins.type_is_pointer(T) &&
 	(
-		ins.type_elem_type(T) == Scene || // either the general Scene union, aka. Scene_Callbacks_Any
-		ins.type_is_variant_of(Scene, ins.type_elem_type(T))  // or its collapsed type
+		ins.type_elem_type(T) == Scene ||
+		ins.type_is_variant_of(Scene, ins.type_elem_type(T))
 	)
 {
 	init      : proc(scene : T),
@@ -29,17 +30,17 @@ Scene_Callbacks :: struct($T: typeid) where ins.type_is_pointer(T) &&
 
 scene_get_callbacks :: proc(scene : ^Scene) -> Scene_Callbacks_Any {
 	// The reason it's parapoly is to ensure typesafety 
-	convert_cbs :: #force_inline proc(cbs: Scene_Callbacks(^$S)) -> Scene_Callbacks_Any {
+	convert_cbs :: proc(s : ^$T, cbs: Scene_Callbacks(^T)) -> Scene_Callbacks_Any {
 		return transmute(Scene_Callbacks_Any)cbs
 	}
 	
-	switch s in scene {
+	switch &s in scene {
 		case Scene_Title:
-			return convert_cbs(SCENE_TITLE_CALLBACKS)
+			return convert_cbs(&s, SCENE_TITLE_CALLBACKS)
 		case Scene_Gameplay:
-			return convert_cbs(SCENE_GAMEPLAY_CALLBACKS)
+			return convert_cbs(&s, SCENE_GAMEPLAY_CALLBACKS)
 		case Scene_Main_Menu:
-			return convert_cbs(SCENE_MAIN_MENU_CALLBACKS)
+			return convert_cbs(&s, SCENE_MAIN_MENU_CALLBACKS)
 	}
 	panic("Unreachable")
 }

@@ -9,97 +9,82 @@ Main_Menu_Option_Id :: enum {
     Quit
 }
 
-MAIN_MENU_OPTION_NAMES := [Main_Menu_Option_Id]string{
+@(rodata)
+main_menu_option_names := [Main_Menu_Option_Id]string{
     .New_Game     = "New Game",
     .Settings     = "Settings",
     .About        = "About",
     .Archivements = "Archivements", 
-    .Quit         = "Quit"
+    .Quit         = "Quit",
+}
+
+@(rodata)
+main_menu_options := [Main_Menu_Option_Id]Menu_Option{
+    .New_Game     = { id = "main_menu:new_game",     name = "New Game" },
+    .Settings     = { id = "main_menu:settings",     name = "Settings" },
+    .About        = { id = "main_menu:about",        name = "About" },
+    .Archivements = { id = "main_menu:archivements", name = "Archivements" },
+    .Quit         = { id = "main_menu:quit",         name = "Quit" },
+}
+
+Main_Menu :: struct {
+    current_option   : Main_Menu_Option_Id,
+    selected_current : bool,
+}
+
+MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
+    update_ui = proc(menu : ^Main_Menu, ui : ^Ui) -> (res : Menu_Result) {
+        selected_opt, selected := menu_helper_label_menu(
+            menu             = menu,
+            ui               = ui,
+            selected_current = menu.selected_current,
+            current_option   = menu.current_option,
+            options          = main_menu_options,
+            
+        )
+
+        if selected do #partial switch selected_opt {
+            case .New_Game:
+                game_request_switch_scene(Scene_Gameplay{
+                    init = { selected_level = 1 },
+                })
+            case .Quit:
+                game_request_quit()
+            case .Settings:
+                res.next_menu = Settings_Menu{}
+        }
+        
+        return
+    },
+    input_ui = proc(menu : ^Main_Menu, ui: ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
+        res.close = menu_helper_label_menu_input(
+            menu             = menu,
+            ui               = ui,
+            ev               = ev,
+            selected_current = &menu.selected_current,
+            current_option   = &menu.current_option,
+        )
+
+        return
+    }
 }
 
 Scene_Main_Menu :: struct {
-    current_option : Main_Menu_Option_Id,
+    menu_stack : Menu_Stack,
 }
 
 SCENE_MAIN_MENU_CALLBACKS : Scene_Callbacks(^Scene_Main_Menu) : {
+    init = proc(scene : ^Scene_Main_Menu) {
+        menu_stack_init(&scene.menu_stack)
+        menu_stack_push_menu(&scene.menu_stack, Main_Menu{})
+    },
     update_ui = proc(scene : ^Scene_Main_Menu, ui : ^Ui) {
-        anchor : Anchor = {
-            container = ui_top_container(ui),
-            parent    = {.5, .5},
-            element   = {.5,  1},
-        }
-
-        spacing :: 4
-        for opt, id in MAIN_MENU_OPTION_NAMES {
-            rect, mouse_state, is_clicked := ui_push_rect(                
-                ui, hsv(0, 0, 0, 0),
-                sizing      = { Fixed{200}, Fixed{32} },
-                anchor      = anchor,
-                interactive = {
-                    id            = opt,
-                    hovered_color = hsv(140, 0.5, 1, 0.2),
-                    held_color    = hsv(140, 0.5, 0.96, 0.2),
-                } 
-            )
-
-            if is_clicked {
-                switch id {
-                    case .New_Game:
-                        game_request_switch_scene(Scene_Gameplay{
-                            init = {
-                                selected_level = 1,
-                            }
-                        })
-                    case .Settings:
-                    case .About:
-                    case .Archivements:
-                    case .Quit:
-                        game_request_quit()
-                }
-            }
-
-            ui_push_container(ui, rect)
-            {
-                defer ui_pop_container(ui)
-
-                ui_push_text(
-                    ui,
-                    font_id     = .Mono,
-                    text        = opt,
-                    anchor      = {
-                        container = ui_top_container(ui),
-                        element   = {.5, .5},
-                        parent    = {.5, .5} 
-                    },
-                    color       = (
-                        id == scene.current_option ?
-                        hsv(140, 0.5, 1) :
-                        hsv(140, 1, 0.8)
-                    ),
-                )
-            }
-
-            anchor.offset.y += rect.w + spacing
-        }
+        menu_stack_update_ui(&scene.menu_stack, ui)
     },
     input_ui = proc(scene : ^Scene_Main_Menu, ui: ^Ui, ev : sapp.Event) {
-        if ev.type == .KEY_DOWN {
-            #partial switch ev.key_code {
-                case .DOWN:
-                    scene.current_option = cast(Main_Menu_Option_Id)(
-                        (cast(int)scene.current_option + 1) % len(Main_Menu_Option_Id)
-                    )
-                case .UP:
-                    cur := cast(int)scene.current_option - 1
-                    if cur < 0 {
-                        scene.current_option = cast(Main_Menu_Option_Id)(cur + len(Main_Menu_Option_Id))
-                    } else {
-                        scene.current_option = cast(Main_Menu_Option_Id)(cur % len(Main_Menu_Option_Id))
-                    }
-                case .SPACE:
-                case .ENTER:
-                case .ESCAPE:
-            }
-        }
+        menu_stack_input_ui(&scene.menu_stack, ui, ev)
+    },
+    destroy = proc(scene : ^Scene_Main_Menu) {
+        menu_stack_destroy(&scene.menu_stack)
     }
 }

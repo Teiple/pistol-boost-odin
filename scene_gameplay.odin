@@ -11,7 +11,7 @@ Scene_Init :: struct {
 Scene_Gameplay :: struct {
     init       : Scene_Init,  
     meshes     : [dynamic]Mesh,
-    pause_menu : Pause_Menu, 
+    menu_stack : Menu_Stack,    
 }
 
 SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
@@ -19,10 +19,10 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         scene.meshes = make([dynamic]Mesh)
         append(&scene.meshes, mesh_create_box({2, 1, 1}))
     
-        pause_menu_init(&scene.pause_menu)
+        menu_stack_init(&scene.menu_stack)
     },
     destroy = proc(scene : ^Scene_Gameplay) {
-        pause_menu_destroy(&scene.pause_menu)
+        menu_stack_destroy(&scene.menu_stack)
         
         for &m in scene.meshes {
             mesh_destroy(&m)
@@ -36,12 +36,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
             text    = fmt.tprintf("You are at level %d", scene.init.selected_level), 
         )
 
-        pause_menu_begin(&scene.pause_menu)
-        {
-            defer pause_menu_end(&scene.pause_menu)
-            
-            pause_menu_update_ui(&scene.pause_menu, ui)
-        }
+        menu_stack_update_ui(&scene.menu_stack, ui)
     },
     draw_3d = proc(scene : ^Scene_Gameplay, renderer : ^Renderer) {
         for &m in scene.meshes {
@@ -55,12 +50,11 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         }
     },
     input_ui = proc(scene : ^Scene_Gameplay, ui: ^Ui, ev : sapp.Event) {
-        if !scene.pause_menu.show {
-            if ev.type == .KEY_DOWN && ev.key_code == .ESCAPE {
-                pause_menu_open(&scene.pause_menu)
-            }
-        } else {
-            pause_menu_input(&scene.pause_menu, ui, ev)
+        if menu_stack_top(&scene.menu_stack) != nil {
+            menu_stack_input_ui(&scene.menu_stack, ui, ev)
+            return
+        } else if ev.type == .KEY_DOWN && ev.key_code == .ESCAPE {
+            menu_stack_push_menu(&scene.menu_stack, Pause_Menu{})
         }
     }
 }

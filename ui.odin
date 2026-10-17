@@ -1,5 +1,6 @@
 package main
 // A very mininal anchor based ui system
+import "core:fmt"
 // It must do everything in one pass
 // Mouse input only accounts for explicit ids
 // There will be no implicit ids
@@ -12,7 +13,6 @@ import shaders "shaders"
 
 
 Anchor :: struct {
-    container : [4]f32,
     element   : [2]f32,
     parent    : [2]f32,
     offset    : [2]f32,
@@ -25,6 +25,11 @@ Fixed :: struct {
 }
 
 ID_NONE :: ""
+
+Ui_Id :: union {
+    string,
+    int,
+}
 
 Grow :: struct {}
 
@@ -53,7 +58,7 @@ Font :: struct {
 Ui_Builder :: struct {
     container_stack : [dynamic][4]f32,
     commands        : [dynamic]Ui_Cmd,
-    held_id         : string,
+    held_id         : Ui_Id,
     mouse           : ^Mouse_Input,
     input_captured  : bool,
 }
@@ -289,37 +294,39 @@ ui_get_quad :: proc(
 
 ui_push_rect :: proc(
     ui    : ^Ui,
-    color : [4]f32,
+    color : [4]f32 = 0,
     interactive : Maybe(struct {
-        id            : string,
+        id            : Ui_Id,
         hovered_color : Maybe([4]f32),
         held_color    : Maybe([4]f32),
     }) = nil,
     sizing : [2]Sizing    = {},
     anchor : Anchor       = {},
 ) -> (ele_rect : [4]f32, mouse_state : Mouse_Button_State, is_clicked : bool) {
+    container := ui_top_container(ui)
+    
     switch size in sizing.x {
         case Fixed:
             ele_rect.z = size.value
         case Grow:
-            ele_rect.z = ui_top_container(ui).z
+            ele_rect.z = container.z
         case Percent:
-            ele_rect.z = ui_top_container(ui).z * size.value 
+            ele_rect.z = container.z * size.value 
     }
 
     switch size in sizing.y {
         case Fixed:
             ele_rect.w = size.value
         case Grow:
-            ele_rect.w = ui_top_container(ui).w
+            ele_rect.w = container.w
         case Percent:
-            ele_rect.w = ui_top_container(ui).w * size.value 
+            ele_rect.w = container.w * size.value 
     }
 
     // apply anchor
     anchor_offset  : [2]f32
-    anchor_offset  = anchor.container.xy
-    anchor_offset += anchor.parent  * anchor.container.zw
+    anchor_offset  = container.xy
+    anchor_offset += anchor.parent  * container.zw
     anchor_offset -= anchor.element * ele_rect.zw
     anchor_offset += anchor.offset
 
@@ -341,38 +348,28 @@ ui_push_rect :: proc(
         is_inside := mouse_is_inside_rect(mouse, ele_rect)
 
         if is_inside {
-            if ui.builder.mouse.state[.Left] == .Pressed {
+            if mouse.state[.Left] == .Pressed {
                 ui.builder.held_id = i.id
             }
             
-            if  i.hovered_color != nil &&
-                ui.builder.mouse.state[.Left] == .None
+            if i.hovered_color != nil
             {
                 color = i.hovered_color.?
             }
-            else if i.held_color != nil &&
-                mouse.state[.Left] == .Down
-            {
-                color = i.held_color.?
-            }
-            
-            mouse_state = mouse.state[.Left]
 
             if ui.builder.held_id == i.id {
-                if mouse_state == .None {
-                    ui.builder.held_id = ID_NONE
+                // fmt.println("is pressing ", mouse.state[.Left])
+                if i.held_color != nil {
+                    color = i.held_color.?
                 }
-                if mouse_state == .Released {
+
+                if mouse.state[.Left] == .Released {
                     ui.builder.held_id = ID_NONE
                     is_clicked = true
                 }
             } 
         } else {
             mouse_state = .None
-
-            if ui.builder.held_id == i.id {
-                ui.builder.held_id = ID_NONE
-            }
         }
     }
 
@@ -453,10 +450,12 @@ ui_push_text :: proc(
         ele_rect.z += bchar.xadvance * scale
     }
 
+    container := ui_top_container(ui)
+
     // apply anchor
     anchor_offset : [2]f32
-    anchor_offset  = anchor.container.xy
-    anchor_offset += anchor.parent  * anchor.container.zw
+    anchor_offset  = container.xy
+    anchor_offset += anchor.parent  * container.zw
     anchor_offset -= anchor.element * ele_rect.zw
     anchor_offset += anchor.offset
 
@@ -574,7 +573,9 @@ ui_top_container :: proc(ui : ^Ui) -> [4]f32 {
 }
 
 ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
-    // nothing for now
+    if ui.builder.mouse.state[.Left] == .Released {
+        ui.builder.held_id = ID_NONE
+    }
 }
 
 // You should call this inside a input/event callback, not frame callback

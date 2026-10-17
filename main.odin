@@ -18,7 +18,7 @@ main :: proc() {
 		window_title     = "Pistol Boost",
 		width            = 960,
 		height           = 540,
-		disable_vsync    = true,
+		// disable_vsync    = true,
 		init_cb    = proc "c" () {
 			context = odin_ctx
 			game_init()
