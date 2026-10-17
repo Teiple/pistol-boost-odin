@@ -7,7 +7,7 @@ Pause_Menu_Option_Id :: enum {
     Continue,
     Settings,
     Main_Menu,
-    Quit
+    Exit
 }
 
 @(rodata)
@@ -15,7 +15,7 @@ pause_menu_options := [Pause_Menu_Option_Id]Menu_Option{
     .Continue  = { id = "pause_menu:continue",  name = "Continue" },
     .Settings  = { id = "pause_menu:settings",  name = "Settings" },
     .Main_Menu = { id = "pause_menu:main_menu", name = "Main Menu" },
-    .Quit      = { id = "pause_menu:quit",      name = "Quit" }
+    .Exit      = { id = "pause_menu:exit",      name = "Exit" }
 }
 
 Pause_Menu :: struct {
@@ -51,16 +51,15 @@ PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
                 res.next_menu = Settings_Menu{}
             case .Main_Menu:
                 game_request_switch_scene(Scene_Main_Menu{})
-            case .Quit:
-                game_request_quit()
+            case .Exit:
+                res.next_menu = Quit_Confirm_Popup_Menu{}
         }
 
         return
     },
     input_ui = proc(menu : ^Pause_Menu, ui: ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
         res.close = menu_helper_label_menu_input(
-            menu             = menu,
-            ui               = ui,
+        ui               = ui,
             ev               = ev,
             selected_current = &menu.selected_current,
             current_option   = &menu.current_option,

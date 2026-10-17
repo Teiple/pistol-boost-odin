@@ -124,8 +124,8 @@ ui_init_default :: proc(ui : ^Ui) {
     })
     
     ui.fonts = {
-        .Normal = ui_make_font(ui, #load("assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf")),
-        .Mono   = ui_make_font(ui, #load("assets/fonts/NotoSans_Mono.ttf")),
+        .Normal = ui_make_font(ui, #load("assets/fonts/NotoSans-Regular.ttf")),
+        .Mono   = ui_make_font(ui, #load("assets/fonts/NotoSansMono_SemiCondensed-Regular.ttf")),
     }
 
     ui.cur_ibuf_cap = 1024
@@ -405,8 +405,10 @@ ui_push_text :: proc(
 
     if len(text) == 0 do return
 
-    scale := font_size / font.base_size
-    pen   := [2]f32{0, font.ascent * scale}
+    scale        := font_size / font.base_size
+    line_height  := font.ascent * scale
+    pen          := [2]f32{0, line_height}
+    line_spacing :: 4
 
     ele_rect.w  = font_size
 
@@ -415,9 +417,20 @@ ui_push_text :: proc(
     start_vert  := len(ui.vertices)
     
     base_index  := u16(start_vert)
+    line_width : f32 = 0
 
     for r in text {
+        if r == '\n' {
+            pen.x      = 0
+            delta_y    := line_height + line_spacing
+            pen.y      += delta_y
+            ele_rect.w += delta_y
+            line_width       = 0
+            continue
+        }
+
         char := i32(r)
+
         assert(char >= 32 && char <= 32 + 92, "Only support ASCII text!")
         char  -= 32
         bchar := font.baked_chars[char]
@@ -446,8 +459,10 @@ ui_push_text :: proc(
         append(&ui.vertices, ..v[:])
         append(&ui.indices,  ..i[:])
 
-        pen.x      += bchar.xadvance * scale
-        ele_rect.z += bchar.xadvance * scale
+        delta_x    := bchar.xadvance * scale
+        pen.x      += delta_x
+        line_width += delta_x
+        ele_rect.z  = max(ele_rect.z, line_width)
     }
 
     container := ui_top_container(ui)

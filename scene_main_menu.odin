@@ -6,7 +6,6 @@ Main_Menu_Option_Id :: enum {
     Settings,
     Archivements,
     About,
-    Quit
 }
 
 @(rodata)
@@ -15,7 +14,6 @@ main_menu_option_names := [Main_Menu_Option_Id]string{
     .Settings     = "Settings",
     .About        = "About",
     .Archivements = "Archivements", 
-    .Quit         = "Quit",
 }
 
 @(rodata)
@@ -24,7 +22,6 @@ main_menu_options := [Main_Menu_Option_Id]Menu_Option{
     .Settings     = { id = "main_menu:settings",     name = "Settings" },
     .About        = { id = "main_menu:about",        name = "About" },
     .Archivements = { id = "main_menu:archivements", name = "Archivements" },
-    .Quit         = { id = "main_menu:quit",         name = "Quit" },
 }
 
 Main_Menu :: struct {
@@ -34,13 +31,14 @@ Main_Menu :: struct {
 
 MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
     update_ui = proc(menu : ^Main_Menu, ui : ^Ui) -> (res : Menu_Result) {
+        defer menu.selected_current = false
+
         selected_opt, selected := menu_helper_label_menu(
             menu             = menu,
             ui               = ui,
             selected_current = menu.selected_current,
             current_option   = menu.current_option,
             options          = main_menu_options,
-            
         )
 
         if selected do #partial switch selected_opt {
@@ -48,17 +46,24 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
                 game_request_switch_scene(Scene_Gameplay{
                     init = { selected_level = 1 },
                 })
-            case .Quit:
-                game_request_quit()
             case .Settings:
                 res.next_menu = Settings_Menu{}
+        }
+        
+        if menu_helper_back_button(
+            ui             = ui,
+            id             = settings_menu_back_btn_id,
+            text_alignment = .Middle,
+            label          = "Exit?"
+        ) {
+            res.next_menu = Quit_Confirm_Popup_Menu{}
         }
         
         return
     },
     input_ui = proc(menu : ^Main_Menu, ui: ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
-        res.close = menu_helper_label_menu_input(
-            menu             = menu,
+        // There is no thing that main menu can close to so we ignore the close request  
+        menu_helper_label_menu_input(
             ui               = ui,
             ev               = ev,
             selected_current = &menu.selected_current,

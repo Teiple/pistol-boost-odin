@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import ins "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
@@ -8,6 +7,7 @@ Menu :: union {
     Main_Menu,
     Pause_Menu,
     Settings_Menu,
+    Quit_Confirm_Popup_Menu,
     // Graphics_Menu,
     // Audio_Menu,
     // Gameplay_Menu,
@@ -41,6 +41,8 @@ menu_get_callbacks :: proc(menu : ^Menu) -> Menu_Callbacks_Any {
             return convert_cbs(&m, PAUSE_MENU_CALLBACKS)
         case Settings_Menu:
             return convert_cbs(&m, SETTINGS_MENU_CALLBACKS)
+        case Quit_Confirm_Popup_Menu:
+            return convert_cbs(&m, QUIT_CONFIRM_POPUP_MENU_CALLBACKS)
     }
     
     panic("Unreachable")
@@ -79,7 +81,6 @@ menu_stack_input_ui :: proc(menu_stack : ^Menu_Stack, ui : ^Ui, ev : sapp.Event)
 }
 
 menu_stack_resolve_result :: proc(menu_stack : ^Menu_Stack, res : Menu_Result) {
-    assert(res.next_menu == nil || (res.next_menu != nil && !res.close))    
     if res.close {
         menu_stack_pop_menu(menu_stack)
     } else if res.next_menu != nil {
@@ -160,7 +161,7 @@ menu_helper_label_menu :: proc(
 
     ui_push_container(ui, rect)
     {
-        defer ui_push_container(ui, rect)
+        defer ui_pop_container(ui)
 
         opt_anchor : Anchor = {
             parent    = { 0, 0},
@@ -214,7 +215,6 @@ menu_helper_label_menu :: proc(
 }
 
 menu_helper_label_menu_input :: proc(
-    menu             : ^$M,
     ui               : ^Ui,
     ev               : sapp.Event,
     selected_current : ^bool,
@@ -248,88 +248,239 @@ menu_helper_label_menu_input :: proc(
     return
 }
 
-menu_helper_options_menu :: proc(
-    menu                  : ^$M,
-    ui                    : ^Ui,
-    selected_current      : bool,
-    current_option        : $O,
-    current_option_select : $S,
-    option_selects        : [O]Menu_Option_Select(S),
-    option_callbacks      : [O]proc(menu: ^M),
-    anchor                : Anchor = {
-        parent  = {.5, .5},
-        element = {.5, .5},
-    },
-    option_size      : [2]f32 = { 200, 32 },
-) where ins.type_is_enum(O)
-{
-    spacing   :: 4
-    opt_count := cast(f32)len(O)
+Text_Alignment :: enum {
+    Left,
+    Middle,
+    Right
+}
 
-    // option container
-    rect, _, _ := ui_push_rect(
-        ui, 
-        sizing = {
-            Fixed{
-                option_size.x
-            },
-            Fixed{
-                option_size.y * opt_count + (opt_count - 1) * spacing,
-            }
-        },
-        anchor = anchor
+menu_helper_back_button :: proc(
+    ui             : ^Ui,
+    id             : Ui_Id,
+    label          : string = "< Back",
+    text_alignment : Text_Alignment = .Left,
+) -> (is_clicked : bool) {
+    rect, mouse_state, clicked := ui_push_rect(                
+        ui, hsv(0, 0, 0, 0),
+        sizing      = { Grow{}, Fixed{42}},
+        anchor      = { element = {0, 1}, parent = {0, 1}},
+        interactive = {
+            id            = id,
+            hovered_color = hsv(140, 0.5, 1, 0.2),
+            held_color    = hsv(140, 0.5, 0.5, 0.2),
+        }
     )
 
     ui_push_container(ui, rect)
     {
-        defer ui_push_container(ui, rect)
+        defer ui_pop_container(ui)
 
-        opt_anchor : Anchor = {
-            parent    = { 0, 0},
-            element   = { 0, 0},
+        anchor : Anchor
+        switch text_alignment {
+            case .Middle:
+                anchor = {
+                    element   = {.5, .5},
+                    parent    = {.5, .5} 
+                }
+            case .Left:
+                anchor = {
+                    element   = { 0, .5},
+                    parent    = { 0, .5} 
+                }
+            case .Right:
+                anchor = {
+                    element   = { 1, .5},
+                    parent    = { 1, .5} 
+                }
         }
 
-        for opt, id in option_selects {
-            rect, mouse_state, is_clicked := ui_push_rect(                
+        ui_push_text(
+            ui,
+            font_id     = .Mono,
+            text        = label,
+            anchor      = anchor,
+            color       = hsv(140, 1, 0.8),
+        )
+    }
+
+    return clicked
+}
+
+Quit_Confirm_Popup_Menu :: struct{
+    selected_current : bool,
+    current_option   : bool,
+}
+
+QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
+    update_ui = proc(m : ^Quit_Confirm_Popup_Menu, ui : ^Ui) -> (res : Menu_Result) {
+        defer m.selected_current = false
+        
+        yes, is_clicked := menu_helper_confirmation(
+            ui,
+            current_option   = m.current_option,
+            selected_current = m.selected_current,
+            yes_id           = "quit_confirm_popup_menu:yes",
+            no_id            = "quit_confirm_popup_menu:no",
+            message          = " Are you sure to\nexit the program?"
+        )
+
+        if is_clicked {
+            if yes {
+                game_request_quit()
+            } else {
+                res.close = true
+            }
+        }
+
+        return
+    },
+    input_ui = proc(m : ^Quit_Confirm_Popup_Menu, ui : ^Ui, ev: sapp.Event) -> (res : Menu_Result) {
+        res.close = menu_helper_confirmation_input(ui, ev,
+            selected_current = &m.selected_current,
+            current_option   = &m.current_option,
+        )
+        
+        return
+    }
+}
+
+menu_helper_confirmation :: proc(
+    ui               : ^Ui,
+    message          : string,
+    yes_id           : Ui_Id,
+    no_id            : Ui_Id,
+    current_option   : bool,
+    selected_current : bool,
+    yes_label        : string = "Yes",
+    no_label         : string = "No",
+) -> (yes : bool, is_clicked : bool) {
+    size       : [2]f32 : {400, 200}
+    padding    :: 16
+    opt_height :: 32
+
+    rect, _, _ := ui_push_rect(                
+        ui, hsv(0, 0, 0, .8),
+        sizing      = { Fixed{size.x}, Fixed{size.y}},
+        anchor      = { element = {.5, .5}, parent = {.5, .5}, offset = {0, -20}},
+    )
+
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+        
+        inner_rect, _, _ := ui_push_rect(                
+            ui, 0,
+            sizing = { Fixed{size.x - 2 * padding}, Fixed{size.y - 2 * padding}},
+            anchor = { offset = padding },
+        )
+
+        ui_push_container(ui, inner_rect)
+        {
+            defer ui_pop_container(ui)
+            
+            // Content rect
+            content_rect, _, _ := ui_push_rect(                
                 ui, hsv(0, 0, 0, 0),
-                sizing      = { Fixed{option_size.x}, Fixed{option_size.y} },
-                anchor      = opt_anchor,
+                sizing = { Grow{}, Fixed{size.y - 2 * padding - opt_height}},
+            )
+            
+            ui_push_container(ui, content_rect)
+            {
+                defer ui_pop_container(ui)
+                
+                ui_push_text(
+                    ui,
+                    font_id = .Mono,
+                    text    = message,
+                    anchor  = { element = {.5, .5}, parent = {.5, .5} },
+                    color   = hsv(140, 1, 0.8),
+                )
+            }
+
+            // Yes/No rects
+            yes_rect, _, yes_clicked := ui_push_rect(                
+                ui, hsv(0, 0, 0, 0),
+                sizing      = { Percent{.5}, Fixed{opt_height}},
+                anchor      = { element = {0, 1}, parent = {0, 1}},
                 interactive = {
-                    id            = opt.id,
+                    id            = yes_id,
                     hovered_color = hsv(140, 0.5, 1, 0.2),
                     held_color    = hsv(140, 0.5, 0.5, 0.2),
                 }
             )
 
-            is_clicked ||= selected_current && id == current_option
+            yes_clicked ||= selected_current && current_option == true
 
-            if is_clicked {
-                if opt_cb := option_callbacks[id]; opt_cb != nil {
-                    opt_cb(menu)
-                }
-            }
-
-            ui_push_container(ui, rect)
+            ui_push_container(ui, yes_rect)
             {
                 defer ui_pop_container(ui)
 
                 ui_push_text(
                     ui,
-                    font_id     = .Mono,
-                    text        = opt.name,
-                    anchor      = {
-                        element   = {.5, .5},
-                        parent    = {.5, .5} 
-                    },
-                    color       = (
-                        id == current_option ?
-                        hsv(140, 0.5, 1) :
-                        hsv(140, 1, 0.8)
-                    ),
+                    font_id = .Mono,
+                    text    = yes_label,
+                    anchor  = { element = {.5, .5}, parent = {.5, .5} },
+                    color   = current_option ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
                 )
             }
 
-            opt_anchor.offset.y += rect.w + spacing
+            no_rect, _, no_clicked := ui_push_rect(                
+                ui, hsv(0, 0, 0, 0),
+                sizing      = { Percent{.5}, Fixed{opt_height}},
+                anchor      = { element = {0, 1}, parent = {.5, 1}},
+                interactive = {
+                    id            = no_id,
+                    hovered_color = hsv(140, 0.5, 1, 0.2),
+                    held_color    = hsv(140, 0.5, 0.5, 0.2),
+                }
+            )
+
+            no_clicked ||= selected_current && current_option == false
+            
+            ui_push_container(ui, no_rect)
+            {
+                defer ui_pop_container(ui)
+
+                ui_push_text(
+                    ui,
+                    font_id = .Mono,
+                    text    = no_label,
+                    anchor  = { element = {.5, .5}, parent = {.5, .5} },
+                    color   = !current_option ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8)
+                )
+            }
+
+            is_clicked = yes_clicked || no_clicked
+            yes        = yes_clicked
         }
-    }   
+    }
+
+    return
+}
+
+
+menu_helper_confirmation_input :: proc(
+    ui               : ^Ui,
+    ev               : sapp.Event,
+    selected_current : ^bool,
+    current_option   : ^bool,
+) -> (requested_to_close : bool)
+{
+    ui_capture_input(ui)
+
+    cur := current_option^
+
+    if ev.type == .KEY_DOWN {
+        #partial switch ev.key_code {
+            case .LEFT, .RIGHT:
+                current_option^ = !cur
+                current_option^ = !cur
+            case .SPACE, .ENTER:
+                selected_current^ = true           
+            case .ESCAPE:
+                requested_to_close = true
+        }
+    }
+
+    return
 }

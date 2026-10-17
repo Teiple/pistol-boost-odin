@@ -5,6 +5,9 @@ import sg "sokol-odin/sokol/gfx"
 import sglue "sokol-odin/sokol/glue"
 import slog "sokol-odin/sokol/log"
 
+VIEWPORT_BASE_WIDTH  :: 960
+VIEWPORT_BASE_HEIGHT :: 540
+
 Game :: struct {
 	viewport   : Viewport,
 	frame_time : Frame_Time,
@@ -34,9 +37,12 @@ game_init :: proc() {
 
 	game_time_init(&game.time)
 
-	viewport_init(&game.viewport, {800, 480}, {
-		sapp.widthf(),
-		sapp.heightf(),
+	viewport_init(&game.viewport, {
+			VIEWPORT_BASE_WIDTH,
+			VIEWPORT_BASE_HEIGHT
+		}, {
+			sapp.widthf(),
+			sapp.heightf(),
 	})
 
 	camera_init_default(&game.camera, {0, 2, 10}, {0, 0, 0})

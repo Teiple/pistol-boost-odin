@@ -5,6 +5,9 @@ import "core:fmt"
 import sapp "sokol-odin/sokol/app"
 import "core:mem"
 
+WINDOW_INITIAL_WIDTH  :: 1024
+WINDOW_INITIAL_HEIGHT :: 768
+
 odin_ctx := runtime.default_context()
 
 main :: proc() {
@@ -16,8 +19,8 @@ main :: proc() {
 
 	sapp.run({
 		window_title     = "Pistol Boost",
-		width            = 960,
-		height           = 540,
+		width            = WINDOW_INITIAL_WIDTH,
+		height           = WINDOW_INITIAL_HEIGHT,
 		// disable_vsync    = true,
 		init_cb    = proc "c" () {
 			context = odin_ctx

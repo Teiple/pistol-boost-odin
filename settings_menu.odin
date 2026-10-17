@@ -23,8 +23,10 @@ settings_menu_options := [Settings_Menu_Option_Id]Menu_Option{
     .Audio    = { id = "settings_menu:audio",    name = "Audio"},
 }
 
+settings_menu_back_btn_id :: "settings_menu:id"
+
 SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
-    update_ui = proc(menu : ^Settings_Menu, ui : ^Ui) -> Menu_Result {
+    update_ui = proc(menu : ^Settings_Menu, ui : ^Ui) -> (res: Menu_Result) {
         selected_opt, selected := menu_helper_label_menu(
             menu             = menu,
             ui               = ui,
@@ -36,11 +38,16 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
         if selected do #partial switch selected_opt {
         }
 
-        return {}
+        res.close = menu_helper_back_button(
+            ui             = ui,
+            id             = settings_menu_back_btn_id,
+            text_alignment = .Middle,
+        )
+
+        return
     },
     input_ui = proc(menu : ^Settings_Menu, ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
         res.close = menu_helper_label_menu_input(
-            menu             = menu,
             ui               = ui,
             ev               = ev,
             selected_current = &menu.selected_current,
