@@ -1,5 +1,6 @@
 package main
 
+import "core:math"
 import ins "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
@@ -243,17 +244,11 @@ menu_helper_label_menu_input :: proc(
     return
 }
 
-Text_Alignment :: enum {
-    Left,
-    Middle,
-    Right
-}
-
 menu_helper_back_button :: proc(
     ui             : ^Ui,
     id             : Ui_Id,
     label          : string,
-    text_alignment : Text_Alignment = .Left,
+    text_alignment : f32 = 0.5,
 ) -> (is_clicked : bool) {
     rect, mouse_state, clicked := ui_push_rect(                
         ui, hsv(0, 0, 0, 0),
@@ -270,23 +265,9 @@ menu_helper_back_button :: proc(
     {
         defer ui_pop_container(ui)
 
-        anchor : Anchor
-        switch text_alignment {
-            case .Middle:
-                anchor = {
-                    element   = {.5, .5},
-                    parent    = {.5, .5},
-                }
-            case .Left:
-                anchor = {
-                    element   = { 0, .5},
-                    parent    = { 0, .5} 
-                }
-            case .Right:
-                anchor = {
-                    element   = { 1, .5},
-                    parent    = { 1, .5} 
-                }
+        anchor : Anchor = {
+            element = text_alignment,
+            parent  = text_alignment,
         }
 
         ui_push_text(
@@ -350,7 +331,7 @@ menu_helper_confirmation :: proc(
     current_option   : bool,
     selected_current : bool,
 ) -> (yes : bool, is_clicked : bool) {
-    size       : [2]f32 : {400, 200}
+    size       : [2]f32= {400, 200}
     padding    :: 16
     opt_height :: 32
 

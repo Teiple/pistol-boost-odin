@@ -1,5 +1,6 @@
 package main
 
+import "core:slice"
 import "core:fmt"
 import sapp "sokol-odin/sokol/app"
 import sg "sokol-odin/sokol/gfx"
@@ -51,7 +52,7 @@ game_init :: proc() {
 	camera_init_default(&game.camera, {0, 2, 10}, {0, 0, 0})
 	renderer_init(&game.renderer)
 	
-	game.language = .Japanese
+	game.language = .English
 	fc := load_font_config(game.language)
 	defer unload_font_config(&fc)
 	
@@ -164,3 +165,13 @@ tr :: proc(term: Loc_Term, params : ..any) -> string {
 	}
 	return loc_map[game.language][term]
 }
+
+game_lang_is_cjk :: proc() -> bool {
+	#partial switch game.language {
+		case .Japanese, .SimplifiedChinese:
+			return true
+		case:
+			return false
+	}
+}
+

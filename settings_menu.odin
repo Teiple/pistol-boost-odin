@@ -39,10 +39,9 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
         }
 
         res.close = menu_helper_back_button(
-            ui             = ui,
-            label          = tr(.Back),
-            id             = settings_menu_back_btn_id,
-            text_alignment = .Middle,
+            ui    = ui,
+            label = tr(.Back),
+            id    = settings_menu_back_btn_id,
         )
 
         return

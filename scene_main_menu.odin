@@ -43,10 +43,9 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
         }
         
         if menu_helper_back_button(
-            ui             = ui,
-            id             = settings_menu_back_btn_id,
-            text_alignment = .Middle,
-            label          = tr(.Exit),
+            ui    = ui,
+            id    = settings_menu_back_btn_id,
+            label = tr(.Exit),
         ) {
             res.next_menu = Quit_Confirm_Popup_Menu{}
         }

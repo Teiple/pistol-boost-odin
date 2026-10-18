@@ -10,7 +10,7 @@ import "core:slice"
 import sg "sokol-odin/sokol/gfx"
 import tt "vendor:stb/truetype"
 import shaders "shaders"
-
+import "core:unicode/utf8"
 
 Anchor :: struct {
     element   : [2]f32,
@@ -447,6 +447,7 @@ ui_push_rect :: proc(
     return ele_rect, mouse_state, is_clicked
 }
 
+
 ui_push_text :: proc(
     ui        : ^Ui,
     text      : string,
@@ -458,7 +459,8 @@ ui_push_text :: proc(
         mouse         : ^Mouse_Input,
         hovered_color : Maybe([4]f32),
     }) = nil,
-    anchor    : Anchor = {},
+    anchor         : Anchor = {},
+    text_alignment : f32 = .5,
 ) -> (ele_rect : [4]f32) {
     // use address here since font struct is quite big
     font := &ui.fonts[font_id]
@@ -477,62 +479,79 @@ ui_push_text :: proc(
     start_vert  := len(ui.vertices)
     
     base_index  := u16(start_vert)
-    line_width : f32 = 0
 
-    for r in text {
-        if r == '\n' {
+    wrapped_lines   := ui_wrap_text(
+        font, text, font_size,
+        max_width = ui_top_container(ui).z
+    )
+
+    widest_line_width := wrapped_lines[0].width
+    for i in 1..<len(wrapped_lines) {
+        if wrapped_lines[i].width > widest_line_width {
+            widest_line_width = wrapped_lines[i].width
+        }
+    }
+
+    for wrapped_line, index in wrapped_lines {
+        // Move the pen down each line and reset horizontal offset
+        // (except the last line)
+        defer if index < len(wrapped_lines) - 1 {
             pen.x      = 0
             delta_y    := line_height + line_spacing
             pen.y      += delta_y
             ele_rect.w += delta_y
-            line_width = 0
-            continue
         }
-
-        char := i32(r)
-        
-        pchar : tt.packedchar
-
-        if char >= 32 && char <= 126 {
-            // ascii text can sample the packed chars directly by index
+        {
+            line_width := wrapped_line.width
+            pad_x      := (widest_line_width - line_width) * text_alignment
             
-            ascii_idx := char - 32
-            pchar = font.packed_chars[ascii_idx]
-        } else {
-            // non-ascii char need lookup table
-
-            non_ascii_idx := font.non_ascii_map[r]
-            pchar = font.packed_chars[non_ascii_idx]
+            pen.x      += pad_x
+            ele_rect.x  = min(ele_rect.x, pen.x)
+            ele_rect.z  = max(ele_rect.z, line_width)
         }
 
-        // rect is easier to reason about imo
-        rect:= [4]f32{
-            f32(pchar.x0),
-            f32(pchar.y0),
-            f32(pchar.x1 - pchar.x0),
-            f32(pchar.y1 - pchar.y0),
+        for r in wrapped_line.line {
+            char := i32(r)
+            
+            pchar : ^tt.packedchar // use pointer as it's also a big struct
+
+            if char >= 32 && char <= 126 {
+                // ascii text can sample the packed chars directly by index
+                ascii_idx := char - 32
+                pchar = &font.packed_chars[ascii_idx]
+            } else {
+                // non-ascii char need lookup table
+                non_ascii_idx := font.non_ascii_map[r]
+                pchar = &font.packed_chars[non_ascii_idx]
+            }
+
+            // rect is easier to reason about imo
+            rect:= [4]f32{
+                f32(pchar.x0),
+                f32(pchar.y0),
+                f32(pchar.x1 - pchar.x0),
+                f32(pchar.y1 - pchar.y0),
+            }
+
+            uv_rect := rect
+            uv_rect.xz /= f32(font.atlas_size.x)
+            uv_rect.yw /= f32(font.atlas_size.y)
+
+            v,i := ui_get_quad(
+                position     = pen + {pchar.xoff, pchar.yoff} * scale,
+                index_offset = base_index,
+                size         = rect.zw * scale,
+                uv_rect      = uv_rect,
+            )
+
+            base_index  += len(v)
+
+            append(&ui.vertices, ..v[:])
+            append(&ui.indices,  ..i[:])
+
+            delta_x := pchar.xadvance * scale
+            pen.x   += delta_x
         }
-
-        uv_rect := rect
-        uv_rect.xz /= f32(font.atlas_size.x)
-        uv_rect.yw /= f32(font.atlas_size.y)
-
-        v,i := ui_get_quad(
-            position     = pen + {pchar.xoff, pchar.yoff} * scale,
-            index_offset = base_index,
-            size         = rect.zw * scale,
-            uv_rect      = uv_rect,
-        )
-
-        base_index  += len(v)
-
-        append(&ui.vertices, ..v[:])
-        append(&ui.indices,  ..i[:])
-
-        delta_x    := pchar.xadvance * scale
-        pen.x      += delta_x
-        line_width += delta_x
-        ele_rect.z  = max(ele_rect.z, line_width)
     }
 
     container := ui_top_container(ui)
@@ -568,6 +587,102 @@ ui_push_text :: proc(
     })
 
     return ele_rect
+}
+
+Wrapped_Line :: struct  {
+    line       : string,
+    width : f32,
+}
+
+@(require_results)
+ui_wrap_text :: proc(
+    font: ^Font,
+    text: string,
+    font_size: f32,
+    max_width: f32,
+    allocator := context.temp_allocator,
+) -> []Wrapped_Line {
+    assert(len(text) > 0)
+    
+    wrapped_lines := make([dynamic]Wrapped_Line, allocator)
+    scale := font_size / font.base_size
+
+    glyph_advance :: proc(font: ^Font, r: rune, scale: f32) -> f32 {
+        if r >= 32 && r <= 126 {
+            return font.packed_chars[r - 32].xadvance * scale
+        }
+        if idx, ok := font.non_ascii_map[r]; ok {
+            return font.packed_chars[idx].xadvance * scale
+        }
+        return 0
+    }
+
+    line_start := 0 // in byte index
+    last_break := 0 // in byte index
+    
+    line_width: f32 = 0
+    word_width: f32 = 0
+
+    for r, cur_index in text {
+        if r == '\n' {
+            append(&wrapped_lines, {text[line_start:cur_index], line_width + word_width})
+            
+            // new line starts next index
+            line_start = cur_index + 1
+            last_break = cur_index + 1
+
+            line_width = 0
+            word_width = 0
+            continue
+        }
+
+        xadvance := glyph_advance(font, r, scale)
+
+        if r == ' ' || r == '\t' {
+            line_width += word_width + xadvance
+            word_width = 0
+            last_break = cur_index + 1
+            continue
+        }
+
+        // next witdth as the result of appending this character/rune
+        next_width := line_width + word_width + xadvance
+        
+        // if lang is cjk, characters are seperatable
+        if game_lang_is_cjk() {
+            // TODO: incase the first advance exceed max_width
+            // it will pushs an empty string
+            if next_width > max_width {
+                // stop before current index
+                append(&wrapped_lines, {text[line_start:cur_index], line_width + word_width})
+                
+                // new line starts from current index
+                // so next line already has a character/rune
+                line_start = cur_index
+                line_width = 0
+                word_width = 0
+            }
+            
+            word_width += xadvance
+            last_break = cur_index
+            
+            continue
+        } else if next_width > max_width && last_break > line_start {
+            append(&wrapped_lines, {text[line_start:last_break - 1], line_width})
+            
+            line_start = last_break
+            line_width = 0
+        }
+
+        word_width += xadvance
+    }
+
+    // The rest
+    if line_start < len(text) {
+        append(&wrapped_lines, {text[line_start:], line_width + word_width})
+    }
+
+    return wrapped_lines[:]
 }
 
 ui_push_cursor :: proc(
