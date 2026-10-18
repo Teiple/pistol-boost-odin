@@ -38,20 +38,19 @@ Percent :: struct {
 }
 
 Font_Id :: enum {
-    Normal,
-    Mono
+    Normal
 }
 
 Font :: struct {
-    atlas_size   : [2]f32,
-    base_size    : f32,
-    font_spacing : f32,
-    line_spacing : f32,
-    ascent       : f32,
-    descent      : f32,
-    baked_chars  : [96]tt.bakedchar,
-    font_img     : sg.Image,
-    font_view    : sg.View,
+    packed_chars  : []tt.packedchar,
+    atlas_size    : [2]i32,
+    base_size     : f32,
+    font_spacing  : f32,
+    line_spacing  : f32,
+    ascent        : f32,
+    font_img      : sg.Image,
+    font_view     : sg.View,
+    non_ascii_map : map[rune]i32, 
 }
 
 // A stateful data container for current frame
@@ -91,7 +90,15 @@ Ui_Cmd :: struct {
     view        : sg.View,
 }
 
-ui_init_default :: proc(ui : ^Ui) {
+Font_Config :: struct {
+    non_ascii_runes : []rune,
+    ttf_data        : []byte,
+    atlas_width     : i32,
+    atlas_height    : i32,
+    base_size       : f32,
+}
+
+ui_init :: proc(ui : ^Ui, font_cfgs : [Font_Id]Font_Config) {
     ui.shader   = sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
     
     ui.pipeline = sg.make_pipeline({
@@ -123,10 +130,9 @@ ui_init_default :: proc(ui : ^Ui) {
         }
     })
     
-    ui.fonts = {
-        .Normal = ui_make_font(ui, #load("assets/fonts/NotoSans-Regular.ttf")),
-        .Mono   = ui_make_font(ui, #load("assets/fonts/NotoSansMono_SemiCondensed-Regular.ttf")),
-    }
+    for font_cfg, id in font_cfgs {
+        ui_init_font(&ui.fonts[id], font_cfg)
+    } 
 
     ui.cur_ibuf_cap = 1024
     ui.cur_vbuf_cap = 1024
@@ -173,9 +179,9 @@ ui_init_default :: proc(ui : ^Ui) {
 
 ui_destroy :: proc(ui : ^Ui) {
     for &f in ui.fonts {
-        sg.destroy_image(f.font_img)
-        sg.destroy_view(f.font_view)
-    } 
+        ui_destroy_font(&f)
+    }
+
     sg.destroy_image(ui.rect_img)
     sg.destroy_view(ui.rect_view)
 
@@ -195,81 +201,135 @@ ui_destroy :: proc(ui : ^Ui) {
 
 }
 
-ui_make_font :: proc(
-    ui           : ^Ui,
-    data         : []byte,
-    base_size    : f32 = 32,
-    spacing      : f32 = 0,
-    line_spacing : f32 = 2,
-    atlas_size   : [2]i32 = {256, 128},
-    allocator    := context.allocator
-) -> (font: Font) {
-    font.base_size = base_size
-    font.font_spacing   = spacing
-    font.line_spacing   = line_spacing
-    font.atlas_size     = cast([2]f32)atlas_size
+ui_init_font :: proc(font: ^Font, font_cfg : Font_Config) {
+    font^ = {
+        base_size    = font_cfg.base_size,
+        atlas_size   = {font_cfg.atlas_width, font_cfg.atlas_height},
+    }
 
-    atlas := make([]byte, len = atlas_size.x * atlas_size.y, allocator = allocator)
-    defer delete(atlas)
-
-    // very annoying side quest to fetch the v metrics
-    // since they wouldn't include them when using BakeFontBitmap()
+    // Fetch vmetrics
     {
-        font_info : tt.fontinfo
-        tt.InitFont(&font_info, raw_data(data), 0)
-        ascent, descent, line_gap : i32
-        tt.GetFontVMetrics(&font_info, &ascent, &descent, &line_gap)
-
-        scale := tt.ScaleForPixelHeight(&font_info, base_size)
-
-        font.ascent  = f32(ascent)  * scale
-        font.descent = f32(descent) * scale
+        descent, line_gap: f32
+        tt.GetScaledFontVMetrics(
+            raw_data(font_cfg.ttf_data),
+            index    = 0,
+            size     = font.base_size,
+            ascent   = &font.ascent,
+            // don't need these really 
+            descent  = &descent,
+            lineGap  = &line_gap,
+        )
     }
 
-    row_used := tt.BakeFontBitmap(
-        data         = raw_data(data),
-        offset       = 0,
-        pixel_height = base_size,
-        pixels       = raw_data(atlas),
-        pw           = atlas_size.x,
-        ph           = atlas_size.y,
-        // standard printable ASCII chars
-        first_char   = 32,
-        num_chars    = 92,
-        chardata     = raw_data(font.baked_chars[:]),
-    )
+    // Prepare buffers
+    atlas := make([]byte, font.atlas_size.x * font.atlas_size.y)
+    defer delete(atlas)    
+    
+    font.packed_chars = make([]tt.packedchar, 95 + len(font_cfg.non_ascii_runes))
 
-    assert(row_used > 0, "Atlas is overflowed! Try increase atlas_size or reduce base_size")
+    ascii_chars          := font.packed_chars[:95]
+    used_non_ascii_chars := font.packed_chars[95:]
 
-    atlas_rgba8 := make([]byte, len = atlas_size.x * atlas_size.y * 4, allocator = allocator)
-    defer delete(atlas_rgba8)
+    // A custom map to map non ascii char (e.g. Chinese char -> the spot in packed_chars)
+    font.non_ascii_map = make(map[rune]i32)
 
-    for p, i in atlas {
-        atlas_rgba8[i * 4]     = 255
-        atlas_rgba8[i * 4 + 1] = 255
-        atlas_rgba8[i * 4 + 2] = 255
-        atlas_rgba8[i * 4 + 3] = p
+    for r, idx in font_cfg.non_ascii_runes {
+        font.non_ascii_map[r] = 95 + i32(idx)
+    }
+    
+    // Define the ranges
+    ranges : [dynamic; 2]tt.pack_range
+    {
+        append(&ranges, {
+            font_size                        = font.base_size,
+            first_unicode_codepoint_in_range = 32,
+            num_chars                        = 95,
+            chardata_for_range               = raw_data(ascii_chars),
+        })
+    
+        if len(used_non_ascii_chars) > 0 {
+            append(&ranges, {
+                font_size                   = font.base_size,
+                array_of_unicode_codepoints = raw_data(font_cfg.non_ascii_runes),
+                num_chars                   = i32(len(font_cfg.non_ascii_runes)),
+                chardata_for_range          = raw_data(used_non_ascii_chars),
+            })
+        }
     }
 
-    font.font_img = sg.make_image({
-        pixel_format = .RGBA8, 
-        width  = atlas_size.x,
-        height = atlas_size.y,
-        data   = {
-            mip_levels = {
-                0 = {
-                    ptr = raw_data(atlas_rgba8),
-                    size = cast(uint)slice.size(atlas_rgba8)
+    // Run the packing
+    pack_ctx: tt.pack_context
+    tt.PackBegin(
+        &pack_ctx,
+        pixels          = raw_data(atlas),
+        width           = font.atlas_size.x,
+        height          = font.atlas_size.y,
+        stride_in_bytes = 0,
+        padding         = 1,
+        alloc_context   = nil)
+    {
+        defer tt.PackEnd(&pack_ctx)
+
+        tt.PackSetOversampling(
+            &pack_ctx,
+            h_oversample = 1,
+            v_oversample = 1,
+        )
+
+        ok := tt.PackFontRanges(
+            &pack_ctx,
+            fontdata   = raw_data(font_cfg.ttf_data),
+            font_index = 0,
+            ranges     = raw_data(ranges[:]),
+            num_ranges = i32(len(ranges)),
+        )
+
+        assert(
+            bool(ok),
+            "Error packing font. Atlas might be too small, try increasing atlas size or reducing base font size"
+        )
+    }
+
+    // Create texture image and texture view for ui to sample
+    atlas_rgba8 := make([]byte, font.atlas_size.x * font.atlas_size.y * 4)
+    {
+        defer delete(atlas_rgba8)
+    
+        for p, i in atlas {
+            atlas_rgba8[i * 4]     = 255
+            atlas_rgba8[i * 4 + 1] = 255
+            atlas_rgba8[i * 4 + 2] = 255
+            atlas_rgba8[i * 4 + 3] = p
+        }
+    
+        font.font_img = sg.make_image({
+            pixel_format = .RGBA8, 
+            width  = font.atlas_size.x,
+            height = font.atlas_size.y,
+            data   = {
+                mip_levels = {
+                    0 = {
+                        ptr = raw_data(atlas_rgba8),
+                        size = cast(uint)slice.size(atlas_rgba8)
+                    }
                 }
             }
-        }
-    })
+        })
+    
+        font.font_view = sg.make_view({
+            texture = {image = font.font_img}
+        })
+    }
 
-    font.font_view = sg.make_view({
-        texture = {image = font.font_img}
-    })
+    return
+}
 
-    return font
+ui_destroy_font :: proc(font : ^Font) {
+    sg.destroy_image(font.font_img)
+    sg.destroy_view(font.font_view)
+
+    delete(font.non_ascii_map)
+    delete(font.packed_chars)
 }
 
 ui_get_quad :: proc(
@@ -389,8 +449,8 @@ ui_push_rect :: proc(
 
 ui_push_text :: proc(
     ui        : ^Ui,
-    font_id   : Font_Id,
     text      : string,
+    font_id   : Font_Id = .Normal,
     font_size : f32 = 32,
     color     : [4]f32 = {0.2, 0.8, 0.2, 1},
     // interactive
@@ -425,30 +485,40 @@ ui_push_text :: proc(
             delta_y    := line_height + line_spacing
             pen.y      += delta_y
             ele_rect.w += delta_y
-            line_width       = 0
+            line_width = 0
             continue
         }
 
         char := i32(r)
+        
+        pchar : tt.packedchar
 
-        assert(char >= 32 && char <= 32 + 92, "Only support ASCII text!")
-        char  -= 32
-        bchar := font.baked_chars[char]
+        if char >= 32 && char <= 126 {
+            // ascii text can sample the packed chars directly by index
+            
+            ascii_idx := char - 32
+            pchar = font.packed_chars[ascii_idx]
+        } else {
+            // non-ascii char need lookup table
+
+            non_ascii_idx := font.non_ascii_map[r]
+            pchar = font.packed_chars[non_ascii_idx]
+        }
 
         // rect is easier to reason about imo
         rect:= [4]f32{
-            f32(bchar.x0),
-            f32(bchar.y0),
-            f32(bchar.x1 - bchar.x0),
-            f32(bchar.y1 - bchar.y0),
+            f32(pchar.x0),
+            f32(pchar.y0),
+            f32(pchar.x1 - pchar.x0),
+            f32(pchar.y1 - pchar.y0),
         }
 
         uv_rect := rect
-        uv_rect.xz /= font.atlas_size.x
-        uv_rect.yw /= font.atlas_size.y
+        uv_rect.xz /= f32(font.atlas_size.x)
+        uv_rect.yw /= f32(font.atlas_size.y)
 
         v,i := ui_get_quad(
-            position     = pen + {bchar.xoff, bchar.yoff} * scale,
+            position     = pen + {pchar.xoff, pchar.yoff} * scale,
             index_offset = base_index,
             size         = rect.zw * scale,
             uv_rect      = uv_rect,
@@ -459,7 +529,7 @@ ui_push_text :: proc(
         append(&ui.vertices, ..v[:])
         append(&ui.indices,  ..i[:])
 
-        delta_x    := bchar.xadvance * scale
+        delta_x    := pchar.xadvance * scale
         pen.x      += delta_x
         line_width += delta_x
         ele_rect.z  = max(ele_rect.z, line_width)

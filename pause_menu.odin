@@ -12,10 +12,10 @@ Pause_Menu_Option_Id :: enum {
 
 @(rodata)
 pause_menu_options := [Pause_Menu_Option_Id]Menu_Option{
-    .Continue  = { id = "pause_menu:continue",  name = "Continue" },
-    .Settings  = { id = "pause_menu:settings",  name = "Settings" },
-    .Main_Menu = { id = "pause_menu:main_menu", name = "Main Menu" },
-    .Exit      = { id = "pause_menu:exit",      name = "Exit" }
+    .Continue  = { id = "pause_menu:continue",  term = .Continue},
+    .Settings  = { id = "pause_menu:settings",  term = .Settings},
+    .Main_Menu = { id = "pause_menu:main_menu", term = .Main_Menu},
+    .Exit      = { id = "pause_menu:exit",      term = .Exit}
 }
 
 Pause_Menu :: struct {

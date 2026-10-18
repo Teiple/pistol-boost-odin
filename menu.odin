@@ -8,10 +8,6 @@ Menu :: union {
     Pause_Menu,
     Settings_Menu,
     Quit_Confirm_Popup_Menu,
-    // Graphics_Menu,
-    // Audio_Menu,
-    // Gameplay_Menu,
-    // Controls_Menu,
 }
 
 Menu_Callbacks_Any :: Menu_Callbacks(^Menu)
@@ -121,7 +117,7 @@ menu_stack_pop_menu :: proc(menu_stack : ^Menu_Stack) {
 
 Menu_Option :: struct {
     id   : Ui_Id,
-    name : string, 
+    term : Loc_Term, 
 }
 
 Menu_Option_Select :: struct($S : typeid) where ins.type_is_enum(S) {
@@ -193,8 +189,7 @@ menu_helper_label_menu :: proc(
 
                 ui_push_text(
                     ui,
-                    font_id     = .Mono,
-                    text        = opt.name,
+                    text        = tr(opt.term),
                     anchor      = {
                         element   = {.5, .5},
                         parent    = {.5, .5} 
@@ -257,7 +252,7 @@ Text_Alignment :: enum {
 menu_helper_back_button :: proc(
     ui             : ^Ui,
     id             : Ui_Id,
-    label          : string = "< Back",
+    label          : string,
     text_alignment : Text_Alignment = .Left,
 ) -> (is_clicked : bool) {
     rect, mouse_state, clicked := ui_push_rect(                
@@ -280,7 +275,7 @@ menu_helper_back_button :: proc(
             case .Middle:
                 anchor = {
                     element   = {.5, .5},
-                    parent    = {.5, .5} 
+                    parent    = {.5, .5},
                 }
             case .Left:
                 anchor = {
@@ -296,7 +291,6 @@ menu_helper_back_button :: proc(
 
         ui_push_text(
             ui,
-            font_id     = .Mono,
             text        = label,
             anchor      = anchor,
             color       = hsv(140, 1, 0.8),
@@ -321,7 +315,9 @@ QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
             selected_current = m.selected_current,
             yes_id           = "quit_confirm_popup_menu:yes",
             no_id            = "quit_confirm_popup_menu:no",
-            message          = " Are you sure to\nexit the program?"
+            message          = .Exit_Confirmation,
+            yes_label        = .Exit_Yes,
+            no_label         = .Exit_No,
         )
 
         if is_clicked {
@@ -346,13 +342,13 @@ QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
 
 menu_helper_confirmation :: proc(
     ui               : ^Ui,
-    message          : string,
+    message          : Loc_Term,
+    yes_label        : Loc_Term,
+    no_label         : Loc_Term,
     yes_id           : Ui_Id,
     no_id            : Ui_Id,
     current_option   : bool,
     selected_current : bool,
-    yes_label        : string = "Yes",
-    no_label         : string = "No",
 ) -> (yes : bool, is_clicked : bool) {
     size       : [2]f32 : {400, 200}
     padding    :: 16
@@ -390,8 +386,7 @@ menu_helper_confirmation :: proc(
                 
                 ui_push_text(
                     ui,
-                    font_id = .Mono,
-                    text    = message,
+                    text    = tr(message),
                     anchor  = { element = {.5, .5}, parent = {.5, .5} },
                     color   = hsv(140, 1, 0.8),
                 )
@@ -417,8 +412,7 @@ menu_helper_confirmation :: proc(
 
                 ui_push_text(
                     ui,
-                    font_id = .Mono,
-                    text    = yes_label,
+                    text    = tr(yes_label),
                     anchor  = { element = {.5, .5}, parent = {.5, .5} },
                     color   = current_option ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
                 )
@@ -443,8 +437,7 @@ menu_helper_confirmation :: proc(
 
                 ui_push_text(
                     ui,
-                    font_id = .Mono,
-                    text    = no_label,
+                    text    = tr(no_label),
                     anchor  = { element = {.5, .5}, parent = {.5, .5} },
                     color   = !current_option ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8)
                 )

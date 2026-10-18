@@ -17,10 +17,10 @@ Settings_Menu_Option_Id :: enum {
 
 @(rodata)
 settings_menu_options := [Settings_Menu_Option_Id]Menu_Option{
-    .Gameplay = { id = "settings_menu:gameplay", name = "Gameplay"},
-    .Controls = { id = "settings_menu:controls", name = "Controls"},
-    .Graphics = { id = "settings_menu:graphics", name = "Graphics"},
-    .Audio    = { id = "settings_menu:audio",    name = "Audio"},
+    .Gameplay = { id = "settings_menu:gameplay", term = .Gameplay},
+    .Controls = { id = "settings_menu:controls", term = .Controls},
+    .Graphics = { id = "settings_menu:graphics", term = .Graphics},
+    .Audio    = { id = "settings_menu:audio",    term = .Audio},
 }
 
 settings_menu_back_btn_id :: "settings_menu:id"
@@ -40,6 +40,7 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
 
         res.close = menu_helper_back_button(
             ui             = ui,
+            label          = tr(.Back),
             id             = settings_menu_back_btn_id,
             text_alignment = .Middle,
         )
@@ -65,10 +66,10 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
 
 @(rodata)
 graphics_menu_option_ids := [Settings_Menu_Option_Id]Menu_Option{
-    .Gameplay = { id = "settings_menu:gameplay", name = "Gameplay"},
-    .Controls = { id = "settings_menu:controls", name = "Controls"},
-    .Graphics = { id = "settings_menu:graphics", name = "Graphics"},
-    .Audio    = { id = "settings_menu:audio",    name = "Audio"},
+    .Gameplay = { id = "settings_menu:gameplay", term = .Gameplay},
+    .Controls = { id = "settings_menu:controls", term = .Controls},
+    .Graphics = { id = "settings_menu:graphics", term = .Graphics},
+    .Audio    = { id = "settings_menu:audio",    term = .Audio},
 }
 
 

@@ -32,8 +32,8 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
     update_ui = proc(scene : ^Scene_Gameplay, ui : ^Ui) {
         ui_push_text(
             ui,
-            font_id = .Mono, 
-            text    = fmt.tprintf("You are at level %d", scene.init.selected_level), 
+            font_id = .Normal, 
+            text    = tr(.Not_Defined), 
         )
 
         menu_stack_update_ui(&scene.menu_stack, ui)

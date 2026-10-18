@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import sapp "sokol-odin/sokol/app"
 import sg "sokol-odin/sokol/gfx"
 import sglue "sokol-odin/sokol/glue"
@@ -21,7 +22,9 @@ Game :: struct {
 	scene           : Scene,
 	scene_callbacks : Scene_Callbacks_Any,
 
-	pending_scene : Maybe(Scene), 
+	pending_scene : Maybe(Scene),
+
+	language : Language,
 }
 
 @(private = "file")
@@ -47,7 +50,14 @@ game_init :: proc() {
 
 	camera_init_default(&game.camera, {0, 2, 10}, {0, 0, 0})
 	renderer_init(&game.renderer)
-	ui_init_default(&game.ui)
+	
+	game.language = .Japanese
+	fc := load_font_config(game.language)
+	defer unload_font_config(&fc)
+	
+	ui_init(&game.ui, {
+		.Normal = fc,
+	})
 
 	mouse_init(&game.mouse)
 	
@@ -146,4 +156,11 @@ game_time :: proc() -> ^Game_Time {
 
 game_request_quit :: proc() {
 	sapp.request_quit()
+}
+
+tr :: proc(term: Loc_Term, params : ..any) -> string {
+	if len(params) > 0 {
+		return fmt.tprintf(loc_map[game.language][term], params)
+	}
+	return loc_map[game.language][term]
 }

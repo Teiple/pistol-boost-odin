@@ -9,19 +9,11 @@ Main_Menu_Option_Id :: enum {
 }
 
 @(rodata)
-main_menu_option_names := [Main_Menu_Option_Id]string{
-    .New_Game     = "New Game",
-    .Settings     = "Settings",
-    .About        = "About",
-    .Archivements = "Archivements", 
-}
-
-@(rodata)
 main_menu_options := [Main_Menu_Option_Id]Menu_Option{
-    .New_Game     = { id = "main_menu:new_game",     name = "New Game" },
-    .Settings     = { id = "main_menu:settings",     name = "Settings" },
-    .About        = { id = "main_menu:about",        name = "About" },
-    .Archivements = { id = "main_menu:archivements", name = "Archivements" },
+    .New_Game     = { id = "main_menu:new_game",     term = .New_Game },
+    .Settings     = { id = "main_menu:settings",     term = .Settings },
+    .About        = { id = "main_menu:about",        term = .About },
+    .Archivements = { id = "main_menu:archivements", term = .Archivements },
 }
 
 Main_Menu :: struct {
@@ -54,7 +46,7 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
             ui             = ui,
             id             = settings_menu_back_btn_id,
             text_alignment = .Middle,
-            label          = "Exit?"
+            label          = tr(.Exit),
         ) {
             res.next_menu = Quit_Confirm_Popup_Menu{}
         }
