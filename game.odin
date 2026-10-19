@@ -1,6 +1,5 @@
 package main
 
-import "core:slice"
 import "core:fmt"
 import sapp "sokol-odin/sokol/app"
 import sg "sokol-odin/sokol/gfx"
@@ -53,12 +52,11 @@ game_init :: proc() {
 	renderer_init(&game.renderer)
 	
 	game.language = .English
-	fc := load_font_config(game.language)
-	defer unload_font_config(&fc)
 	
-	ui_init(&game.ui, {
-		.Normal = fc,
-	})
+	font_configs := load_lang_font_configs()
+	defer unload_lang_font_configs(font_configs)
+	
+	ui_init(&game.ui, font_configs)
 
 	mouse_init(&game.mouse)
 	
@@ -71,7 +69,7 @@ game_update :: proc(unscaled_dt : f32) {
 	
 	dt : f32 = game_time_raw_update(&game.time, unscaled_dt)
 
-	ui_begin(&game.ui, &game.viewport, &game.mouse)
+	ui_begin(&game.ui, &game.viewport, &game.mouse, game.language)
 	{
 		if game.scene_callbacks.update_ui != nil {
 			game.scene_callbacks.update_ui(&game.scene, &game.ui)
@@ -175,3 +173,10 @@ game_lang_is_cjk :: proc() -> bool {
 	}
 }
 
+game_switch_lang :: proc(lang : Language) {
+	game.language = lang
+}
+
+game_lang :: proc() -> Language {
+	return game.language
+}

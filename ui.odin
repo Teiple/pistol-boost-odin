@@ -1,6 +1,5 @@
 package main
 // A very mininal anchor based ui system
-import "core:fmt"
 // It must do everything in one pass
 // Mouse input only accounts for explicit ids
 // There will be no implicit ids
@@ -10,7 +9,6 @@ import "core:slice"
 import sg "sokol-odin/sokol/gfx"
 import tt "vendor:stb/truetype"
 import shaders "shaders"
-import "core:unicode/utf8"
 
 Anchor :: struct {
     element   : [2]f32,
@@ -71,7 +69,8 @@ Ui :: struct {
     rect_img    : sg.Image,
     rect_view   : sg.View,
 
-    fonts : [Font_Id]Font,
+    lang_fonts : [Language][Font_Id]Font,
+    language   : Language,
 
     // These can be used to impl growing buf but for 
     // now they are just for validation
@@ -90,7 +89,8 @@ Ui_Cmd :: struct {
     view        : sg.View,
 }
 
-Font_Config :: struct {
+Lang_Font_Config :: struct {
+    language        : Language,
     non_ascii_runes : []rune,
     ttf_data        : []byte,
     atlas_width     : i32,
@@ -98,7 +98,7 @@ Font_Config :: struct {
     base_size       : f32,
 }
 
-ui_init :: proc(ui : ^Ui, font_cfgs : [Font_Id]Font_Config) {
+ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config) {
     ui.shader   = sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
     
     ui.pipeline = sg.make_pipeline({
@@ -130,8 +130,8 @@ ui_init :: proc(ui : ^Ui, font_cfgs : [Font_Id]Font_Config) {
         }
     })
     
-    for font_cfg, id in font_cfgs {
-        ui_init_font(&ui.fonts[id], font_cfg)
+    for font_cfg, id in lang_font_cfgs {
+        ui_init_lang_font(&ui.lang_fonts[font_cfg.language][.Normal], font_cfg)
     } 
 
     ui.cur_ibuf_cap = 1024
@@ -178,8 +178,10 @@ ui_init :: proc(ui : ^Ui, font_cfgs : [Font_Id]Font_Config) {
 }
 
 ui_destroy :: proc(ui : ^Ui) {
-    for &f in ui.fonts {
-        ui_destroy_font(&f)
+    for &lf in ui.lang_fonts {
+        for &f in lf {
+            ui_destroy_font(&f)
+        }
     }
 
     sg.destroy_image(ui.rect_img)
@@ -201,7 +203,7 @@ ui_destroy :: proc(ui : ^Ui) {
 
 }
 
-ui_init_font :: proc(font: ^Font, font_cfg : Font_Config) {
+ui_init_lang_font :: proc(font: ^Font, font_cfg : Lang_Font_Config) {
     font^ = {
         base_size    = font_cfg.base_size,
         atlas_size   = {font_cfg.atlas_width, font_cfg.atlas_height},
@@ -217,7 +219,7 @@ ui_init_font :: proc(font: ^Font, font_cfg : Font_Config) {
             ascent   = &font.ascent,
             // don't need these really 
             descent  = &descent,
-            lineGap  = &line_gap,
+            lineGap  = &line_gap, 
         )
     }
 
@@ -246,7 +248,6 @@ ui_init_font :: proc(font: ^Font, font_cfg : Font_Config) {
             num_chars                        = 95,
             chardata_for_range               = raw_data(ascii_chars),
         })
-    
         if len(used_non_ascii_chars) > 0 {
             append(&ranges, {
                 font_size                   = font.base_size,
@@ -463,7 +464,7 @@ ui_push_text :: proc(
     text_alignment : f32 = .5,
 ) -> (ele_rect : [4]f32) {
     // use address here since font struct is quite big
-    font := &ui.fonts[font_id]
+    font := &ui.lang_fonts[ui.language][font_id]
 
     if len(text) == 0 do return
 
@@ -603,7 +604,7 @@ ui_wrap_text :: proc(
     allocator := context.temp_allocator,
 ) -> []Wrapped_Line {
     assert(len(text) > 0)
-    
+
     wrapped_lines := make([dynamic]Wrapped_Line, allocator)
     scale := font_size / font.base_size
 
@@ -754,9 +755,10 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     ui.builder.input_captured = false
 }
 
-ui_begin :: proc(ui : ^Ui, viewport : ^Viewport, mouse : ^Mouse_Input) {
+ui_begin :: proc(ui : ^Ui, viewport : ^Viewport, mouse : ^Mouse_Input, lang : Language) {
     ui_push_container(ui, {0, 0, viewport.base_size.x, viewport.base_size.y})
     ui.builder.mouse = mouse
+    ui.language = lang
 }
 
 ui_push_container :: proc(ui : ^Ui, rect : [4]f32){
@@ -787,3 +789,6 @@ ui_is_capturing_input :: proc(ui : ^Ui) -> bool {
     return ui.builder.input_captured
 }
 
+ui_set_lang :: proc(ui : ^Ui, lang : Language) {
+    ui.language = lang
+}

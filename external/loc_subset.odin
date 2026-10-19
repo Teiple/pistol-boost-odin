@@ -18,6 +18,7 @@ lang_exports := [Seperated_Lang]string {
 }
 
 main :: proc() {
+    language_selections := main.LANGUAGE_SELECTIONS
     for lang in Seperated_Lang {    
         sb : strings.Builder 
         strings.builder_init(&sb)
@@ -26,6 +27,8 @@ main :: proc() {
         for trans, term in main.loc_map[main.Language(lang)] {
             fmt.sbprintln(&sb, trans)
         }
+        
+        fmt.sbprintln(&sb, language_selections[main.Language(lang)])
         
         err := os.write_entire_file_from_string(
             lang_exports[lang],

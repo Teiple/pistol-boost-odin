@@ -1,6 +1,5 @@
 package main
 
-import "core:math"
 import ins "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
@@ -9,6 +8,7 @@ Menu :: union {
     Pause_Menu,
     Settings_Menu,
     Quit_Confirm_Popup_Menu,
+    Language_Menu,
 }
 
 Menu_Callbacks_Any :: Menu_Callbacks(^Menu)
@@ -40,6 +40,8 @@ menu_get_callbacks :: proc(menu : ^Menu) -> Menu_Callbacks_Any {
             return convert_cbs(&m, SETTINGS_MENU_CALLBACKS)
         case Quit_Confirm_Popup_Menu:
             return convert_cbs(&m, QUIT_CONFIRM_POPUP_MENU_CALLBACKS)
+        case Language_Menu:
+            return convert_cbs(&m, LANGUAGE_MENU_CALLBACKS)
     }
     
     panic("Unreachable")
@@ -116,9 +118,17 @@ menu_stack_pop_menu :: proc(menu_stack : ^Menu_Stack) {
     }
 }
 
+Raw_Term :: struct {
+    raw      : string,
+    language : Language, 
+}
+
 Menu_Option :: struct {
     id   : Ui_Id,
-    term : Loc_Term, 
+    term : union {
+        Loc_Term,
+        Raw_Term,
+    }, 
 }
 
 Menu_Option_Select :: struct($S : typeid) where ins.type_is_enum(S) {
@@ -188,9 +198,19 @@ menu_helper_label_menu :: proc(
             {
                 defer ui_pop_container(ui)
 
+                raw_term, is_raw := opt.term.(Raw_Term)
+            
+                prev_lang := ui.language
+
+                if is_raw {
+                    ui_set_lang(ui, raw_term.language)
+                }
+
+                text := is_raw ? raw_term.raw : tr(opt.term.(Loc_Term))
+
                 ui_push_text(
                     ui,
-                    text        = tr(opt.term),
+                    text        = text,
                     anchor      = {
                         element   = {.5, .5},
                         parent    = {.5, .5} 
@@ -201,6 +221,10 @@ menu_helper_label_menu :: proc(
                         hsv(140, 1, 0.8)
                     ),
                 )
+
+                if is_raw {
+                    ui_set_lang(ui, prev_lang)
+                }
             }
 
             opt_anchor.offset.y += rect.w + spacing

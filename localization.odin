@@ -24,10 +24,18 @@ Loc_Term :: enum {
     Audio,
     Controls,
     Graphics,
+    Language,
     Back,
 }
 
 NOT_DEFINED_TERM :: "<UNDEFINED!>"
+
+LANGUAGE_SELECTIONS : [Language]string : {
+    .English           = "English",   
+    .Vietnamese        = "Tiếng Việt",
+    .SimplifiedChinese = "简体中文",   
+    .Japanese          = "日本語",     
+}
 
 @(rodata)
 loc_map : [Language][Loc_Term]string = {
@@ -47,6 +55,7 @@ loc_map : [Language][Loc_Term]string = {
         .Audio = "Audio",
         .Controls = "Controls",
         .Graphics = "Graphics",
+        .Language = "Language",
         .Back = "< Back",
     },
     .SimplifiedChinese = {
@@ -65,6 +74,7 @@ loc_map : [Language][Loc_Term]string = {
         .Audio = "音频",
         .Controls = "操作",
         .Graphics = "画面",
+        .Language = "语言",
         .Back = "< 返回",
     },
     .Vietnamese = {
@@ -79,10 +89,11 @@ loc_map : [Language][Loc_Term]string = {
         .Settings = "Cài đặt",
         .Archivements = "Thành tựu",
         .About = "Thông tin",
-        .Gameplay = "Gameplay", 
+        .Gameplay = "Lối chơi", 
         .Audio = "Âm thanh",
         .Controls = "Điều khiển",
         .Graphics = "Đồ họa",
+        .Language = "Ngôn ngữ",
         .Back = "< Quay lại",
     },
     .Japanese = {
@@ -101,11 +112,12 @@ loc_map : [Language][Loc_Term]string = {
         .Audio = "オーディオ",
         .Controls = "コントロール",
         .Graphics = "グラフィック",
+        .Language = "言語",
         .Back = "< 戻る",
     },
 }
 
-Lang_Font_Config :: struct {
+Lang_Font_Declare :: struct {
     ttf_data     : []byte,
     atlas_width  : i32,
     atlas_height : i32,
@@ -114,8 +126,9 @@ Lang_Font_Config :: struct {
 
 DEFAULT_FONT_BASE_SIZE :: 32
 
+// TODO: Multiple font id style for each lang font
 @(rodata)
-lang_font_configs : [Language]Lang_Font_Config = {
+lang_font_declares : [Language]Lang_Font_Declare = {
     .English..=.Vietnamese = {
         ttf_data     = #load("assets/fonts/NotoSansMono_SemiCondensed-Regular.ttf"),
         atlas_width  = 256,
@@ -133,40 +146,63 @@ lang_font_configs : [Language]Lang_Font_Config = {
     },
 } 
 
-load_font_config :: proc(lang: Language) -> (font_cfg : Font_Config) {
-    lang_cfg := lang_font_configs[lang] 
-    
-    non_ascii_runes := make([dynamic]rune)
-    
-    for trans in loc_map[lang] {
-        for r in trans {
+load_lang_font_configs :: proc() -> []Lang_Font_Config {
+    font_cfgs := make([]Lang_Font_Config, len(Language))
+
+    language_selections := LANGUAGE_SELECTIONS
+
+    for lang_decl, lang in lang_font_declares {
+        non_ascii_runes := make([dynamic]rune)
+        
+        for trans in loc_map[lang] {
+            for r in trans {
+                char := int(r)
+                // ascii range always loaded contiguously
+                if char >= 32 && char <= 126 {
+                    continue
+                }
+                if slice.contains(non_ascii_runes[:], r) {
+                    continue
+                }
+
+                append(&non_ascii_runes, r)
+            }
+        }
+
+        for r in language_selections[lang] {
             char := int(r)
-            // ascii range always loaded contiguously
+
             if char >= 32 && char <= 126 {
                 continue
             }
+
             if slice.contains(non_ascii_runes[:], r) {
                 continue
             }
-
+            
             append(&non_ascii_runes, r)
         }
-    }
 
-    font_cfg.non_ascii_runes = non_ascii_runes[:]
-    font_cfg.ttf_data        = lang_cfg.ttf_data
-    font_cfg.atlas_width     = lang_cfg.atlas_width
-    font_cfg.atlas_height    = lang_cfg.atlas_height
-
-    if lang_cfg.base_size <= 0 {
-        font_cfg.base_size = DEFAULT_FONT_BASE_SIZE
-    } else {
-        font_cfg.base_size = lang_cfg.base_size
+        font_cfgs[lang] = {            
+            language        = lang,
+            non_ascii_runes = non_ascii_runes[:],
+            ttf_data        = lang_decl.ttf_data,
+            atlas_width     = lang_decl.atlas_width,
+            atlas_height    = lang_decl.atlas_height,
+            base_size       = (
+                lang_decl.base_size <= 0 ?
+                DEFAULT_FONT_BASE_SIZE :
+                lang_decl.base_size
+            )
+        }
     }
     
-    return
+    return font_cfgs[:]
 }
 
-unload_font_config :: proc(font_cfg : ^Font_Config) {
-    delete(font_cfg.non_ascii_runes)
+unload_lang_font_configs :: proc(font_cfgs : []Lang_Font_Config) {
+    for config in font_cfgs {
+        delete(config.non_ascii_runes)
+    }
+    delete(font_cfgs)
 }
