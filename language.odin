@@ -9,12 +9,14 @@ Language :: enum {
 }
 
 Loc_Term :: enum {
-    Not_Defined,
+    Undefined,
     New_Game,
     Continue,
     Exit,
-    Exit_Yes,
-    Exit_No,
+    Yes,
+    No,
+    On,
+    Off,
     Exit_Confirmation,
     Main_Menu,
     Settings,
@@ -26,9 +28,13 @@ Loc_Term :: enum {
     Graphics,
     Language,
     Back,
+    Resolution,
+    Vsync,
+    Brightness,
+    Gamma,
+    Particles,
+    Decals,
 }
-
-NOT_DEFINED_TERM :: "<UNDEFINED!>"
 
 LANGUAGE_SELECTIONS : [Language]string : {
     .English           = "English",   
@@ -37,15 +43,19 @@ LANGUAGE_SELECTIONS : [Language]string : {
     .Japanese          = "日本語",     
 }
 
+UNDEFINED_TERM :: "<UNDEFINED!>"
+
 @(rodata)
 loc_map : [Language][Loc_Term]string = {
     .English = {
-        .Not_Defined = NOT_DEFINED_TERM,
+        .Undefined = UNDEFINED_TERM,
         .New_Game = "New Game",
         .Continue = "Continue",
         .Exit = "Exit?",
-        .Exit_Yes = "Yes",
-        .Exit_No = "No",
+        .Yes = "Yes",
+        .No = "No",
+        .On = "On",
+        .Off = "Off",
         .Exit_Confirmation = "Are you sure you want to exit the program?",
         .Main_Menu = "Main Menu",
         .Settings = "Settings",
@@ -57,14 +67,23 @@ loc_map : [Language][Loc_Term]string = {
         .Graphics = "Graphics",
         .Language = "Language",
         .Back = "< Back",
+
+        .Resolution = "Resolution",
+        .Vsync = "Vsync",
+        .Brightness = "Brightness",
+        .Gamma = "Gamma",
+        .Particles = "Particles",
+        .Decals = "Decals",
     },
     .SimplifiedChinese = {
-        .Not_Defined = NOT_DEFINED_TERM,
+        .Undefined = UNDEFINED_TERM,
         .New_Game = "新游戏",
         .Continue = "继续",
         .Exit = "退出？",
-        .Exit_Yes = "是",
-        .Exit_No = "否",
+        .Yes = "是",
+        .No = "否",
+        .On = "开启",
+        .Off = "关闭",
         .Exit_Confirmation = "确定要退出程序吗？",
         .Main_Menu = "主菜单",
         .Settings = "设置",
@@ -76,14 +95,23 @@ loc_map : [Language][Loc_Term]string = {
         .Graphics = "画面",
         .Language = "语言",
         .Back = "< 返回",
+
+        .Resolution = "分辨率",
+        .Vsync = "垂直同步",
+        .Brightness = "亮度",
+        .Gamma = "伽马值",
+        .Particles = "粒子",
+        .Decals = "贴花",
     },
     .Vietnamese = {
-        .Not_Defined = NOT_DEFINED_TERM,
+        .Undefined = UNDEFINED_TERM,
         .New_Game = "Game mới",
         .Continue = "Tiếp tục",
         .Exit = "Thoát?",
-        .Exit_Yes = "Có",
-        .Exit_No = "Không",
+        .Yes = "Có",
+        .No = "Không",
+        .On = "Bật",
+        .Off = "Tắt",
         .Exit_Confirmation = "Bạn có chắc muốn thoát chương trình?",
         .Main_Menu = "Menu chính",
         .Settings = "Cài đặt",
@@ -95,14 +123,23 @@ loc_map : [Language][Loc_Term]string = {
         .Graphics = "Đồ họa",
         .Language = "Ngôn ngữ",
         .Back = "< Quay lại",
+
+        .Resolution = "Độ phân giải",
+        .Vsync = "Đồng bộ dọc",
+        .Brightness = "Độ sáng",
+        .Gamma = "Gamma",
+        .Particles = "Hiệu ứng hạt",
+        .Decals = "Đề-can",
     },
     .Japanese = {
-        .Not_Defined = NOT_DEFINED_TERM,
+        .Undefined = UNDEFINED_TERM,
         .New_Game = "新しいゲーム",
         .Continue = "続ける",
         .Exit = "終了しますか?",
-        .Exit_Yes = "はい",
-        .Exit_No = "いいえ",
+        .Yes = "はい",
+        .No = "いいえ",
+        .On = "オン",
+        .Off = "オフ",
         .Exit_Confirmation = "プログラムを終了してもよろしいですか?",
         .Main_Menu = "メインメニュー",
         .Settings = "設定",
@@ -114,6 +151,13 @@ loc_map : [Language][Loc_Term]string = {
         .Graphics = "グラフィック",
         .Language = "言語",
         .Back = "< 戻る",
+
+        .Resolution = "解像度",
+        .Vsync = "垂直同期",
+        .Brightness = "明るさ",
+        .Gamma = "ガンマ",
+        .Particles = "パーティクル",
+        .Decals = "デカール",
     },
 }
 
@@ -148,9 +192,8 @@ lang_font_declares : [Language]Lang_Font_Declare = {
 
 load_lang_font_configs :: proc() -> []Lang_Font_Config {
     font_cfgs := make([]Lang_Font_Config, len(Language))
-
     language_selections := LANGUAGE_SELECTIONS
-
+    
     for lang_decl, lang in lang_font_declares {
         non_ascii_runes := make([dynamic]rune)
         

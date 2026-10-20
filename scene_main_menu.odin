@@ -1,7 +1,7 @@
 package main
 import sapp "sokol-odin/sokol/app"
 
-Main_Menu_Option_Id :: enum {
+Main_Menu_Item_Id :: enum {
     New_Game,
     Settings,
     Archivements,
@@ -9,7 +9,7 @@ Main_Menu_Option_Id :: enum {
 }
 
 @(rodata)
-main_menu_options := [Main_Menu_Option_Id]Menu_Option{
+main_menu_items := [Main_Menu_Item_Id]Menu_Item{
     .New_Game     = { id = "main_menu:new_game",     term = .New_Game },
     .Settings     = { id = "main_menu:settings",     term = .Settings },
     .About        = { id = "main_menu:about",        term = .About },
@@ -17,7 +17,7 @@ main_menu_options := [Main_Menu_Option_Id]Menu_Option{
 }
 
 Main_Menu :: struct {
-    current_option   : Main_Menu_Option_Id,
+    current_item   : Main_Menu_Item_Id,
     selected_current : bool,
 }
 
@@ -29,8 +29,8 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
             menu             = menu,
             ui               = ui,
             selected_current = menu.selected_current,
-            current_option   = menu.current_option,
-            options          = main_menu_options,
+            current_item     = menu.current_item,
+            items            = main_menu_items,
         )
 
         if selected do #partial switch selected_opt {
@@ -45,7 +45,7 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
         if menu_helper_back_button(
             ui    = ui,
             id    = settings_menu_back_btn_id,
-            label = tr(.Exit),
+            label = .Exit,
         ) {
             res.next_menu = Quit_Confirm_Popup_Menu{}
         }
@@ -58,7 +58,7 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
             ui               = ui,
             ev               = ev,
             selected_current = &menu.selected_current,
-            current_option   = &menu.current_option,
+            current_item     = &menu.current_item,
         )
 
         return

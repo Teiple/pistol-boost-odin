@@ -9,6 +9,7 @@ Menu :: union {
     Settings_Menu,
     Quit_Confirm_Popup_Menu,
     Language_Menu,
+    Graphics_Menu,
 }
 
 Menu_Callbacks_Any :: Menu_Callbacks(^Menu)
@@ -42,6 +43,8 @@ menu_get_callbacks :: proc(menu : ^Menu) -> Menu_Callbacks_Any {
             return convert_cbs(&m, QUIT_CONFIRM_POPUP_MENU_CALLBACKS)
         case Language_Menu:
             return convert_cbs(&m, LANGUAGE_MENU_CALLBACKS)
+        case Graphics_Menu:
+            return convert_cbs(&m, GRAPHICS_MENU_CALLBACKS)
     }
     
     panic("Unreachable")
@@ -118,49 +121,69 @@ menu_stack_pop_menu :: proc(menu_stack : ^Menu_Stack) {
     }
 }
 
+// mainly used for language selection
 Raw_Term :: struct {
     raw      : string,
     language : Language, 
 }
 
-Menu_Option :: struct {
-    id   : Ui_Id,
-    term : union {
-        Loc_Term,
-        Raw_Term,
-    }, 
+Menu_Term :: union {
+    Loc_Term,
+    Raw_Term,
 }
 
-Menu_Option_Select :: struct($S : typeid) where ins.type_is_enum(S) {
-    using _     : Menu_Option,
-    selectables : [S]string,
+Menu_Item :: struct {
+    id   : Ui_Id,
+    term : Menu_Term, 
+}
+
+Menu_Item_Of :: struct($T: typeid) {
+    item_id   : string, 
+    item_term : Loc_Term, 
+    using _ : T,
+}
+
+Menu_Options_Of :: struct($T: typeid) {
+    option_box_id : Ui_Id,
+    options       : union {
+        [T]Loc_Term,
+        struct {
+            labels   : [T]string,
+            language : Language
+        },
+    }
+}
+
+@(private)
+type_item_options_of :: struct($T : typeid) {
+    using _ :  Menu_Item_Of(Menu_Options_Of(T))
 }
 
 menu_helper_label_menu :: proc(
     menu             : ^$M,
     ui               : ^Ui,
     selected_current : bool,
-    current_option   : $O,
-    options          : [O]Menu_Option,
+    current_item     : $T,
+    items            : [T]Menu_Item,
     anchor           : Anchor = {
         parent  = {.5, .5},
         element = {.5, .5},
     },
-    option_size      : [2]f32 = { 200, 32 },
-) -> (selected_option : O, selected : bool) where ins.type_is_enum(O)
+    item_size        : [2]f32 = { 200, 32 },
+) -> (selected_option : T, selected : bool) where ins.type_is_enum(T)
 {
     spacing   :: 4
-    opt_count := cast(f32)len(O)
+    opt_count := cast(f32)len(T)
 
     // option container
     rect, _, _ := ui_push_rect(
         ui, 
         sizing = {
             Fixed{
-                option_size.x
+                item_size.x
             },
             Fixed{
-                option_size.y * opt_count + (opt_count - 1) * spacing,
+                item_size.y * opt_count + (opt_count - 1) * spacing,
             }
         },
         anchor = anchor
@@ -170,27 +193,24 @@ menu_helper_label_menu :: proc(
     {
         defer ui_pop_container(ui)
 
-        opt_anchor : Anchor = {
-            parent    = { 0, 0},
-            element   = { 0, 0},
-        }
+        item_anchor : Anchor
 
-        for opt, opt_enum in options {
+        for item, item_enum in items {
             rect, mouse_state, is_clicked := ui_push_rect(                
                 ui, hsv(0, 0, 0, 0),
-                sizing      = { Fixed{option_size.x}, Fixed{option_size.y} },
-                anchor      = opt_anchor,
+                sizing      = { Fixed{item_size.x}, Fixed{item_size.y} },
+                anchor      = item_anchor,
                 interactive = {
-                    id            = opt.id,
+                    id            = item.id,
                     hovered_color = hsv(140, 0.5, 1, 0.2),
                     held_color    = hsv(140, 0.5, 0.5, 0.2),
                 }
             )
 
-            is_clicked ||= selected_current && opt_enum == current_option
+            is_clicked ||= selected_current && item_enum == current_item
 
             if is_clicked {
-                selected_option = opt_enum
+                selected_option = item_enum
                 selected        = true
             }
 
@@ -198,7 +218,7 @@ menu_helper_label_menu :: proc(
             {
                 defer ui_pop_container(ui)
 
-                raw_term, is_raw := opt.term.(Raw_Term)
+                raw_term, is_raw := item.term.(Raw_Term)
             
                 prev_lang := ui.language
 
@@ -206,7 +226,7 @@ menu_helper_label_menu :: proc(
                     ui_set_lang(ui, raw_term.language)
                 }
 
-                text := is_raw ? raw_term.raw : tr(opt.term.(Loc_Term))
+                text := is_raw ? raw_term.raw : tr(item.term.(Loc_Term))
 
                 ui_push_text(
                     ui,
@@ -216,7 +236,7 @@ menu_helper_label_menu :: proc(
                         parent    = {.5, .5} 
                     },
                     color       = (
-                        opt_enum == current_option ?
+                        item_enum == current_item ?
                         hsv(140, 0.5, 1) :
                         hsv(140, 1, 0.8)
                     ),
@@ -227,7 +247,7 @@ menu_helper_label_menu :: proc(
                 }
             }
 
-            opt_anchor.offset.y += rect.w + spacing
+            item_anchor.offset.y += rect.w + spacing
         }
     }   
     
@@ -238,25 +258,25 @@ menu_helper_label_menu_input :: proc(
     ui               : ^Ui,
     ev               : sapp.Event,
     selected_current : ^bool,
-    current_option   : ^$O,
-) -> (requested_to_close : bool) where ins.type_is_enum(O)
+    current_item     : ^$T,
+) -> (requested_to_close : bool) where ins.type_is_enum(T)
 {
     ui_capture_input(ui)
 
-    cur := current_option^
+    cur := current_item^
 
     if ev.type == .KEY_DOWN {
         #partial switch ev.key_code {
             case .DOWN:
-                current_option^ = cast(O)(
-                    (cast(int)cur + 1) % len(O)
+                current_item^ = cast(T)(
+                    (cast(int)cur + 1) % len(T)
                 )
             case .UP:
                 prev := cast(int)cur - 1
                 if prev < 0 {
-                    current_option^ = cast(O)(prev + len(O))
+                    current_item^ = cast(T)(prev + len(T))
                 } else {
-                    current_option^ = cast(O)(prev % len(O))
+                    current_item^ = cast(T)(prev % len(T))
                 }
             case .SPACE, .ENTER:
                 selected_current^ = true           
@@ -271,7 +291,7 @@ menu_helper_label_menu_input :: proc(
 menu_helper_back_button :: proc(
     ui             : ^Ui,
     id             : Ui_Id,
-    label          : string,
+    label          : Loc_Term,
     text_alignment : f32 = 0.5,
 ) -> (is_clicked : bool) {
     rect, mouse_state, clicked := ui_push_rect(                
@@ -296,7 +316,7 @@ menu_helper_back_button :: proc(
 
         ui_push_text(
             ui,
-            text        = label,
+            text        = tr(label),
             anchor      = anchor,
             color       = hsv(140, 1, 0.8),
         )
@@ -305,9 +325,106 @@ menu_helper_back_button :: proc(
     return clicked
 }
 
+
+menu_helper_options_menu :: proc(
+    menu             : ^$M,
+    ui               : ^Ui,
+    selected_current : bool,
+    current_item     : $T,
+    items            : [T]$S,
+    anchor           : Anchor = {
+        parent  = {.5, .5},
+        element = {.5, .5},
+    },
+    item_height           : f32 = 32,
+    widths           : [2]f32 = {100, 60},
+) -> (selected_option : T, selected : bool) where ins.type_is_enum(T)
+{
+    spacing   :: 4
+    item_count := cast(f32)len(T)
+
+    // option container
+    rect, _, _ := ui_push_rect(
+        ui, 
+        sizing = {
+            Fixed{ widths[0] + widths[1] },
+            Fixed{
+                item_height * item_count + (item_count - 1) * spacing,
+            }
+        },
+        anchor = anchor
+    )
+
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+
+        item_anchor : Anchor
+        
+        for item, item_enum in items {
+            rect, mouse_state, is_clicked := ui_push_rect(                
+                ui, hsv(0, 0, 0, 0),
+                sizing      = { Fixed{widths[0]}, Fixed{item_height} },
+                anchor      = item_anchor,
+                interactive = {
+                    id            = item.id,
+                    hovered_color = hsv(140, 0.5, 1, 0.2),
+                    held_color    = hsv(140, 0.5, 0.5, 0.2),
+                }
+            )
+
+            is_clicked ||= selected_current && item_enum == current_item
+
+            if is_clicked {
+                selected_option = item_enum
+                selected        = true
+            }
+
+            ui_push_container(ui, rect)
+            {
+                defer ui_pop_container(ui)
+
+                raw_term, is_raw := item.term.(Raw_Term)
+            
+                prev_lang := ui.language
+
+                if is_raw {
+                    ui_set_lang(ui, raw_term.language)
+                }
+
+                text := is_raw ? raw_term.raw : tr(item.term.(Loc_Term))
+
+                ui_push_text(
+                    ui,
+                    text        = text,
+                    anchor      = {
+                        element   = {.5, .5},
+                        parent    = {.5, .5} 
+                    },
+                    color       = (
+                        item_enum == current_item ?
+                        hsv(140, 0.5, 1) :
+                        hsv(140, 1, 0.8)
+                    ),
+                )
+
+                if is_raw {
+                    ui_set_lang(ui, prev_lang)
+                }
+            }
+
+            item_anchor.offset.y += rect.w + spacing
+        }
+    }   
+    
+    return
+}
+
+
+
 Quit_Confirm_Popup_Menu :: struct{
     selected_current : bool,
-    current_option   : bool,
+    current_item     : bool,
 }
 
 QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
@@ -316,13 +433,13 @@ QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
         
         yes, is_clicked := menu_helper_confirmation(
             ui,
-            current_option   = m.current_option,
+            current_item   = m.current_item,
             selected_current = m.selected_current,
             yes_id           = "quit_confirm_popup_menu:yes",
             no_id            = "quit_confirm_popup_menu:no",
             message          = .Exit_Confirmation,
-            yes_label        = .Exit_Yes,
-            no_label         = .Exit_No,
+            yes_label        = .Yes,
+            no_label         = .No,
         )
 
         if is_clicked {
@@ -338,7 +455,7 @@ QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
     input_ui = proc(m : ^Quit_Confirm_Popup_Menu, ui : ^Ui, ev: sapp.Event) -> (res : Menu_Result) {
         res.close = menu_helper_confirmation_input(ui, ev,
             selected_current = &m.selected_current,
-            current_option   = &m.current_option,
+            current_item   = &m.current_item,
         )
         
         return
@@ -352,7 +469,7 @@ menu_helper_confirmation :: proc(
     no_label         : Loc_Term,
     yes_id           : Ui_Id,
     no_id            : Ui_Id,
-    current_option   : bool,
+    current_item     : bool,
     selected_current : bool,
 ) -> (yes : bool, is_clicked : bool) {
     size       : [2]f32= {400, 200}
@@ -409,7 +526,7 @@ menu_helper_confirmation :: proc(
                 }
             )
 
-            yes_clicked ||= selected_current && current_option == true
+            yes_clicked ||= selected_current && current_item == true
 
             ui_push_container(ui, yes_rect)
             {
@@ -419,7 +536,7 @@ menu_helper_confirmation :: proc(
                     ui,
                     text    = tr(yes_label),
                     anchor  = { element = {.5, .5}, parent = {.5, .5} },
-                    color   = current_option ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
+                    color   = current_item ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
                 )
             }
 
@@ -434,7 +551,7 @@ menu_helper_confirmation :: proc(
                 }
             )
 
-            no_clicked ||= selected_current && current_option == false
+            no_clicked ||= selected_current && current_item == false
             
             ui_push_container(ui, no_rect)
             {
@@ -444,7 +561,7 @@ menu_helper_confirmation :: proc(
                     ui,
                     text    = tr(no_label),
                     anchor  = { element = {.5, .5}, parent = {.5, .5} },
-                    color   = !current_option ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8)
+                    color   = !current_item ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8)
                 )
             }
 
@@ -461,18 +578,17 @@ menu_helper_confirmation_input :: proc(
     ui               : ^Ui,
     ev               : sapp.Event,
     selected_current : ^bool,
-    current_option   : ^bool,
+    current_item   : ^bool,
 ) -> (requested_to_close : bool)
 {
     ui_capture_input(ui)
 
-    cur := current_option^
+    cur := current_item^
 
     if ev.type == .KEY_DOWN {
         #partial switch ev.key_code {
             case .LEFT, .RIGHT:
-                current_option^ = !cur
-                current_option^ = !cur
+                current_item^ = !cur
             case .SPACE, .ENTER:
                 selected_current^ = true           
             case .ESCAPE:

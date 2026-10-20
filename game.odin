@@ -157,9 +157,9 @@ game_request_quit :: proc() {
 	sapp.request_quit()
 }
 
-tr :: proc(term: Loc_Term, params : ..any) -> string {
+tr :: proc(term: Loc_Term, params : ..any, allocator := context.temp_allocator) -> string {
 	if len(params) > 0 {
-		return fmt.tprintf(loc_map[game.language][term], params)
+		return fmt.aprintf(loc_map[game.language][term], params)
 	}
 	return loc_map[game.language][term]
 }

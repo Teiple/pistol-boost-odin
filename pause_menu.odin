@@ -3,7 +3,7 @@ package main
 import "core:mem"
 import sapp "sokol-odin/sokol/app"
 
-Pause_Menu_Option_Id :: enum {
+Pause_Menu_Item_Id :: enum {
     Continue,
     Settings,
     Main_Menu,
@@ -11,7 +11,7 @@ Pause_Menu_Option_Id :: enum {
 }
 
 @(rodata)
-pause_menu_options := [Pause_Menu_Option_Id]Menu_Option{
+pause_menu_items := [Pause_Menu_Item_Id]Menu_Item{
     .Continue  = { id = "pause_menu:continue",  term = .Continue},
     .Settings  = { id = "pause_menu:settings",  term = .Settings},
     .Main_Menu = { id = "pause_menu:main_menu", term = .Main_Menu},
@@ -20,7 +20,7 @@ pause_menu_options := [Pause_Menu_Option_Id]Menu_Option{
 
 Pause_Menu :: struct {
     show             : bool,
-    current_option   : Pause_Menu_Option_Id,
+    current_item     : Pause_Menu_Item_Id,
     selected_current : bool,
 }
 
@@ -36,8 +36,8 @@ PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
             menu             = menu,
             ui               = ui,
             selected_current = menu.selected_current,
-            current_option   = menu.current_option,
-            options          = pause_menu_options,
+            current_item     = menu.current_item,
+            items            = pause_menu_items,
             anchor           = {
                 parent  = {1, .5},
                 element = {1, .5},
@@ -62,7 +62,7 @@ PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
         ui               = ui,
             ev               = ev,
             selected_current = &menu.selected_current,
-            current_option   = &menu.current_option,
+            current_item     = &menu.current_item,
         )
         return
     },

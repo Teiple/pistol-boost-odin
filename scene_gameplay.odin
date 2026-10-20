@@ -33,7 +33,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         ui_push_text(
             ui,
             font_id = .Normal, 
-            text    = tr(.Not_Defined), 
+            text    = tr(.Undefined), 
         )
 
         menu_stack_update_ui(&scene.menu_stack, ui)
