@@ -30,6 +30,8 @@ settings_menu_back_btn_id :: "settings_menu:back"
 
 SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
     update_ui = proc(menu : ^Settings_Menu, ui : ^Ui) -> (res: Menu_Result) {
+        defer menu.selected_current = false
+
         selected_opt, selected := menu_helper_label_menu(
             menu             = menu,
             ui               = ui,
@@ -109,11 +111,9 @@ graphics_menu_options : [Graphics_Menu_Item_Id]Graphics_Setting_Menu_Item = {
         item_term     =  .Resolution,
         option_box_id = "graphics_menu:resolution:value",
         options       = {
-            labels    = {
-                .Res_800x480 = "800x480",
-                .Res_800x600 = "800x600",
-                .Res_960x540 = "960x540",
-            },
+            .Res_800x480 = "800x480",
+            .Res_800x600 = "800x600",
+            .Res_960x540 = "960x540",
         }
     },
     .Vsync =  type_item_options_of(ToggleState) {
@@ -133,7 +133,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
 
     update_ui = proc(menu : ^Graphics_Menu, ui : ^Ui) -> (res: Menu_Result) {
         item_height :: 32
-        widths : [2]f32 : {100, 100}
+        widths : [2]f32 : {200, 100}
         spacing   :: 4
         item_count := cast(f32)len(Graphics_Menu_Item_Id)
         
@@ -147,6 +147,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                 }
             },
             anchor = { parent = {.5, .5}, element = {.5, .5} },
+            color  = hsv(140, a = .2)
         )
 
         ui_push_container(ui, rect)
@@ -158,9 +159,70 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
             for menu_item, id in graphics_menu_options {
                 switch item in menu_item {
                 case type_item_options_of(Resolution):
-                    ui_push_text(ui, tr(item.item_term), anchor = item_anchor)
+                    rect1, _, _ := ui_push_rect(ui, sizing = { Percent{.5}, Fixed{item_height} }, anchor = item_anchor)
+                    ui_push_container(ui, rect1)
+                    {
+                        defer ui_pop_container(ui)
+                        ui_push_text(ui, tr(item.item_term), anchor = { element = {0, .5}, parent = {0, .5} })
+                    }
+                    
+                    anc := item_anchor
+                    anc.parent = {.5, 0}
+                    rect2, _, _ := ui_push_rect(
+                        ui          = ui,
+                        interactive = {
+                            id      = item.option_box_id,
+                        },
+                        sizing      = { Percent{.5}, Fixed{item_height} },
+                        anchor      = anc
+                    )
+                    ui_push_container(ui, rect2)
+                    {
+                        defer ui_pop_container(ui)
+                        ui_push_text(
+                            ui,
+                            item.options.([Resolution]string)[.Res_800x480],
+                            anchor = {
+                                element = {1, .5},
+                                parent  = {1, .5},
+                            }
+                        )
+                    }
+                    
                 case type_item_options_of(ToggleState):
-                    ui_push_text(ui, tr(item.item_term), anchor = item_anchor)
+                    rect1, _, _ := ui_push_rect(
+                        ui,
+                        sizing = { Percent{.5}, Fixed{item_height} },
+                        anchor = item_anchor,
+                    )
+                    ui_push_container(ui, rect1)
+                    {
+                        defer ui_pop_container(ui)
+                        ui_push_text(ui, tr(item.item_term), anchor = { element = {0, .5}, parent = {0, .5} })
+                    }
+
+                    anc := item_anchor
+                    anc.parent = {.5, 0}
+                    rect2, _, _ := ui_push_rect(
+                        ui          = ui,
+                        interactive = {
+                            id      = item.option_box_id,
+                        },
+                        sizing      = { Percent{.5}, Fixed{item_height} },
+                        anchor      = anc
+                    )
+                    ui_push_container(ui, rect2)
+                    {
+                        defer ui_pop_container(ui)
+                        ui_push_text(
+                            ui,
+                            tr(item.options.([ToggleState]Loc_Term)[.On]),
+                            anchor = {
+                                element = {1, .5},
+                                parent  = {1, .5},
+                            }
+                        )
+                    }
                 }
                  
                 item_anchor.offset.y += item_height + spacing

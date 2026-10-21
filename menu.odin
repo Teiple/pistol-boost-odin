@@ -143,14 +143,16 @@ Menu_Item_Of :: struct($T: typeid) {
     using _ : T,
 }
 
+Raw_Term_Enum_Array :: struct($T : typeid) {
+    labels   : [T]string,
+    language : Language
+}
+
 Menu_Options_Of :: struct($T: typeid) {
     option_box_id : Ui_Id,
     options       : union {
         [T]Loc_Term,
-        struct {
-            labels   : [T]string,
-            language : Language
-        },
+        [T]string, // always English, there is no usecase for other languages yet
     }
 }
 
