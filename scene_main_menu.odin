@@ -53,13 +53,15 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
         return
     },
     input_ui = proc(menu : ^Main_Menu, ui: ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
-        // There is no thing that main menu can close to so we ignore the close request  
-        menu_helper_label_menu_input(
+        quit := menu_helper_label_menu_input(
             ui               = ui,
             ev               = ev,
             selected_current = &menu.selected_current,
             current_item     = &menu.current_item,
         )
+        if quit {
+            res.next_menu = Quit_Confirm_Popup_Menu{}
+        }
 
         return
     }

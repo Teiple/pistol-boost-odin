@@ -137,10 +137,13 @@ Menu_Item :: struct {
     term : Menu_Term, 
 }
 
-Menu_Item_Of :: struct($T: typeid) {
+Menu_Item_Options :: struct($T: typeid) {
     item_id   : string, 
     item_term : Loc_Term, 
-    using _ : T,
+    options   : union {
+        [T]Loc_Term,
+        [T]string, // always English, there is no usecase for other languages yet
+    }
 }
 
 Raw_Term_Enum_Array :: struct($T : typeid) {
@@ -148,17 +151,60 @@ Raw_Term_Enum_Array :: struct($T : typeid) {
     language : Language
 }
 
-Menu_Options_Of :: struct($T: typeid) {
-    option_box_id : Ui_Id,
-    options       : union {
-        [T]Loc_Term,
-        [T]string, // always English, there is no usecase for other languages yet
-    }
-}
+menu_item_options :: proc(
+    ui          : ^Ui,
+    item        : Menu_Item_Options($T),
+    current_val : ^T,
+    is_active   : bool,
+    anchor      : Anchor,
+    item_height : f32,
+    switch_next : bool,
+    switch_prev : bool,
+) -> (is_clicked: bool) where ins.type_is_enum(T) {
+    rect, _, clicked := ui_push_rect(
+        ui,
+        sizing      = { Grow{}, Fixed{item_height} },
+        anchor      = anchor,
+        interactive = {
+            id            = item.item_id,
+            hovered_color = hsv(140, 0.5, 1, 0.2),
+            held_color    = hsv(140, 0.5, 0.5, 0.2),
+        },
+    )
+    ui_push_container(ui, rect)
+    defer ui_pop_container(ui)
 
-@(private)
-type_item_options_of :: struct($T : typeid) {
-    using _ :  Menu_Item_Of(Menu_Options_Of(T))
+    ui_push_text(
+        ui,
+        text   = tr(item.item_term),
+        anchor = { element = {0, .5}, parent = {0, .5}, offset = {8, 0} },
+        color  = is_active ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
+    )
+
+    val_str: string
+    switch opts in item.options {
+    case [T]Loc_Term:
+        val_str = tr(opts[current_val^])
+    case [T]string:
+        val_str = opts[current_val^]
+    }
+
+    ui_push_text(
+        ui,
+        text   = val_str,
+        anchor = { element = {1, .5}, parent = {1, .5}, offset = {-8, 0} },
+        color  = is_active ? hsv(42, 0.7, 1) : hsv(42, 1, 0.8),
+    )
+
+    if clicked || is_active {
+        if switch_next || clicked {
+            current_val^ = cont_enum_next(current_val^)
+        } else if switch_prev {
+            current_val^ = cont_enum_prev(current_val^)
+        }
+    }
+
+    return clicked
 }
 
 menu_helper_label_menu :: proc(
@@ -261,25 +307,16 @@ menu_helper_label_menu_input :: proc(
     ev               : sapp.Event,
     selected_current : ^bool,
     current_item     : ^$T,
-) -> (requested_to_close : bool) where ins.type_is_enum(T)
+) -> (requested_to_close : bool) where ins.type_is_enum(T) && ins.type_enum_is_contiguous(T)
 {
     ui_capture_input(ui)
-
-    cur := current_item^
 
     if ev.type == .KEY_DOWN {
         #partial switch ev.key_code {
             case .DOWN:
-                current_item^ = cast(T)(
-                    (cast(int)cur + 1) % len(T)
-                )
+                current_item^ = cont_enum_next(current_item^)
             case .UP:
-                prev := cast(int)cur - 1
-                if prev < 0 {
-                    current_item^ = cast(T)(prev + len(T))
-                } else {
-                    current_item^ = cast(T)(prev % len(T))
-                }
+                current_item^ = cont_enum_prev(current_item^)
             case .SPACE, .ENTER:
                 selected_current^ = true           
             case .ESCAPE:
@@ -326,102 +363,6 @@ menu_helper_back_button :: proc(
 
     return clicked
 }
-
-
-menu_helper_options_menu :: proc(
-    menu             : ^$M,
-    ui               : ^Ui,
-    selected_current : bool,
-    current_item     : $T,
-    items            : [T]$S,
-    anchor           : Anchor = {
-        parent  = {.5, .5},
-        element = {.5, .5},
-    },
-    item_height           : f32 = 32,
-    widths           : [2]f32 = {100, 60},
-) -> (selected_option : T, selected : bool) where ins.type_is_enum(T)
-{
-    spacing   :: 4
-    item_count := cast(f32)len(T)
-
-    // option container
-    rect, _, _ := ui_push_rect(
-        ui, 
-        sizing = {
-            Fixed{ widths[0] + widths[1] },
-            Fixed{
-                item_height * item_count + (item_count - 1) * spacing,
-            }
-        },
-        anchor = anchor
-    )
-
-    ui_push_container(ui, rect)
-    {
-        defer ui_pop_container(ui)
-
-        item_anchor : Anchor
-        
-        for item, item_enum in items {
-            rect, mouse_state, is_clicked := ui_push_rect(                
-                ui, hsv(0, 0, 0, 0),
-                sizing      = { Fixed{widths[0]}, Fixed{item_height} },
-                anchor      = item_anchor,
-                interactive = {
-                    id            = item.id,
-                    hovered_color = hsv(140, 0.5, 1, 0.2),
-                    held_color    = hsv(140, 0.5, 0.5, 0.2),
-                }
-            )
-
-            is_clicked ||= selected_current && item_enum == current_item
-
-            if is_clicked {
-                selected_option = item_enum
-                selected        = true
-            }
-
-            ui_push_container(ui, rect)
-            {
-                defer ui_pop_container(ui)
-
-                raw_term, is_raw := item.term.(Raw_Term)
-            
-                prev_lang := ui.language
-
-                if is_raw {
-                    ui_set_lang(ui, raw_term.language)
-                }
-
-                text := is_raw ? raw_term.raw : tr(item.term.(Loc_Term))
-
-                ui_push_text(
-                    ui,
-                    text        = text,
-                    anchor      = {
-                        element   = {.5, .5},
-                        parent    = {.5, .5} 
-                    },
-                    color       = (
-                        item_enum == current_item ?
-                        hsv(140, 0.5, 1) :
-                        hsv(140, 1, 0.8)
-                    ),
-                )
-
-                if is_raw {
-                    ui_set_lang(ui, prev_lang)
-                }
-            }
-
-            item_anchor.offset.y += rect.w + spacing
-        }
-    }   
-    
-    return
-}
-
 
 
 Quit_Confirm_Popup_Menu :: struct{

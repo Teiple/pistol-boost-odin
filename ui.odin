@@ -16,7 +16,7 @@ Anchor :: struct {
     offset    : [2]f32,
 }
 
-Sizing :: union { Fixed, Grow, Percent }
+Sizing :: union { Fixed, Grow, Percent, PercentOffset}
 
 Fixed :: struct {
     value : f32,
@@ -33,6 +33,11 @@ Grow :: struct {}
 
 Percent :: struct {
     value : f32,
+}
+
+PercentOffset :: struct {
+    value  : f32,
+    offset : f32,
 }
 
 Font_Id :: enum {
@@ -372,7 +377,9 @@ ui_push_rect :: proc(
         case Grow:
             ele_rect.z = container.z
         case Percent:
-            ele_rect.z = container.z * size.value 
+            ele_rect.z = container.z * size.value
+        case PercentOffset:
+            ele_rect.z = container.z * size.value + size.offset
     }
 
     switch size in sizing.y {
@@ -381,7 +388,9 @@ ui_push_rect :: proc(
         case Grow:
             ele_rect.w = container.w
         case Percent:
-            ele_rect.w = container.w * size.value 
+            ele_rect.w = container.w * size.value
+        case PercentOffset:
+            ele_rect.w = container.w * size.value + size.offset 
     }
 
     // apply anchor
@@ -450,18 +459,14 @@ ui_push_rect :: proc(
 
 
 ui_push_text :: proc(
-    ui        : ^Ui,
-    text      : string,
-    font_id   : Font_Id = .Normal,
-    font_size : f32 = 32,
-    color     : [4]f32 = {0.2, 0.8, 0.2, 1},
-    // interactive
-    interactive : Maybe(struct {
-        mouse         : ^Mouse_Input,
-        hovered_color : Maybe([4]f32),
-    }) = nil,
+    ui             : ^Ui,
+    text           : string,
+    font_id        : Font_Id = .Normal,
+    font_size      : f32 = 32,
+    color          : [4]f32 = {0.2, 0.8, 0.2, 1},
     anchor         : Anchor = {},
     text_alignment : f32 = .5,
+    padding        : [4]f32 = 0,
 ) -> (ele_rect : [4]f32) {
     // use address here since font struct is quite big
     font := &ui.lang_fonts[ui.language][font_id]
@@ -557,27 +562,22 @@ ui_push_text :: proc(
 
     container := ui_top_container(ui)
 
-    // apply anchor
+    // apply padding + anchor
+    ele_rect.zw += padding.xy + padding.zw
+    
     anchor_offset : [2]f32
     anchor_offset  = container.xy
     anchor_offset += anchor.parent  * container.zw
     anchor_offset -= anchor.element * ele_rect.zw
     anchor_offset += anchor.offset
 
-    ele_rect.xy += anchor_offset
-
-    color := color
-    if i, ok := interactive.?; ok {
-        if i.hovered_color != nil &&
-            i.mouse.state[.Left] == .None &&
-            mouse_is_inside_rect(i.mouse, ele_rect) {
-            color = i.hovered_color.?
-        }
-    }
+    ele_rect.xy = anchor_offset
+    
+    text_offset := anchor_offset + padding.xy
     
     for vi in start_vert..<len(ui.vertices) {
         v := &ui.vertices[vi]
-        v.position.xy += anchor_offset
+        v.position.xy += text_offset
         v.color = color
     }
 
