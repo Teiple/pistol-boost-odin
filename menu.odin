@@ -151,16 +151,16 @@ Raw_Term_Enum_Array :: struct($T : typeid) {
     language : Language
 }
 
-menu_item_options :: proc(
-    ui          : ^Ui,
-    item        : Menu_Item_Options($T),
-    current_val : ^T,
-    is_active   : bool,
-    anchor      : Anchor,
-    item_height : f32,
-    switch_next : bool,
-    switch_prev : bool,
-) -> (is_clicked: bool) where ins.type_is_enum(T) {
+menu_helper_item_options :: proc(
+    ui            : ^Ui,
+    item          : Menu_Item_Options($T),
+    current_value : T,
+    is_active     : bool,
+    anchor        : Anchor,
+    item_height   : f32,
+    switch_next   : bool,
+    switch_prev   : bool,
+) -> (new_value : T, changed : bool) where ins.type_is_enum(T) {
     rect, _, clicked := ui_push_rect(
         ui,
         sizing      = { Grow{}, Fixed{item_height} },
@@ -171,40 +171,43 @@ menu_item_options :: proc(
             held_color    = hsv(140, 0.5, 0.5, 0.2),
         },
     )
+
     ui_push_container(ui, rect)
-    defer ui_pop_container(ui)
+    {
+        defer ui_pop_container(ui)
+    
+        ui_push_text(
+            ui,
+            text   = tr(item.item_term),
+            anchor = { element = {0, .5}, parent = {0, .5}, offset = {8, 0} },
+            color  = is_active ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
+        )
 
-    ui_push_text(
-        ui,
-        text   = tr(item.item_term),
-        anchor = { element = {0, .5}, parent = {0, .5}, offset = {8, 0} },
-        color  = is_active ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
-    )
+         val_str: string
+        switch opts in item.options {
+            case [T]Loc_Term:
+                val_str = tr(opts[current_value])
+            case [T]string:
+                val_str = opts[current_value]
+        }
 
-    val_str: string
-    switch opts in item.options {
-    case [T]Loc_Term:
-        val_str = tr(opts[current_val^])
-    case [T]string:
-        val_str = opts[current_val^]
-    }
+        ui_push_text(
+            ui,
+            text   = val_str,
+            anchor = { element = {1, .5}, parent = {1, .5}, offset = {-8, 0} },
+            color  = is_active ? hsv(42, 0.7, 1) : hsv(42, 1, 0.8),
+        )
 
-    ui_push_text(
-        ui,
-        text   = val_str,
-        anchor = { element = {1, .5}, parent = {1, .5}, offset = {-8, 0} },
-        color  = is_active ? hsv(42, 0.7, 1) : hsv(42, 1, 0.8),
-    )
-
-    if clicked || is_active {
-        if switch_next || clicked {
-            current_val^ = cont_enum_next(current_val^)
-        } else if switch_prev {
-            current_val^ = cont_enum_prev(current_val^)
+        if clicked || is_active {
+            if switch_next || clicked {
+                return cont_enum_next(current_value), true
+            } else if switch_prev {
+                return cont_enum_prev(current_value), true
+            }
         }
     }
 
-    return clicked
+    return
 }
 
 menu_helper_label_menu :: proc(

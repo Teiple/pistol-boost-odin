@@ -122,47 +122,11 @@ Graphics_Quality :: enum {
     High,
 }
 
-Graphics_Setting_Menu_Item :: union {
-    Menu_Item_Options(Resolution),
-    Menu_Item_Options(ToggleState),
-}
-
 Graphics_Setting_Menu_Item_Id :: enum {
     Resolution,
     Fullscreen,
     Vsync,
 }
-
-@(rodata)
-graphics_menu_options : [Graphics_Setting_Menu_Item_Id]Graphics_Setting_Menu_Item = {
-    .Resolution = Menu_Item_Options(Resolution) {
-        item_id       = "graphics_menu:resolution",
-        item_term     =  .Resolution,
-        options       = {
-            .Res_800x480 = "800x480",
-            .Res_800x600 = "800x600",
-            .Res_960x540 = "960x540",
-        }
-    },
-    .Fullscreen = Menu_Item_Options(ToggleState) {
-        item_id       = "graphics_menu:fullscreen",
-        item_term     =  .Fullscreen,
-        options       = {
-            .On   = .On,
-            .Off  = .Off,
-        }
-    },
-    .Vsync =  Menu_Item_Options(ToggleState) {
-        item_id       = "graphics_menu:vsync",
-        item_term     =  .Vsync,
-        options       = {
-            .On   = .On,
-            .Off  = .Off,
-        }
-    },
-}
-
-graphics_menu_back_btn_id :: "graphics_menu:id"
 
 GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
     update_ui = proc(menu : ^Graphics_Menu, ui : ^Ui) -> (res: Menu_Result) {
@@ -199,134 +163,76 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                         defer ui_pop_container(ui)
 
                         item_anchor : Anchor
-
-                        for menu_item, item_enum in graphics_menu_options {
-                            switch item in menu_item {
-                            case Menu_Item_Options(Resolution):
-                                current_option := &menu.current_config.resolution
-                                saved_option   := menu.saved_config.resolution
-
-                                rect, _, is_clicked := ui_push_rect(
-                                    ui,
-                                    sizing = { Grow{}, Fixed{item_height} },
-                                    anchor = item_anchor,
-                                    interactive = {
-                                        id            = item.item_id,
-                                        hovered_color = hsv(140, 0.5, 1, 0.2),
-                                        held_color    = hsv(140, 0.5, 0.5, 0.2),
-                                    }
-                                )
-                                ui_push_container(ui, rect)
-                                {
-                                    defer ui_pop_container(ui)
-                                    
-                                    item_label := tr(item.item_term)
-
-                                    ui_push_text(
+                        
+                        for item in Graphics_Setting_Menu_Item_Id {
+                            is_active := has_current_item && current_item == item
+                            defer item_anchor.offset.y += item_height + spacing
+                            switch item {
+                                case .Resolution:
+                                    new_val, changed := menu_helper_item_options(
                                         ui,
-                                        text = item_label,
-                                        anchor = { element = {0, .5}, parent = {0, .5}, offset = {8, 0} },
-                                        color       = (
-                                            has_current_item && item_enum == current_item ?
-                                            hsv(140, 0.5, 1) :
-                                            hsv(140, 1, 0.8)
-                                        ),
-                                    )
-                                    
-                                    opt_string := item.options.([Resolution]string)[current_option^]
-
-                                    ui_push_text(
-                                        ui,
-                                        opt_string,
-                                        anchor = {
-                                            element = {1, .5},
-                                            parent  = {1, .5},
-                                            offset  = {-8, 0},
+                                        item          = Menu_Item_Options(Resolution) {
+                                            item_id   = "graphics_setting_menu:resolution",
+                                            item_term = .Resolution,
+                                            options = {
+                                                .Res_800x480 = "800x480",
+                                                .Res_800x600 = "800x600",
+                                                .Res_960x540 = "960x540",
+                                            } 
                                         },
-                                        color       = (
-                                            has_current_item && item_enum == current_item ?
-                                            hsv(42, 0.7, 1) : hsv(42, 1, 0.8)
-                                        ),
+                                        current_value = menu.current_config.resolution,
+                                        is_active     = is_active,
+                                        anchor        = item_anchor,
+                                        switch_next   = menu.switch_next,
+                                        switch_prev   = menu.switch_prev,
+                                        item_height   = item_height,
                                     )
-
-                                    if is_clicked || (has_current_item && current_item == item_enum) {
-                                        if menu.switch_next || is_clicked {
-                                            current_option^ = cont_enum_next(current_option^)
-                                        } else if menu.switch_prev {
-                                            current_option^ = cont_enum_prev(current_option^)
-                                        }
+                                    if changed {
+                                        menu.current_config.resolution = new_val
                                     }
-                                }
-                                
-                            case Menu_Item_Options(ToggleState):
-                                current_option : ^ToggleState
-                                saved_option : ToggleState
-
-                                #partial switch item_enum {
-                                    case .Fullscreen: 
-                                        current_option = &menu.current_config.fullscreen
-                                        saved_option   = menu.saved_config.fullscreen
-                                    case .Vsync: 
-                                        current_option = &menu.current_config.vsync
-                                        saved_option   = menu.saved_config.vsync
-                                    case:
-                                        panic("Unhandled toggle")
-                                }
-
-                                rect, _, is_clicked := ui_push_rect(
-                                    ui,
-                                    sizing = { Grow{}, Fixed{item_height} },
-                                    anchor = item_anchor,
-                                    interactive = {
-                                        id            = item.item_id,
-                                        hovered_color = hsv(140, 0.5, 1, 0.2),
-                                        held_color    = hsv(140, 0.5, 0.5, 0.2),
-                                    }
-                                )
-                                ui_push_container(ui, rect)
-                                {
-                                    defer ui_pop_container(ui)
-                                
-                                    item_label := tr(item.item_term)
-
-                                    ui_push_text(
+                                case .Vsync:
+                                    new_val, changed := menu_helper_item_options(
                                         ui,
-                                        text = item_label,
-                                        anchor = { element = {0, .5}, parent = {0, .5}, offset = {8, 0} },
-                                        color       = (
-                                            has_current_item && item_enum == current_item ?
-                                            hsv(140, 0.5, 1) :
-                                            hsv(140, 1, 0.8)
-                                        ),
-                                    )
-                                    
-                                    opt_string := tr(item.options.([ToggleState]Loc_Term)[current_option^])
-                                    
-                                    ui_push_text(
-                                        ui,
-                                        opt_string,
-                                        anchor = {
-                                            element = {1, .5},
-                                            parent  = {1, .5},
-                                            offset  = {-8, 0},
+                                        item          = Menu_Item_Options(ToggleState) {
+                                            item_id   = "graphics_setting_menu:vsync",
+                                            item_term = .Vsync,
+                                            options = {
+                                                .On = .On,
+                                                .Off = .Off,
+                                            } 
                                         },
-                                        color       = (
-                                            has_current_item && current_item == item_enum ?
-                                            hsv(42, 0.7, 1) : hsv(42, 1, 0.8)
-                                        ),
+                                        current_value = menu.current_config.vsync,
+                                        is_active     = is_active,
+                                        anchor        = item_anchor,
+                                        switch_next   = menu.switch_next,
+                                        switch_prev   = menu.switch_prev,
+                                        item_height   = item_height,
                                     )
-
-                                    if is_clicked || (has_current_item && current_item == item_enum) {
-                                        if menu.switch_next || is_clicked {
-                                            current_option^ = cont_enum_next(current_option^)
-                                        } else if menu.switch_prev {
-                                            current_option^ = cont_enum_prev(current_option^)
-                                        }
+                                    if changed {
+                                        menu.current_config.vsync = new_val
                                     }
-                                }
+                                case .Fullscreen:
+                                    new_val, changed := menu_helper_item_options(
+                                        ui,
+                                        item          = Menu_Item_Options(ToggleState) {
+                                            item_id   = "graphics_setting_menu:fullscreen",
+                                            item_term = .Fullscreen,
+                                            options = {
+                                                .On = .On,
+                                                .Off = .Off,
+                                            } 
+                                        },
+                                        current_value = menu.current_config.fullscreen,
+                                        is_active     = is_active,
+                                        anchor        = item_anchor,
+                                        switch_next   = menu.switch_next,
+                                        switch_prev   = menu.switch_prev,
+                                        item_height   = item_height,
+                                    )
+                                    if changed {
+                                        menu.current_config.fullscreen = new_val
+                                    }
                             }
-                            
-                            item_anchor.offset.y += item_height + spacing
                         }
                     }
                 case .Footer:
