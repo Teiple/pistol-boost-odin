@@ -1,5 +1,7 @@
 package main
 
+import "core:math"
+import "core:fmt"
 import ins "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
@@ -154,13 +156,15 @@ Raw_Term_Enum_Array :: struct($T : typeid) {
 menu_helper_item_options :: proc(
     ui            : ^Ui,
     item          : Menu_Item_Options($T),
+    
     current_value : T,
     is_active     : bool,
     anchor        : Anchor,
+    
     item_height   : f32,
     switch_next   : bool,
     switch_prev   : bool,
-) -> (new_value : T, changed : bool) where ins.type_is_enum(T) {
+) -> (new_value : T, changed : bool) where ins.type_is_enum(T) || ins.type_is_integer(T) {
     rect, _, clicked := ui_push_rect(
         ui,
         sizing      = { Grow{}, Fixed{item_height} },
@@ -183,17 +187,18 @@ menu_helper_item_options :: proc(
             color  = is_active ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
         )
 
-         val_str: string
+        opt_string: string
+        is_number_range := false
         switch opts in item.options {
             case [T]Loc_Term:
-                val_str = tr(opts[current_value])
+                opt_string = tr(opts[current_value])
             case [T]string:
-                val_str = opts[current_value]
+                opt_string = opts[current_value]
         }
 
         ui_push_text(
             ui,
-            text   = val_str,
+            text   = opt_string,
             anchor = { element = {1, .5}, parent = {1, .5}, offset = {-8, 0} },
             color  = is_active ? hsv(42, 0.7, 1) : hsv(42, 1, 0.8),
         )
@@ -207,6 +212,120 @@ menu_helper_item_options :: proc(
         }
     }
 
+    return
+}
+
+menu_helper_item_spinner :: proc(
+    ui : ^Ui,
+
+    item_id   : string,
+    item_term : Loc_Term,
+
+    current_value : $T,
+    min           : T,
+    max           : T,
+    step          : T,
+
+    is_active   : bool,
+    anchor      : Anchor,
+    item_height : f32,
+    switch_next : bool,
+    switch_prev : bool,
+
+    format      : string,
+
+    allocator   := context.temp_allocator
+) -> (new_value : T, changed : bool) where ins.type_is_numeric(T) {
+    current_value := math.clamp(current_value, min, max) 
+
+    rect, _, clicked := ui_push_rect(
+        ui,
+        sizing      = { Grow{}, Fixed{item_height} },
+        anchor      = anchor,
+        interactive = {
+            id            = item_id,
+            hovered_color = hsv(140, 0.5, 1, 0.2),
+            held_color    = hsv(140, 0.5, 0.5, 0.2),
+        },
+    )
+
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+    
+        ui_push_text(
+            ui,
+            text   = tr(item_term),
+            anchor = { element = {0, .5}, parent = {0, .5}, offset = {8, 0} },
+            color  = is_active ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
+        )
+
+        val_string := fmt.aprintf(format, current_value, allocator = allocator)
+
+        ui_push_text(
+            ui,
+            text   = val_string,
+            anchor = { element = {1, .5}, parent = {1, .5}, offset = {-8, 0} },
+            color  = is_active ? hsv(42, 0.7, 1) : hsv(42, 1, 0.8),
+        )
+
+        if clicked || is_active {
+            if switch_next || clicked {
+                new_value := current_value + step
+                if new_value > max {
+                    new_value = min
+                }
+                return new_value, new_value != current_value
+            } else if switch_prev {
+                new_value := current_value - step
+                if new_value < min {
+                    new_value = max
+                }
+                return new_value, new_value != current_value
+            }
+        }
+    }
+
+    return
+}
+
+menu_helper_calculate_footer_layout :: proc(
+    item_index    : int,
+    item_count    : int,
+    footer_height : f32 = 42,
+    mid_btn_witdh : f32 = 200,
+) -> (sizing : [2]Sizing, anchor : Anchor, text_anchor : Anchor) {
+    sizing.y = Fixed{footer_height}
+    if item_count == 1 {
+        sizing.x    = Grow{}
+        anchor      = { element = {0, 1}, parent = {0, 1} }
+        text_anchor = { element = {.5, .5}, parent = {.5, .5} }
+    } else if item_count >= 2 {
+        mid_btn_count        := f32(item_count - 2) 
+        mid_btn_total_width  := mid_btn_count * mid_btn_witdh
+
+        // Two ends
+        if item_index == 0 {
+            sizing.x = PercentOffset{.5, -mid_btn_total_width * .5}
+            anchor      = { element = {0, 1},   parent = {0, 1} }
+            text_anchor = { element = {1, .5},  parent = {1, .5} }
+        } else if item_index == item_count - 1 {
+            sizing.x = PercentOffset{.5, -mid_btn_total_width * .5}
+            anchor      = { element = {1, 1}, parent = {1, 1} }
+            text_anchor = { element = {0, .5},  parent = {0, .5} }
+        } else {
+            // Middle small buttons
+            mid_index  := f32(item_index) - 1
+
+            sizing.x = Fixed{mid_btn_witdh}
+            anchor = {
+                element = {0, 1},
+                parent = {0.5, 1},
+                offset = {mid_index * mid_btn_witdh - .5 * mid_btn_total_width, 0}
+            }
+            text_anchor = { element = {.5, .5},  parent = {.5, .5} }
+        }
+    } 
     return
 }
 
@@ -248,7 +367,8 @@ menu_helper_label_menu :: proc(
 
         for item, item_enum in items {
             rect, mouse_state, is_clicked := ui_push_rect(                
-                ui, hsv(0, 0, 0, 0),
+                ui,
+                color       = hsv(0, 0, 0, 0),
                 sizing      = { Fixed{item_size.x}, Fixed{item_size.y} },
                 anchor      = item_anchor,
                 interactive = {
@@ -337,7 +457,8 @@ menu_helper_back_button :: proc(
     text_alignment : f32 = 0.5,
 ) -> (is_clicked : bool) {
     rect, mouse_state, clicked := ui_push_rect(                
-        ui, hsv(0, 0, 0, 0),
+        ui,
+        color       = hsv(0, 0, 0, 0),
         sizing      = { Grow{}, Fixed{42}},
         anchor      = { element = {0, 1}, parent = {0, 1}},
         interactive = {
@@ -423,9 +544,10 @@ menu_helper_confirmation :: proc(
     opt_height :: 32
 
     rect, _, _ := ui_push_rect(                
-        ui, hsv(0, 0, 0, .8),
-        sizing      = { Fixed{size.x}, Fixed{size.y}},
-        anchor      = { element = {.5, .5}, parent = {.5, .5}, offset = {0, -20}},
+        ui,
+        color  = hsv(0, 0, 0, .8),
+        sizing = { Fixed{size.x}, Fixed{size.y}},
+        anchor = { element = {.5, .5}, parent = {.5, .5}, offset = {0, -20}},
     )
 
     ui_push_container(ui, rect)
@@ -433,7 +555,7 @@ menu_helper_confirmation :: proc(
         defer ui_pop_container(ui)
         
         inner_rect, _, _ := ui_push_rect(                
-            ui, 0,
+            ui,
             sizing = { Fixed{size.x - 2 * padding}, Fixed{size.y - 2 * padding}},
             anchor = { offset = padding },
         )
@@ -444,7 +566,7 @@ menu_helper_confirmation :: proc(
             
             // Content rect
             content_rect, _, _ := ui_push_rect(                
-                ui, hsv(0, 0, 0, 0),
+                ui,
                 sizing = { Grow{}, Fixed{size.y - 2 * padding - opt_height}},
             )
             
@@ -462,7 +584,7 @@ menu_helper_confirmation :: proc(
 
             // Yes/No rects
             yes_rect, _, yes_clicked := ui_push_rect(                
-                ui, hsv(0, 0, 0, 0),
+                ui,
                 sizing      = { Percent{.5}, Fixed{opt_height}},
                 anchor      = { element = {0, 1}, parent = {0, 1}},
                 interactive = {
@@ -487,7 +609,7 @@ menu_helper_confirmation :: proc(
             }
 
             no_rect, _, no_clicked := ui_push_rect(                
-                ui, hsv(0, 0, 0, 0),
+                ui,
                 sizing      = { Percent{.5}, Fixed{opt_height}},
                 anchor      = { element = {0, 1}, parent = {.5, 1}},
                 interactive = {

@@ -180,3 +180,19 @@ game_switch_lang :: proc(lang : Language) {
 game_lang :: proc() -> Language {
 	return game.language
 }
+
+game_set_gamma :: proc(gamma : f32) {
+	viewport_set_gamma(&game.viewport, gamma)
+}
+
+game_set_fullscreen :: proc(fullscreen : bool) {
+	if sapp.is_fullscreen() == fullscreen {
+		return
+	} else {
+		sapp.toggle_fullscreen()
+	}
+}
+
+game_request_size :: proc(size : [2]f32) {
+	viewport_request_size(&game.viewport, size)
+}

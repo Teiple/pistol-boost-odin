@@ -1,6 +1,5 @@
 package main
 
-import "core:math/linalg"
 import "core:slice"
 import sg "sokol-odin/sokol/gfx"
 import sglue "sokol-odin/sokol/glue"
@@ -11,9 +10,11 @@ VIEWPORT_CLEAR_COLOR   : sg.Color : {0.02, 0.078, 0.078, 1}
 
 Viewport :: struct {
 	base_size : [2]f32,
+	pending_base_size : [2]f32,
 	dest_rect : [4]f32,
 
 	scale : f32,
+	gamma : f32,
 
 	display_pipeline : sg.Pipeline,
 	display_shader   : sg.Shader,
@@ -70,19 +71,19 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32, window_size : [2]f32) 
 
 	// Display pipeline & bindings
 	{
-		vp.display_shader =	sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
+		vp.display_shader =	sg.make_shader(shaders.viewport_shader_desc(sg.query_backend()))
 		vp.display_pipeline = sg.make_pipeline({
 			index_type = .NONE, // it's the default btw, just write to make it clearer
 			shader = vp.display_shader,
 			layout = {
 				attrs = {
-					shaders.ATTR_unlit_pos =  {
+					shaders.ATTR_viewport_pos =  {
 						format = .FLOAT3,
 					},
-					shaders.ATTR_unlit_color0 = {
+					shaders.ATTR_viewport_color0 = {
 						format = .FLOAT4,
 					},
-					shaders.ATTR_unlit_texcoord0 = {
+					shaders.ATTR_viewport_texcoord0 = {
 						format = .FLOAT2,
 					},
 				} 
@@ -136,6 +137,8 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32, window_size : [2]f32) 
 
 	// Some system relies on .scale or .dest_rect supper early on
 	viewport_calculate_aspect(vp, window_size)	
+
+	vp.gamma = 1.0
 }
 
 viewport_calculate_aspect :: proc(vp : ^Viewport, window_size : [2]f32){
@@ -148,6 +151,11 @@ viewport_calculate_aspect :: proc(vp : ^Viewport, window_size : [2]f32){
 }
 
 viewport_begin :: proc(vp : ^Viewport, window_size : [2]f32) {
+	if vp.pending_base_size != 0 {
+		vp.base_size         = vp.pending_base_size
+		vp.pending_base_size = 0
+	}
+	
 	viewport_calculate_aspect(vp, window_size)
 
 	// Offscreen Pass
@@ -172,10 +180,14 @@ viewport_end :: proc(vp : ^Viewport) {
 	}
 	sg.apply_pipeline(vp.display_pipeline)
 	sg.apply_bindings(vp.display_bindings)
-	viewport_mvp : shaders.Unlit_Vs_Params = { mvp = linalg.MATRIX4F32_IDENTITY }
-	sg.apply_uniforms(shaders.UB_unlit_vs_params, {
-		ptr = &viewport_mvp, size = size_of(viewport_mvp)
+
+	params : shaders.Viewport_Vs_Params = {
+		gamma = vp.gamma
+	}
+	sg.apply_uniforms(shaders.UB_viewport_vs_params, {
+		ptr = &params, size = size_of(params)
 	})
+
 	// Draw viewport triangle
 	sg.draw(0, 3, 1)
 	sg.end_pass()
@@ -208,4 +220,12 @@ viewport_get_vp_mouse_delta :: proc(vp : ^Viewport, mouse_delta: [2]f32) -> [2]f
 
 viewport_get_vp_confine_mouse_pos :: proc(vp : ^Viewport, mouse_position: [2]f32) -> [2]f32 {
 	return {clamp(mouse_position.x, 0, vp.base_size.x), clamp(mouse_position.y, 0, vp.base_size.y)}
+}
+
+viewport_set_gamma :: proc(vp : ^Viewport, gamma : f32) {
+	vp.gamma = gamma
+}
+
+viewport_request_size :: proc(vp : ^Viewport, size: [2]f32) {
+	vp.pending_base_size = size
 }

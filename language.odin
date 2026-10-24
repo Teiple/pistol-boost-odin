@@ -32,7 +32,6 @@ Loc_Term :: enum {
     Defaults,
     Resolution,
     Fullscreen,
-    Vsync,
     Brightness,
     Gamma,
     Particles,
@@ -72,10 +71,9 @@ loc_map : [Language][Loc_Term]string = {
         .Back = "< Back",
         .Apply = "Apply",
         .Defaults = "Defaults",
-
         .Resolution = "Resolution",
         .Fullscreen = "Fullscreen",
-        .Vsync = "Vsync",
+        
         .Brightness = "Brightness",
         .Gamma = "Gamma",
         .Particles = "Particles",
@@ -103,10 +101,9 @@ loc_map : [Language][Loc_Term]string = {
         .Back = "< 返回",
         .Apply = "申请",
         .Defaults = "默认值",
-
         .Resolution = "分辨率",
         .Fullscreen = "全屏",
-        .Vsync = "垂直同步",
+        
         .Brightness = "亮度",
         .Gamma = "伽马值",
         .Particles = "粒子",
@@ -134,10 +131,9 @@ loc_map : [Language][Loc_Term]string = {
         .Back = "< Quay lại",
         .Apply = "Áp dụng",
         .Defaults = "Mặc định",
-
         .Resolution = "Độ phân giải",
         .Fullscreen = "Toàn màn hình",
-        .Vsync = "Đồng bộ dọc",
+        
         .Brightness = "Độ sáng",
         .Gamma = "Gamma",
         .Particles = "Hiệu ứng hạt",
@@ -165,10 +161,9 @@ loc_map : [Language][Loc_Term]string = {
         .Back = "< 戻る",
         .Apply = "適用する",
         .Defaults = "デフォルト",
-
         .Resolution = "解像度",
         .Fullscreen = "全画面表示",
-        .Vsync = "垂直同期",
+        
         .Brightness = "明るさ",
         .Gamma = "ガンマ",
         .Particles = "パーティクル",

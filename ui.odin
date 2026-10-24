@@ -1,5 +1,6 @@
 package main
 // A very mininal anchor based ui system
+import "core:fmt"
 // It must do everything in one pass
 // Mouse input only accounts for explicit ids
 // There will be no implicit ids
@@ -360,14 +361,14 @@ ui_get_quad :: proc(
 
 ui_push_rect :: proc(
     ui    : ^Ui,
+    sizing : [2]Sizing    = {},
+    anchor : Anchor       = {},
     color : [4]f32 = 0,
     interactive : Maybe(struct {
         id            : Ui_Id,
         hovered_color : Maybe([4]f32),
         held_color    : Maybe([4]f32),
     }) = nil,
-    sizing : [2]Sizing    = {},
-    anchor : Anchor       = {},
 ) -> (ele_rect : [4]f32, mouse_state : Mouse_Button_State, is_clicked : bool) {
     container := ui_top_container(ui)
     

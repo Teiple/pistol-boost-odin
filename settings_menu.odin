@@ -1,7 +1,5 @@
 package main
 
-import fmt "core:fmt"
-import ins "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
 Settings_Menu :: struct {
@@ -76,14 +74,13 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
 @(rodata)
 graphics_setting_config_default : Graphics_Setting_Config = {
     resolution = .Res_960x540,       
-    vsync      = .On,       
-    fullscreen = .On,
+    fullscreen = .Off,
 }
 
 Graphics_Setting_Config :: struct {
-    resolution : Resolution,       
-    vsync      : ToggleState,       
+    resolution : Resolution,
     fullscreen : ToggleState,
+    gamma      : f32,
 }
 
 Graphics_Setting_Footer_Item_Id :: enum {
@@ -105,27 +102,21 @@ Graphics_Menu :: struct {
     }
 }
 
-Resolution :: enum {
+Resolution :: enum u8 {
     Res_800x480,
     Res_800x600,
     Res_960x540,
 }
 
-ToggleState :: enum {
+ToggleState :: enum u8 {
     On,
     Off,
-}
-
-Graphics_Quality :: enum {
-    Low,
-    Medium,
-    High,
 }
 
 Graphics_Setting_Menu_Item_Id :: enum {
     Resolution,
     Fullscreen,
-    Vsync,
+    Gamma,
 }
 
 GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
@@ -169,7 +160,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                             defer item_anchor.offset.y += item_height + spacing
                             switch item {
                                 case .Resolution:
-                                    new_val, changed := menu_helper_item_options(
+                                    new_value, changed := menu_helper_item_options(
                                         ui,
                                         item          = Menu_Item_Options(Resolution) {
                                             item_id   = "graphics_setting_menu:resolution",
@@ -188,31 +179,19 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         item_height   = item_height,
                                     )
                                     if changed {
-                                        menu.current_config.resolution = new_val
-                                    }
-                                case .Vsync:
-                                    new_val, changed := menu_helper_item_options(
-                                        ui,
-                                        item          = Menu_Item_Options(ToggleState) {
-                                            item_id   = "graphics_setting_menu:vsync",
-                                            item_term = .Vsync,
-                                            options = {
-                                                .On = .On,
-                                                .Off = .Off,
-                                            } 
-                                        },
-                                        current_value = menu.current_config.vsync,
-                                        is_active     = is_active,
-                                        anchor        = item_anchor,
-                                        switch_next   = menu.switch_next,
-                                        switch_prev   = menu.switch_prev,
-                                        item_height   = item_height,
-                                    )
-                                    if changed {
-                                        menu.current_config.vsync = new_val
+                                        menu.current_config.resolution = new_value
+
+                                        switch menu.current_config.resolution {
+                                            case .Res_800x480:
+                                                game_request_size({800, 480})
+                                            case .Res_800x600:
+                                                game_request_size({800, 600})
+                                            case .Res_960x540:
+                                                game_request_size({960, 540})
+                                        }
                                     }
                                 case .Fullscreen:
-                                    new_val, changed := menu_helper_item_options(
+                                    new_value, changed := menu_helper_item_options(
                                         ui,
                                         item          = Menu_Item_Options(ToggleState) {
                                             item_id   = "graphics_setting_menu:fullscreen",
@@ -230,7 +209,29 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         item_height   = item_height,
                                     )
                                     if changed {
-                                        menu.current_config.fullscreen = new_val
+                                        menu.current_config.fullscreen = new_value
+                                        
+                                        game_set_fullscreen(menu.current_config.fullscreen == .On)
+                                    }
+                                case .Gamma:
+                                    new_value, changed := menu_helper_item_spinner(
+                                        ui,
+                                        item_id       = "graphics_setting_menu:gamma", 
+                                        item_term     = .Gamma, 
+                                        current_value = menu.current_config.gamma,
+                                        min           = .5,
+                                        max           = 1.5,
+                                        step          = .1,
+                                        format        = "%.1f",
+                                        is_active     = is_active,
+                                        anchor        = item_anchor,
+                                        switch_next   = menu.switch_next,
+                                        switch_prev   = menu.switch_prev,
+                                        item_height   = item_height,
+                                    )
+                                    if changed {
+                                        menu.current_config.gamma = new_value
+                                        game_set_gamma(menu.current_config.gamma)
                                     }
                             }
                         }
@@ -271,54 +272,21 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                     }
 
                     for item, index in items {
-                        sizing : [2]Sizing
-                        sizing.y = Fixed{42}
-
-                        anchor      : Anchor
-                        text_anchor : Anchor
-
-                        if len(items) == 1 {
-                            sizing.x    = Grow{}
-                            anchor      = { element = {0, 1}, parent = {0, 1} }
-                            text_anchor = { element = {.5, .5}, parent = {.5, .5} }
-                        } else if len(items) >= 2 {
-                            small_button_button_count := f32(len(items) - 2) 
-                            small_button_total_width  := small_button_button_count * small_button_width
-
-                            // Two ends
-                            if index == 0 {
-                                sizing.x = PercentOffset{.5, -small_button_total_width * .5}
-                                anchor      = { element = {0, 1},   parent = {0, 1} }
-                                text_anchor = { element = {1, .5},  parent = {1, .5} }
-                            } else if index == len(items) - 1 {
-                                sizing.x = PercentOffset{.5, -small_button_total_width * .5}
-                                anchor      = { element = {1, 1}, parent = {1, 1} }
-                                text_anchor = { element = {0, .5},  parent = {0, .5} }
-                            } else {
-                                // Middle small buttons
-                                small_button_index  := f32(index) - 1
-
-                                sizing.x = Fixed{small_button_total_width}
-                                anchor      = { element = {0, 1}, parent = {0.5, 1}, offset = {small_button_index * small_button_width - .5 * small_button_total_width, 0} }
-                                text_anchor = { element = {.5, .5},  parent = {.5, .5} }
-                            }
-                        } 
+                        sizing, anchor, text_anchor := menu_helper_calculate_footer_layout(index, len(items))
+                        is_selected := menu.switch_next && has_current_item && current_item == item
 
                         switch item {
                             case .Back:
                                 rect, _, is_clicked := ui_push_rect(
-                                    ui,
-                                    sizing = sizing,
-                                    anchor = anchor,
+                                    ui, sizing, anchor,
                                     interactive = {
-                                        id            = "graphics_menu:back",
+                                        id            = "graphics_setting_menu:back",
                                         hovered_color = hsv(140, 0.5, 1, 0.2),
                                         held_color    = hsv(140, 0.5, 0.5, 0.2),
                                     }
                                 )
 
-                                is_clicked ||= menu.switch_next && has_current_item && current_item == item
-                                res.close = is_clicked
+                                res.close = is_clicked || is_selected
 
                                  ui_push_container(ui, rect)
                                 {
@@ -341,14 +309,13 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                     sizing = sizing,
                                     anchor = anchor,
                                     interactive = {
-                                        id            = "graphics_menu:defaults",
+                                        id            = "graphics_setting_menu:defaults",
                                         hovered_color = hsv(140, 0.5, 1, 0.2),
                                         held_color    = hsv(140, 0.5, 0.5, 0.2),
                                     }
                                 )
 
-                                is_clicked ||= menu.switch_next && has_current_item && current_item == item
-                                if is_clicked {
+                                if is_clicked || is_selected {
                                     
                                 }
 
@@ -373,14 +340,13 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                     sizing = sizing,
                                     anchor = anchor,
                                     interactive = {
-                                        id            = "graphics_menu:apply",
+                                        id            = "graphics_setting_menu:apply",
                                         hovered_color = hsv(140, 0.5, 1, 0.2),
                                         held_color    = hsv(140, 0.5, 0.5, 0.2),
                                     }
                                 )
 
-                                is_clicked ||= menu.switch_next && has_current_item && current_item == item
-                                if is_clicked {
+                                if is_clicked || is_selected {
 
                                 }
 
