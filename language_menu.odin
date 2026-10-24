@@ -13,7 +13,7 @@ Language_Menu :: struct {
 language_menu_items := [Language]Menu_Item{
     .English           = { id = "lang_menu:en", term = { LANGUAGE_SELECTIONS[.English],           .English }},
     .Vietnamese        = { id = "lang_menu:vi", term = { LANGUAGE_SELECTIONS[.Vietnamese],        .Vietnamese }},
-    .SimplifiedChinese = { id = "lang_menu:sc", term = { LANGUAGE_SELECTIONS[.SimplifiedChinese], .SimplifiedChinese }},
+    .Simplified_Chinese = { id = "lang_menu:sc", term = { LANGUAGE_SELECTIONS[.Simplified_Chinese], .Simplified_Chinese }},
     .Japanese          = { id = "lang_menu:jp", term = { LANGUAGE_SELECTIONS[.Japanese],          .Japanese }},
 }
 

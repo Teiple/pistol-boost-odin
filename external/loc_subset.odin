@@ -7,13 +7,13 @@ import "core:os"
 
 
 Seperated_Lang :: enum {
-    SimplifiedChinese = cast(int)main.Language.SimplifiedChinese,
+    Simplified_Chinese = cast(int)main.Language.Simplified_Chinese,
     Japanese          = cast(int)main.Language.Japanese,
 }
 
 @(rodata)
 lang_exports := [Seperated_Lang]string {
-    .SimplifiedChinese = #directory + "/loc_subset_sc.txt",
+    .Simplified_Chinese = #directory + "/loc_subset_sc.txt",
     .Japanese          = #directory + "/loc_subset_jp.txt",
 }
 

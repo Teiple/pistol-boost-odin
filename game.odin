@@ -8,6 +8,7 @@ import slog "sokol-odin/sokol/log"
 
 VIEWPORT_BASE_WIDTH  :: 960
 VIEWPORT_BASE_HEIGHT :: 540
+GAME_VERSION         :: "0.0.0"
 
 Game :: struct {
 	viewport   : Viewport,
@@ -24,7 +25,7 @@ Game :: struct {
 
 	pending_scene : Maybe(Scene),
 
-	language : Language,
+	settings : Game_Settings,
 }
 
 @(private = "file")
@@ -51,7 +52,8 @@ game_init :: proc() {
 	camera_init_default(&game.camera, {0, 2, 10}, {0, 0, 0})
 	renderer_init(&game.renderer)
 	
-	game.language = .English
+	game.settings = settings_load()
+	settings_apply_all(game.settings)
 	
 	font_configs := load_lang_font_configs()
 	defer unload_lang_font_configs(font_configs)
@@ -69,7 +71,7 @@ game_update :: proc(unscaled_dt : f32) {
 	
 	dt : f32 = game_time_raw_update(&game.time, unscaled_dt)
 
-	ui_begin(&game.ui, &game.viewport, &game.mouse, game.language)
+	ui_begin(&game.ui, &game.viewport, &game.mouse, game.settings.language)
 	{
 		if game.scene_callbacks.update_ui != nil {
 			game.scene_callbacks.update_ui(&game.scene, &game.ui)
@@ -159,14 +161,14 @@ game_request_quit :: proc() {
 
 tr :: proc(term: Loc_Term, params : ..any, allocator := context.temp_allocator) -> string {
 	if len(params) > 0 {
-		return fmt.aprintf(loc_map[game.language][term], params)
+		return fmt.aprintf(loc_map[game.settings.language][term], params)
 	}
-	return loc_map[game.language][term]
+	return loc_map[game.settings.language][term]
 }
 
 game_lang_is_cjk :: proc() -> bool {
-	#partial switch game.language {
-		case .Japanese, .SimplifiedChinese:
+	#partial switch game.settings.language {
+		case .Japanese, .Simplified_Chinese:
 			return true
 		case:
 			return false
@@ -174,11 +176,11 @@ game_lang_is_cjk :: proc() -> bool {
 }
 
 game_switch_lang :: proc(lang : Language) {
-	game.language = lang
+	game.settings.language = lang
 }
 
 game_lang :: proc() -> Language {
-	return game.language
+	return game.settings.language
 }
 
 game_set_gamma :: proc(gamma : f32) {
@@ -195,4 +197,12 @@ game_set_fullscreen :: proc(fullscreen : bool) {
 
 game_request_size :: proc(size : [2]f32) {
 	viewport_request_size(&game.viewport, size)
+}
+
+game_get_settings :: proc() -> ^Game_Settings {
+	return &game.settings
+}
+
+game_save_settings :: proc() {
+	settings_save(game.settings)
 }

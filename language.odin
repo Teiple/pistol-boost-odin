@@ -4,7 +4,7 @@ import "core:slice"
 Language :: enum {
     English,
     Vietnamese,
-    SimplifiedChinese,
+    Simplified_Chinese,
     Japanese,
 }
 
@@ -41,7 +41,7 @@ Loc_Term :: enum {
 LANGUAGE_SELECTIONS : [Language]string : {
     .English           = "English",   
     .Vietnamese        = "Tiếng Việt",
-    .SimplifiedChinese = "简体中文",   
+    .Simplified_Chinese = "简体中文",   
     .Japanese          = "日本語",     
 }
 
@@ -79,7 +79,7 @@ loc_map : [Language][Loc_Term]string = {
         .Particles = "Particles",
         .Decals = "Decals",
     },
-    .SimplifiedChinese = {
+    .Simplified_Chinese = {
         .Undefined = UNDEFINED_TERM,
         .New_Game = "新游戏",
         .Continue = "继续",
@@ -188,7 +188,7 @@ lang_font_declares : [Language]Lang_Font_Declare = {
         atlas_width  = 256,
         atlas_height = 128,
     },
-    .SimplifiedChinese = {
+    .Simplified_Chinese = {
         ttf_data     = #load("assets/fonts/NotoSansMonoCJKsc-Subset.ttf"),
         atlas_width  = 256,
         atlas_height = 256,
@@ -238,7 +238,7 @@ load_lang_font_configs :: proc() -> []Lang_Font_Config {
 
         font_cfgs[lang] = {            
             language        = lang,
-            non_ascii_runes = non_ascii_runes[:],
+            non_ascii_runes = non_ascii_runes,
             ttf_data        = lang_decl.ttf_data,
             atlas_width     = lang_decl.atlas_width,
             atlas_height    = lang_decl.atlas_height,

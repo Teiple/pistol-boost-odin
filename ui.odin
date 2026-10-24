@@ -46,7 +46,7 @@ Font_Id :: enum {
 }
 
 Font :: struct {
-    packed_chars  : []tt.packedchar,
+    packed_chars  : [dynamic]tt.packedchar,
     atlas_size    : [2]i32,
     base_size     : f32,
     font_spacing  : f32,
@@ -97,7 +97,7 @@ Ui_Cmd :: struct {
 
 Lang_Font_Config :: struct {
     language        : Language,
-    non_ascii_runes : []rune,
+    non_ascii_runes : [dynamic]rune,
     ttf_data        : []byte,
     atlas_width     : i32,
     atlas_height    : i32,
@@ -209,7 +209,7 @@ ui_destroy :: proc(ui : ^Ui) {
 
 }
 
-ui_init_lang_font :: proc(font: ^Font, font_cfg : Lang_Font_Config) {
+ui_init_lang_font :: proc(font: ^Font, font_cfg : Lang_Font_Config, allocator := context.allocator) {
     font^ = {
         base_size    = font_cfg.base_size,
         atlas_size   = {font_cfg.atlas_width, font_cfg.atlas_height},
@@ -230,10 +230,10 @@ ui_init_lang_font :: proc(font: ^Font, font_cfg : Lang_Font_Config) {
     }
 
     // Prepare buffers
-    atlas := make([]byte, font.atlas_size.x * font.atlas_size.y)
-    defer delete(atlas)    
+    atlas := make([]byte, font.atlas_size.x * font.atlas_size.y, allocator = allocator)
+    defer delete(atlas, allocator)    
     
-    font.packed_chars = make([]tt.packedchar, 95 + len(font_cfg.non_ascii_runes))
+    font.packed_chars = make([dynamic]tt.packedchar, len = 95 + len(font_cfg.non_ascii_runes), allocator = allocator)
 
     ascii_chars          := font.packed_chars[:95]
     used_non_ascii_chars := font.packed_chars[95:]

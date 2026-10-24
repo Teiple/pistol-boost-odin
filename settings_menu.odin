@@ -1,5 +1,4 @@
 package main
-
 import sapp "sokol-odin/sokol/app"
 
 Settings_Menu :: struct {
@@ -71,46 +70,20 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
     },
 }
 
-@(rodata)
-graphics_setting_config_default : Graphics_Setting_Config = {
-    resolution = .Res_960x540,       
-    fullscreen = .Off,
-}
-
-Graphics_Setting_Config :: struct {
-    resolution : Resolution,
-    fullscreen : ToggleState,
-    gamma      : f32,
-}
-
 Graphics_Setting_Footer_Item_Id :: enum {
     Back,
     Defaults,
-    Apply,    
 }
 
 Graphics_Menu :: struct {
     current_menu_item   : Graphics_Setting_Menu_Item_Id,
     current_footer_item : Graphics_Setting_Footer_Item_Id,
-    saved_config        : Graphics_Setting_Config,
-    current_config      : Graphics_Setting_Config,
     switch_next         : bool,
     switch_prev         : bool,
     focus_area          : enum {
         Menu,
         Footer,
     }
-}
-
-Resolution :: enum u8 {
-    Res_800x480,
-    Res_800x600,
-    Res_960x540,
-}
-
-ToggleState :: enum u8 {
-    On,
-    Off,
 }
 
 Graphics_Setting_Menu_Item_Id :: enum {
@@ -125,6 +98,8 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
             menu.switch_next = false
             menu.switch_prev = false
         }
+
+        settings := game_get_settings()
 
         for focus_area in type_of(menu.focus_area) {
             switch focus_area {
@@ -166,12 +141,13 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                             item_id   = "graphics_setting_menu:resolution",
                                             item_term = .Resolution,
                                             options = {
-                                                .Res_800x480 = "800x480",
-                                                .Res_800x600 = "800x600",
-                                                .Res_960x540 = "960x540",
+                                                .Resolution_480x270  = "480x270",
+                                                .Resolution_640x360  = "640x360",
+                                                .Resolution_960x540  = "960x540",
+                                                .Resolution_1280x720 = "1280x720",
                                             } 
                                         },
-                                        current_value = menu.current_config.resolution,
+                                        current_value = settings.graphics.resolution,
                                         is_active     = is_active,
                                         anchor        = item_anchor,
                                         switch_next   = menu.switch_next,
@@ -179,29 +155,17 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         item_height   = item_height,
                                     )
                                     if changed {
-                                        menu.current_config.resolution = new_value
-
-                                        switch menu.current_config.resolution {
-                                            case .Res_800x480:
-                                                game_request_size({800, 480})
-                                            case .Res_800x600:
-                                                game_request_size({800, 600})
-                                            case .Res_960x540:
-                                                game_request_size({960, 540})
-                                        }
+                                        settings.graphics.resolution = new_value
+                                        settings_apply(settings.graphics)
                                     }
                                 case .Fullscreen:
-                                    new_value, changed := menu_helper_item_options(
+                                    new_value, changed := menu_helper_item_toggle(
                                         ui,
-                                        item          = Menu_Item_Options(ToggleState) {
-                                            item_id   = "graphics_setting_menu:fullscreen",
-                                            item_term = .Fullscreen,
-                                            options = {
-                                                .On = .On,
-                                                .Off = .Off,
-                                            } 
-                                        },
-                                        current_value = menu.current_config.fullscreen,
+                                        item_id   = "graphics_setting_menu:fullscreen",
+                                        item_term = .Fullscreen,
+                                        on_term   = .On,
+                                        off_term  = .Off,
+                                        current_value = settings.graphics.fullscreen,
                                         is_active     = is_active,
                                         anchor        = item_anchor,
                                         switch_next   = menu.switch_next,
@@ -209,16 +173,15 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         item_height   = item_height,
                                     )
                                     if changed {
-                                        menu.current_config.fullscreen = new_value
-                                        
-                                        game_set_fullscreen(menu.current_config.fullscreen == .On)
+                                        settings.graphics.fullscreen = new_value
+                                        settings_apply(settings.graphics)
                                     }
                                 case .Gamma:
                                     new_value, changed := menu_helper_item_spinner(
                                         ui,
                                         item_id       = "graphics_setting_menu:gamma", 
                                         item_term     = .Gamma, 
-                                        current_value = menu.current_config.gamma,
+                                        current_value = settings.graphics.gamma,
                                         min           = .5,
                                         max           = 1.5,
                                         step          = .1,
@@ -230,8 +193,8 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         item_height   = item_height,
                                     )
                                     if changed {
-                                        menu.current_config.gamma = new_value
-                                        game_set_gamma(menu.current_config.gamma)
+                                        settings.graphics.gamma = new_value
+                                        settings_apply(settings.graphics)
                                     }
                             }
                         }
@@ -241,18 +204,14 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                     current_item       := menu.current_footer_item
                     small_button_width :: 200
                     
-                    items : [dynamic ; len(Graphics_Setting_Footer_Item_Id)]Graphics_Setting_Footer_Item_Id = {
+                    items : [dynamic; len(Graphics_Setting_Footer_Item_Id)]Graphics_Setting_Footer_Item_Id = {
                         .Back
                     }
 
-                    has_changed_from_default := menu.current_config != graphics_setting_config_default 
-                    has_changed_from_saved   := menu.saved_config   != menu.current_config
+                    has_changed_from_default := settings.graphics != GRAPHICS_SETTINGS_DEFAULT
                     
                     if has_changed_from_default {
                         append(&items, .Defaults)
-                    }
-                    if has_changed_from_saved {
-                        append(&items, .Apply)
                     }
 
                     // Clamp current option
@@ -286,7 +245,10 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                     }
                                 )
 
-                                res.close = is_clicked || is_selected
+                                if is_clicked || is_selected {
+                                    game_save_settings()
+                                    res.close = true
+                                }
 
                                  ui_push_container(ui, rect)
                                 {
@@ -316,7 +278,8 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                 )
 
                                 if is_clicked || is_selected {
-                                    
+                                    settings.graphics = GRAPHICS_SETTINGS_DEFAULT
+                                    settings_apply(settings.graphics)
                                 }
 
                                 ui_push_container(ui, rect)
@@ -325,37 +288,6 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                     ui_push_text(
                                         ui,
                                         text   = tr(.Defaults),
-                                        anchor = text_anchor,
-                                        color  = (
-                                            has_current_item && current_item == item ?
-                                            hsv(140, 0.5, 1) :
-                                            hsv(140, 1, 0.8)
-                                        ),
-                                        padding = 32,
-                                    )
-                                }
-                            case .Apply:
-                                rect, _, is_clicked := ui_push_rect(
-                                    ui,
-                                    sizing = sizing,
-                                    anchor = anchor,
-                                    interactive = {
-                                        id            = "graphics_setting_menu:apply",
-                                        hovered_color = hsv(140, 0.5, 1, 0.2),
-                                        held_color    = hsv(140, 0.5, 0.5, 0.2),
-                                    }
-                                )
-
-                                if is_clicked || is_selected {
-
-                                }
-
-                                ui_push_container(ui, rect)
-                                {
-                                    defer ui_pop_container(ui)
-                                    ui_push_text(
-                                        ui,
-                                        text   = tr(.Apply),
                                         anchor = text_anchor,
                                         color  = (
                                             has_current_item && current_item == item ?
@@ -381,9 +313,9 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                 requested_to_close = true
             } else if ev.key_code == .TAB {
                 if (ev.modifiers & sapp.MODIFIER_SHIFT) != 0 {
-                    menu.focus_area   = cont_enum_prev(menu.focus_area)
+                    menu.focus_area   = enum_prev(menu.focus_area)
                 } else {
-                    menu.focus_area = cont_enum_next(menu.focus_area)
+                    menu.focus_area = enum_next(menu.focus_area)
                 }
                 
             } else {
@@ -393,9 +325,9 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
 
                         #partial switch ev.key_code {
                             case .DOWN:
-                                current_item^ = cont_enum_next(current_item^)
+                                current_item^ = enum_next(current_item^)
                             case .UP:
-                                current_item^ = cont_enum_prev(current_item^)
+                                current_item^ = enum_prev(current_item^)
                             case .SPACE, .ENTER, .RIGHT:
                                 menu.switch_next = true
                             case .LEFT:
@@ -408,9 +340,9 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
 
                         #partial switch ev.key_code {
                             case .DOWN, .RIGHT:
-                                current_item^ = cont_enum_next(current_item^)
+                                current_item^ = enum_next(current_item^)
                             case .UP, .LEFT:
-                                current_item^ = cont_enum_prev(current_item^)
+                                current_item^ = enum_prev(current_item^)
                             case .SPACE, .ENTER:
                                 menu.switch_next = true         
                             case .ESCAPE:
@@ -426,3 +358,4 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
         return
     },
 }
+

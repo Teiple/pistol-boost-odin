@@ -205,9 +205,69 @@ menu_helper_item_options :: proc(
 
         if clicked || is_active {
             if switch_next || clicked {
-                return cont_enum_next(current_value), true
+                return enum_next(current_value), true
             } else if switch_prev {
-                return cont_enum_prev(current_value), true
+                return enum_prev(current_value), true
+            }
+        }
+    }
+
+    return
+}
+
+
+menu_helper_item_toggle :: proc(
+    ui            : ^Ui,
+    item_id       : string,
+    item_term     : Loc_Term,
+    
+    current_value : bool,
+    is_active     : bool,
+    anchor        : Anchor,
+    
+    on_term       : Loc_Term,
+    off_term      : Loc_Term,
+
+    item_height   : f32,
+    switch_next   : bool,
+    switch_prev   : bool,
+) -> (new_value : bool, changed : bool) {
+    rect, _, clicked := ui_push_rect(
+        ui,
+        sizing      = { Grow{}, Fixed{item_height} },
+        anchor      = anchor,
+        interactive = {
+            id            = item_id,
+            hovered_color = hsv(140, 0.5, 1, 0.2),
+            held_color    = hsv(140, 0.5, 0.5, 0.2),
+        },
+    )
+
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+    
+        ui_push_text(
+            ui,
+            text   = tr(item_term),
+            anchor = { element = {0, .5}, parent = {0, .5}, offset = {8, 0} },
+            color  = is_active ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
+        )
+
+        opt_string := tr(current_value ? on_term : off_term)
+
+        ui_push_text(
+            ui,
+            text   = opt_string,
+            anchor = { element = {1, .5}, parent = {1, .5}, offset = {-8, 0} },
+            color  = is_active ? hsv(42, 0.7, 1) : hsv(42, 1, 0.8),
+        )
+
+        if clicked || is_active {
+            if switch_next || clicked {
+                return !current_value, true
+            } else if switch_prev {
+                return !current_value, true
             }
         }
     }
@@ -437,9 +497,9 @@ menu_helper_label_menu_input :: proc(
     if ev.type == .KEY_DOWN {
         #partial switch ev.key_code {
             case .DOWN:
-                current_item^ = cont_enum_next(current_item^)
+                current_item^ = enum_next(current_item^)
             case .UP:
-                current_item^ = cont_enum_prev(current_item^)
+                current_item^ = enum_prev(current_item^)
             case .SPACE, .ENTER:
                 selected_current^ = true           
             case .ESCAPE:
