@@ -49,12 +49,12 @@ game_init :: proc() {
 			sapp.heightf(),
 	})
 
-	camera_init_default(&game.camera, {0, 2, 10}, {0, 0, 0})
+	camera_init_default(&game.camera, {0, .2, .5}, {0, 0, 0})
 	renderer_init(&game.renderer)
 	
 	game.settings = settings_load()
 	settings_apply_all(game.settings)
-	
+
 	font_configs := load_lang_font_configs()
 	defer unload_lang_font_configs(font_configs)
 	

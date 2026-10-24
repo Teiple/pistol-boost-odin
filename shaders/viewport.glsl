@@ -20,7 +20,7 @@ void main() {
 @fs fs
 layout(binding=0) uniform texture2D viewport_tex;
 layout(binding=0) uniform sampler viewport_smp;
-layout(binding=0) uniform viewport_vs_params {
+layout(binding=0) uniform viewport_fs_params {
     float gamma;
 };
 

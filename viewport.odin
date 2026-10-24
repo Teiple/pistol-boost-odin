@@ -181,10 +181,10 @@ viewport_end :: proc(vp : ^Viewport) {
 	sg.apply_pipeline(vp.display_pipeline)
 	sg.apply_bindings(vp.display_bindings)
 
-	params : shaders.Viewport_Vs_Params = {
+	params : shaders.Viewport_Fs_Params = {
 		gamma = vp.gamma
 	}
-	sg.apply_uniforms(shaders.UB_viewport_vs_params, {
+	sg.apply_uniforms(shaders.UB_viewport_fs_params, {
 		ptr = &params, size = size_of(params)
 	})
 

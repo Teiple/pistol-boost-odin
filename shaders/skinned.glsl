@@ -3,7 +3,7 @@
 @ctype mat4 matrix[4,4]f32
 
 @vs vs_skinned
-layout(binding=0) uniform vs_skinned_params {
+layout(binding=0) uniform skinned_vs_params {
     mat4 mvp;
     mat4 bones[64];
 };

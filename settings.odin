@@ -4,9 +4,9 @@ import "core:os"
 import "core:fmt"
 import "core:encoding/json"
 
-SAVE_DIR :: "."
-SAVE_FILE :: "config.json"
-SAVE_FILE_PATH := SAVE_DIR + "/" + SAVE_FILE
+CONFIG_DIR       :: "."
+CONFIG_FILE      :: "config.json"
+CONFIG_FILE_PATH := CONFIG_DIR + "/" + CONFIG_FILE
 
 Game_Settings :: struct {
     graphics : Graphics_Settings,
@@ -60,10 +60,10 @@ Control_Settings :: struct {
 }
 
 settings_save :: proc(settings : Game_Settings, allocator := context.temp_allocator) {
-    if !os.exists(SAVE_DIR) {
-        err := os.make_directory_all(SAVE_DIR)
+    if !os.exists(CONFIG_DIR) {
+        err := os.make_directory_all(CONFIG_DIR)
         if err != nil {
-            fmt.eprintfln("Cannot create directory %v for save file", SAVE_DIR)
+            fmt.eprintfln("Cannot create directory %v for save file", CONFIG_DIR)
             return
         }   
     }
@@ -81,7 +81,7 @@ settings_save :: proc(settings : Game_Settings, allocator := context.temp_alloca
     if marshal_err != nil {
         fmt.eprintfln("Error marshalling graphics setting: %v", marshal_err)
     } else {
-        save_err := os.write_entire_file(SAVE_FILE_PATH, config_data)
+        save_err := os.write_entire_file(CONFIG_FILE_PATH, config_data)
         if save_err != nil {
             fmt.eprintfln("Error saving graphics setting: %v", save_err)
         }
@@ -89,11 +89,11 @@ settings_save :: proc(settings : Game_Settings, allocator := context.temp_alloca
 }
 
 settings_load :: proc(allocator := context.allocator) -> (settings : Game_Settings) {
-    if !os.exists(SAVE_FILE_PATH) {
+    if !os.exists(CONFIG_FILE_PATH) {
         return GAME_SETTINGS_DEFAULT
     }
     
-    config_data, load_err := os.read_entire_file(SAVE_FILE_PATH, allocator = allocator)
+    config_data, load_err := os.read_entire_file(CONFIG_FILE_PATH, allocator = allocator)
     defer delete(config_data, allocator)
 
     if load_err != nil {

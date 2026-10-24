@@ -392,13 +392,37 @@
 	"buffers":
 	[
 		{
-			"contents": "bash: /home/hongphuc/.cargo/env: No such file or directory\nhongphuc@hongphuc:/mnt/fedora-extra/Personal/pistol_boost$ ",
+			"contents": "Package Control Messages\n========================\n\n\nLSP\n---\n\n  => 2.16.0\n  \n  # Features\n  \n  - Allow disabling the `lsp_save` key binding with the `disable_lsp_save` view setting (#3068) (Rafał Chłodnicki)\n  - Add `WindowManager.is_session_starting()` (#3081) (Rafał Chłodnicki)\n  \n  # Fixes\n  \n  - Don't start language servers in deleted workspace folders (#3073) (Rafał Chłodnicki)\n  - Add missing dynamic capability exceptions, fixing \"Format Selection\" with LSP-ruff (#3084) (Raoul Wols)\n  - Support `LocationLink` in `editor.action.showReferences` (#3080) (Rafał Chłodnicki)\n  - Apply all external configs registered within one debounce window (#3075) (Rafał Chłodnicki)\n  - Point the \"Restart Servers\" menu item at `lsp_restart_server` (#3083) (Roshan Ramani)\n  - Match the schema default of show_messages_panel_level to the setting (#3079) (Roshan Ramani)\n  - Forget diagnostic result IDs when clearing diagnostics for a URI (#3070) (Rafał Chłodnicki)\n  - Fix reading lines from files that are not valid UTF-8 (#3067) (Rafał Chłodnicki)\n  - Highlight method names containing periods in the server log (#3062) (Rafał Chłodnicki)\n  \n  # Refactors\n  \n  - Pass the reverse insert mode to `get_text_edit_range` (#3066) (Rafał Chłodnicki)\n",
 			"settings":
 			{
-				"buffer_size": 118,
+				"buffer_size": 1241,
 				"line_ending": "Unix",
-				"name": "hongphuc@hongphuc:/mnt/fedora-extra/Personal/pistol_boost",
+				"name": "Package Control Messages",
+				"read_only": true,
 				"scratch": true
+			},
+			"undo_stack":
+			[
+				[
+					1,
+					1,
+					"package_control_message",
+					{
+						"message": "\n\nLSP\n---\n\n  => 2.16.0\n  \n  # Features\n  \n  - Allow disabling the `lsp_save` key binding with the `disable_lsp_save` view setting (#3068) (Rafał Chłodnicki)\n  - Add `WindowManager.is_session_starting()` (#3081) (Rafał Chłodnicki)\n  \n  # Fixes\n  \n  - Don't start language servers in deleted workspace folders (#3073) (Rafał Chłodnicki)\n  - Add missing dynamic capability exceptions, fixing \"Format Selection\" with LSP-ruff (#3084) (Raoul Wols)\n  - Support `LocationLink` in `editor.action.showReferences` (#3080) (Rafał Chłodnicki)\n  - Apply all external configs registered within one debounce window (#3075) (Rafał Chłodnicki)\n  - Point the \"Restart Servers\" menu item at `lsp_restart_server` (#3083) (Roshan Ramani)\n  - Match the schema default of show_messages_panel_level to the setting (#3079) (Roshan Ramani)\n  - Forget diagnostic result IDs when clearing diagnostics for a URI (#3070) (Rafał Chłodnicki)\n  - Fix reading lines from files that are not valid UTF-8 (#3067) (Rafał Chłodnicki)\n  - Highlight method names containing periods in the server log (#3062) (Rafał Chłodnicki)\n  \n  # Refactors\n  \n  - Pass the reverse insert mode to `get_text_edit_range` (#3066) (Rafał Chłodnicki)\n"
+					},
+					"AQAAAAAAAAAAAAAA2QQAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/"
+				]
+			]
+		},
+		{
+			"file": "sokol-odin/examples/debugtext/main.odin",
+			"file_size": 2708,
+			"file_write_time": 134360081523266950,
+			"settings":
+			{
+				"buffer_size": 2708,
+				"line_ending": "Unix"
 			}
 		}
 	],
@@ -572,9 +596,6 @@
 	"expanded_folders":
 	[
 		"/mnt/fedora-extra/Personal/pistol_boost",
-		"/mnt/fedora-extra/Personal/pistol_boost/sokol-odin",
-		"/mnt/fedora-extra/Personal/pistol_boost/sokol-odin/examples",
-		"/mnt/fedora-extra/Personal/pistol_boost/sokol-odin/examples/debugtext-userfont",
 		"/home/hongphuc/odin-lang/odin/core"
 	],
 	"file_history":
@@ -712,93 +733,76 @@
 			[
 				{
 					"buffer": 0,
-					"selected": true,
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 118,
+						"buffer_size": 1241,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								118,
-								118
+								1241,
+								1241
 							]
 						],
 						"settings":
 						{
-							"__vi_external_disable": true,
 							"auto_complete": false,
-							"auto_complete_commit_on_tab": false,
-							"bracket_highlighter.clone_locations":
-							{
-							},
-							"bracket_highlighter.ignore": true,
-							"color_scheme": "Terminus.hidden-color-scheme",
-							"draw_centered": false,
-							"draw_indent_guides": false,
-							"draw_unicode_white_space": false,
-							"draw_white_space": "none",
+							"auto_indent": false,
 							"gutter": false,
-							"highlight_line": false,
-							"is_widget": true,
-							"lsp_uri": "buffer:702",
-							"result_base_dir": "/mnt/fedora-extra/Personal/pistol_boost",
-							"result_file_regex": null,
-							"result_line_regex": null,
-							"rulers":
-							[
-								500
-							],
-							"scroll_past_end": true,
-							"syntax": "Terminus View.sublime-syntax",
-							"terminus.highlight_counter": 2,
-							"terminus_view": true,
-							"terminus_view.args":
-							{
-								"auto_close": true,
-								"cancellable": false,
-								"cmd":
-								[
-									"/bin/bash",
-									"-i",
-									"-l"
-								],
-								"cwd": "/mnt/fedora-extra/Personal/pistol_boost",
-								"default_title": "Login Shell",
-								"env":
-								{
-									"LANG": "en_US.UTF-8",
-									"PROMPT_TOOLKIT_COLOR_DEPTH": "DEPTH_8_BIT",
-									"TERM": "xterm-256color",
-									"TERMINUS_SUBLIME": "1",
-									"TERM_PROGRAM": "Terminus-Sublime"
-								},
-								"file_regex": null,
-								"line_regex": null,
-								"panel_name": "Terminus 2",
-								"reactivable": true,
-								"show_in_panel": null,
-								"tag": null,
-								"timeit": false,
-								"title": null,
-								"view_settings":
-								{
-								}
-							},
-							"terminus_view.cancellable": false,
-							"terminus_view.key.ctrl+k": true,
-							"terminus_view.key.ctrl+p": true,
-							"terminus_view.natural_keyboard": true,
-							"terminus_view.reactivable": true,
-							"terminus_view.tag": null,
-							"terminus_view.viewport_y": 0.0,
-							"word_wrap": false
+							"lsp_uri": "buffer:42",
+							"syntax": "Packages/Text/Plain text.tmLanguage",
+							"tab_width": 2,
+							"word_wrap": true
 						},
 						"translation.x": 0.0,
 						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "sokol-odin/examples/debugtext/main.odin",
+					"selected": true,
+					"semi_transient": true,
+					"settings":
+					{
+						"buffer_size": 2708,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								0,
+								0
+							]
+						],
+						"settings":
+						{
+							"auto_complete_triggers":
+							[
+								{
+									"characters": "<",
+									"selector": "text.html, text.xml"
+								},
+								{
+									"rhs_empty": true,
+									"selector": "punctuation.accessor"
+								}
+							],
+							"lsp_uri": "file:///mnt/fedora-extra/Personal/pistol_boost/sokol-odin/examples/debugtext/main.odin",
+							"syntax": "Packages/Odin/Odin.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 745.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,

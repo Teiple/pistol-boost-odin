@@ -733,7 +733,7 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     sg.apply_pipeline(ui.pipeline)
     
     // a projection to base size, can be cached but nahh
-    mvp : Mvp_Vs_Param = {
+    mvp : shaders.Unlit_Vs_Params = {
         mvp = linalg.matrix_ortho3d(
             0, viewport.base_size.x,
             viewport.base_size.y, 0,

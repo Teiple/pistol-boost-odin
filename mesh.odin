@@ -15,8 +15,8 @@ Mesh_Data :: struct {
 }
 
 Mesh :: struct {
-	bindings : sg.Bindings,
-	index_count   : i32,
+	bindings    : sg.Bindings,
+	index_count : i32,
 }
 
 mesh_create_from_data :: proc(data : Mesh_Data) -> (mesh : Mesh)  {
@@ -35,7 +35,7 @@ mesh_create_from_data :: proc(data : Mesh_Data) -> (mesh : Mesh)  {
     // default views and sample bindings
     mesh.bindings.views[0] = sg.make_view({
         texture = {
-            image = shared_white_pixel_image,
+            image = sg_placeholder_image,
         }
     })
     mesh.bindings.samplers[0] = sg.make_sampler({})
