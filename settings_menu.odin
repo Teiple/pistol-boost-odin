@@ -353,8 +353,11 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
             }
         }
 
-        res.close = requested_to_close
-
+        if requested_to_close {
+            res.close = true 
+            game_save_settings()
+        }
+        
         return
     },
 }

@@ -1,5 +1,7 @@
 package main
 
+import "core:math"
+import "core:fmt"
 import "core:math/linalg"
 import sapp "sokol-odin/sokol/app"
 
@@ -52,6 +54,12 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         //         )
         //     )
         // }
+
+        model_sample_bone_animation(
+            model           = &scene.test_model,
+            animation_index = 0,
+            at_timestamp    = math.mod(game_time().scaled_time, 1.0),
+        )
 
         renderer_draw_model(
             renderer,

@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:slice"
 import "core:math/linalg"
 import sg "sokol-odin/sokol/gfx"
@@ -151,7 +152,7 @@ renderer_draw_model :: proc(
 
 	assert(len(model.model_to_bone_matrix) <= len(params.bones))
 	for bone, i in model.bones {
-		params.bones[i] = 1		
+		params.bones[i] = model.bones[i].model_matrix * model.model_to_bone_matrix[i]
 	}
 	
 	// Warning: This assumes alot, that all pipelines must use mvp and the ub index is 0

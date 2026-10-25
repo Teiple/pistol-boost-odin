@@ -1,5 +1,11 @@
 package main
 
+import "core:fmt"
+import "core:strings"
+import "core:math"
+import "core:terminal"
+import "core:math/linalg"
+import "base:runtime"
 import "core:image/png"
 import "core:slice"
 import gltf "glTF2"
@@ -20,12 +26,35 @@ Model_Bone :: struct {
 	model_matrix   : matrix[4,4]f32,
 }
 
+Model_Animation_Channel :: union {
+	Model_Animation_Position_Channel,
+	Model_Animation_Rotation_Channel,
+}
+
+Model_Animation_Position_Channel :: struct {
+	bone_index : int,
+	timestamps : [dynamic]f32,
+	positions  : [dynamic][3]f32,
+}
+
+Model_Animation_Rotation_Channel :: struct {
+	bone_index : int,
+	timestamps : [dynamic]f32,
+	rotations  : [dynamic]quaternion128,
+}
+
+Model_Animation :: struct {
+	channels   : [dynamic]Model_Animation_Channel,
+	name       : string,
+}
+
 Model :: struct {
-	index_count          : i32,
-	bindings             : sg.Bindings,
 	bones                : [dynamic]Model_Bone,
 	model_to_bone_matrix : [dynamic]matrix[4,4]f32, 
+	animations           : [dynamic]Model_Animation,
+	bindings             : sg.Bindings,
 	texture_image        : sg.Image,
+	index_count          : i32,
 }
 
 Model_Attribute :: enum {
@@ -112,7 +141,7 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 				vertex := Model_Vertex{
 					position = position[i],
 					uv       = uv[i],
-					color    = {expand_values(color[i]), 1},
+					color    = hsv(140, .5, 1), //{expand_values(color[i]), 1},
 					joints   = joints[i],
 					weights  = weights[i],
 				}
@@ -122,6 +151,52 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 
 			for idx in indices {
 				append(&model_indices, base_vertex + idx)
+			}
+		}
+	}
+
+	// Fetch animations
+	model.animations = make([dynamic]Model_Animation, len(dat.animations), allocator = allocator)
+
+	for &anim, i in dat.animations {
+		model.animations[i] = {
+			name     = strings.clone(anim.name.?, allocator = allocator),
+			channels = make(
+				[dynamic]Model_Animation_Channel,
+				allocator = allocator
+			)
+		}
+
+		for channel_index in 0..<len(anim.channels) {
+			channel := anim.channels[channel_index]
+			node, is_animating_node := channel.target.node.?
+			if !is_animating_node do continue
+			bone_index, is_animating_bone := node_to_bone_lookup[node]
+			if !is_animating_bone do continue
+			
+			sampler := anim.samplers[channel.sampler]
+			
+			#partial switch channel.target.path {
+				case .Translation:
+					append(&model.animations[i].channels, {
+						bone_index = bone_index,
+						timestamps = slice.clone_to_dynamic(gltf.buffer_slice(dat, sampler.input).([]f32), allocator = allocator),
+						positions  = slice.clone_to_dynamic(gltf.buffer_slice(dat, sampler.output).([][3]f32), allocator = allocator),
+					})
+				case .Rotation:
+					clone_to_quaternions :: proc(rotation_slice : [][4]f32, allocator : runtime.Allocator) -> [dynamic]quaternion128 {
+						quats := make([dynamic]quaternion128, len(rotation_slice), allocator = allocator)
+						for rot, i in rotation_slice {
+							quats[i] = quaternion(w = rot.w, x = rot.x, y = rot.y, z = rot.z)
+						}
+						return quats
+					}
+
+					append(&model.animations[i].channels, {
+						bone_index = bone_index,
+						timestamps = slice.clone_to_dynamic(gltf.buffer_slice(dat, sampler.input).([]f32), allocator = allocator),
+						rotations  = clone_to_quaternions(gltf.buffer_slice(dat, sampler.output).([][4]f32), allocator = allocator),
+					})
 			}
 		}
 	}
@@ -190,6 +265,9 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 	})
 
 	model.bindings.samplers[0] = sg.make_sampler({})
+
+	// default to rest pose
+	model_calculate_hierachy(model)
 }
 
 model_destroy :: proc(model : ^Model) {
@@ -201,4 +279,81 @@ model_destroy :: proc(model : ^Model) {
 
 	delete(model.model_to_bone_matrix)
 	delete(model.bones)
+
+	for &anim in model.animations {
+		for &channel in anim.channels {
+			switch c in channel {
+				case Model_Animation_Position_Channel:
+					delete(c.timestamps)
+					delete(c.positions)
+				case Model_Animation_Rotation_Channel:
+					delete(c.timestamps)
+					delete(c.rotations)
+			}
+		}
+		delete(anim.channels)
+		delete(anim.name)
+	}
+	delete(model.animations)
+}
+
+model_sample_bone_animation :: proc(model: ^Model, animation_index: int, at_timestamp : f32) {
+	anim := model.animations[animation_index]
+	for &channel in anim.channels {
+		timestamps : []f32
+		switch &c in channel {
+			case Model_Animation_Position_Channel:
+				timestamps = c.timestamps[:]
+			case Model_Animation_Rotation_Channel:
+				timestamps = c.timestamps[:]
+		}
+
+		assert(len(timestamps) > 0)
+
+		current_index := len(timestamps) - 1
+		for i in 0..<len(timestamps) {
+			if timestamps[i] >= at_timestamp {
+				current_index = i
+				break
+			}
+		}
+
+		from_index :=  max(current_index - 1, 0)
+		to_index   := current_index
+		
+		progress   := math.clamp(
+			(
+				from_index != to_index ?
+				(at_timestamp - timestamps[from_index]) /
+				(timestamps[to_index] - timestamps[from_index]) : 0
+			),
+			0, 1
+		)
+
+		switch &c in channel {
+			case Model_Animation_Position_Channel:
+				model.bones[c.bone_index].local_position =
+					linalg.lerp(c.positions[from_index], c.positions[to_index], progress);
+			case Model_Animation_Rotation_Channel:
+				model.bones[c.bone_index].local_rotation =
+					linalg.quaternion_nlerp(c.rotations[from_index], c.rotations[to_index], progress);
+		}
+	}
+
+	model_calculate_hierachy(model)
+}
+
+model_calculate_hierachy :: proc(model: ^Model) {
+	for &bone in model.bones {
+		local_matrix := (
+			linalg.matrix4_translate(bone.local_position) *
+			linalg.matrix4_from_quaternion(bone.local_rotation)
+		)
+
+		if bone.parent == -1 {
+			bone.model_matrix = local_matrix
+		} else {
+			bone.model_matrix = model.bones[bone.parent].model_matrix * local_matrix
+		}
+	}
 }
