@@ -72,14 +72,14 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
     },
 }
 
-Setting_Footer_Item :: enum {
+Settings_Footer_Item :: enum {
     Back,
     Defaults,
 }
 
 Graphics_Menu :: struct {
-    current_menu_item   : Graphics_Setting_Menu_Item_Id,
-    current_footer_item : Setting_Footer_Item,
+    current_menu_item   : Graphics_Menu_Item_Id,
+    current_footer_item : Settings_Footer_Item,
     switch_next         : bool,
     switch_prev         : bool,
     focus_area          : enum {
@@ -88,7 +88,7 @@ Graphics_Menu :: struct {
     }
 }
 
-Graphics_Setting_Menu_Item_Id :: enum {
+Graphics_Menu_Item_Id :: enum {
     Resolution,
     Fullscreen,
     Gamma,
@@ -109,7 +109,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                     item_height :: 32
                     widths      : [2]f32 : {200, 100}
                     spacing     :: 4
-                    item_count  := cast(f32)len(Graphics_Setting_Menu_Item_Id)
+                    item_count  := cast(f32)len(Graphics_Menu_Item_Id)
                     
                     // option container
                     rect, _, _ := ui_push_rect(
@@ -132,7 +132,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
 
                         item_anchor : Anchor
                         
-                        for item in Graphics_Setting_Menu_Item_Id {
+                        for item in Graphics_Menu_Item_Id {
                             is_active := has_current_item && current_item == item
                             defer item_anchor.offset.y += item_height + spacing
                             switch item {
@@ -140,7 +140,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                     new_value, changed := menu_helper_item_options(
                                         ui,
                                         item          = Menu_Item_Options(Resolution) {
-                                            item_id   = "graphics_setting_menu:resolution",
+                                            item_id   = "graphics_menu:resolution",
                                             item_term = .Resolution,
                                             options = {
                                                 .Resolution_480x270  = "480x270",
@@ -163,7 +163,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                 case .Fullscreen:
                                     new_value, changed := menu_helper_item_toggle(
                                         ui,
-                                        item_id   = "graphics_setting_menu:fullscreen",
+                                        item_id   = "graphics_menu:fullscreen",
                                         item_term = .Fullscreen,
                                         on_term   = .On,
                                         off_term  = .Off,
@@ -181,7 +181,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                 case .Gamma:
                                     new_value, changed := menu_helper_item_spinner(
                                         ui,
-                                        item_id       = "graphics_setting_menu:gamma", 
+                                        item_id       = "graphics_menu:gamma", 
                                         item_term     = .Gamma, 
                                         current_value = settings.gamma,
                                         min           = .5,
@@ -206,7 +206,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                     current_item       := menu.current_footer_item
                     small_button_width :: 200
                     
-                    items : [dynamic; len(Setting_Footer_Item)]Setting_Footer_Item = {
+                    items : [dynamic; len(Settings_Footer_Item)]Settings_Footer_Item = {
                         .Back
                     }
 
@@ -241,7 +241,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                 rect, _, is_clicked := ui_push_rect(
                                     ui, sizing, anchor,
                                     interactive = {
-                                        id            = "graphics_setting_menu:back",
+                                        id            = "graphics_menu:back",
                                         hovered_color = hsv(140, 0.5, 1, 0.2),
                                         held_color    = hsv(140, 0.5, 0.5, 0.2),
                                     }
@@ -286,7 +286,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                     sizing = sizing,
                                     anchor = anchor,
                                     interactive = {
-                                        id            = "graphics_setting_menu:defaults",
+                                        id            = "graphics_menu:defaults",
                                         hovered_color = hsv(140, 0.5, 1, 0.2),
                                         held_color    = hsv(140, 0.5, 0.5, 0.2),
                                     }
@@ -378,8 +378,8 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
 }
 
 Controls_Menu :: struct {
-    current_menu_item   : Controls_Setting_Menu_Item_Id,
-    current_footer_item : Setting_Footer_Item,
+    current_menu_item   : Controls_Menu_Item_Id,
+    current_footer_item : Settings_Footer_Item,
     switch_next         : bool,
     switch_prev         : bool,
     focus_area          : enum {
@@ -388,7 +388,7 @@ Controls_Menu :: struct {
     }
 }
 
-Controls_Setting_Menu_Item_Id :: enum {
+Controls_Menu_Item_Id :: enum {
     Mouse_Invert_Y,
     Mouse_Horizontal_Sensitivity,
     Mouse_Vertical_Sensitivity,
@@ -410,7 +410,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                     item_height :: 32
                     widths      : [2]f32 : {200, 100}
                     spacing     :: 4
-                    item_count  := cast(f32)len(Controls_Setting_Menu_Item_Id)
+                    item_count  := cast(f32)len(Controls_Menu_Item_Id)
                     
                     // option container
                     rect, _, _ := ui_push_rect(
@@ -433,14 +433,14 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
 
                         item_anchor : Anchor
                         
-                        for item in Controls_Setting_Menu_Item_Id {
+                        for item in Controls_Menu_Item_Id {
                             is_active := has_current_item && current_item == item
                             defer item_anchor.offset.y += item_height + spacing
                             switch item {
                                 case .Mouse_Invert_Y:
                                     new_value, changed := menu_helper_item_toggle(
                                         ui,
-                                        item_id   = "control_settings_menu:fullscreen",
+                                        item_id   = "controls_menu:invert_y",
                                         item_term = .Undefined,
                                         on_term   = .On,
                                         off_term  = .Off,
@@ -458,7 +458,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                 case .Mouse_Horizontal_Sensitivity:
                                     new_value, changed := menu_helper_item_spinner(
                                         ui,
-                                        item_id       = "control_settings_menu:mouse_horizontal_sensitivity", 
+                                        item_id       = "controls_menu:mouse_horizontal_sensitivity", 
                                         item_term     = .Undefined, 
                                         current_value = settings.horizontal_sensitivity,
                                         min           = 1,
@@ -478,7 +478,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                 case .Mouse_Vertical_Sensitivity:
                                     new_value, changed := menu_helper_item_spinner(
                                         ui,
-                                        item_id       = "control_settings_menu:mouse_vertical_sensitivity", 
+                                        item_id       = "controls_menu:mouse_vertical_sensitivity", 
                                         item_term     = .Undefined, 
                                         current_value = settings.vertical_sensitivity,
                                         min           = 1,
@@ -503,11 +503,11 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                     current_item       := menu.current_footer_item
                     small_button_width :: 200
                     
-                    items : [dynamic; len(Setting_Footer_Item)]Setting_Footer_Item = {
+                    items : [dynamic; len(Settings_Footer_Item)]Settings_Footer_Item = {
                         .Back
                     }
 
-                    has_changed_from_default := settings^ != CONTROLS_DEFAULT
+                    has_changed_from_default := settings^ != CONTROLS_SETTINGS_DEFAULT
                     
                     if has_changed_from_default {
                         append(&items, .Defaults)
@@ -538,7 +538,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                 rect, _, is_clicked := ui_push_rect(
                                     ui, sizing, anchor,
                                     interactive = {
-                                        id            = "control_settings_menu:back",
+                                        id            = "controls_menu:back",
                                         hovered_color = hsv(140, 0.5, 1, 0.2),
                                         held_color    = hsv(140, 0.5, 0.5, 0.2),
                                     }
@@ -583,14 +583,14 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                     sizing = sizing,
                                     anchor = anchor,
                                     interactive = {
-                                        id            = "control_menu_settingg:defaults",
+                                        id            = "controls_menu:defaults",
                                         hovered_color = hsv(140, 0.5, 1, 0.2),
                                         held_color    = hsv(140, 0.5, 0.5, 0.2),
                                     }
                                 )
 
                                 if is_clicked || is_selected {
-                                    settings^ = CONTROLS_DEFAULT
+                                    settings^ = CONTROLS_SETTINGS_DEFAULT
                                     settings_apply(settings^)
                                 }
 

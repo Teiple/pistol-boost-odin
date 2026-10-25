@@ -10,14 +10,14 @@ CONFIG_FILE_PATH := CONFIG_DIR + "/" + CONFIG_FILE
 
 Game_Settings :: struct #all_or_none {
     graphics : Graphics_Settings,
-    controls : Control_Settings,
+    controls : Controls_Settings,
     language : Language, 
 }
 
 GAME_SETTINGS_DEFAULT :: Game_Settings {
     graphics = GRAPHICS_SETTINGS_DEFAULT,
     language = LANGUAGE_DEFAULT,
-    controls = CONTROLS_DEFAULT,
+    controls = CONTROLS_SETTINGS_DEFAULT,
 }
 
 LANGUAGE_DEFAULT :: Language.English
@@ -55,13 +55,13 @@ Audio_Settings :: struct {
     sfx        : f32,
 }
 
-Control_Settings :: struct {
+Controls_Settings :: struct {
     horizontal_sensitivity : i32,
     vertical_sensitivity   : i32,
     invert_y               : bool,
 }
 
-CONTROLS_DEFAULT :: Control_Settings {
+CONTROLS_SETTINGS_DEFAULT :: Controls_Settings {
     horizontal_sensitivity = 3,
     vertical_sensitivity   = 3,
     invert_y               = false,
@@ -142,7 +142,7 @@ settings_apply_language :: proc(lang : Language) {
     game_switch_lang(lang)
 }
 
-settings_apply_controls :: proc(controls : Control_Settings) {
+settings_apply_controls :: proc(controls : Controls_Settings) {
     game_set_mouse_sensitivity({
         cast(f32)controls.horizontal_sensitivity,
         cast(f32)controls.vertical_sensitivity,
