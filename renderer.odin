@@ -76,7 +76,7 @@ renderer_init :: proc(renderer : ^Renderer) {
 							shaders.ATTR_skinned_pos       = { format = .FLOAT3 },
 							shaders.ATTR_skinned_color0    = { format = .FLOAT4 },
 							shaders.ATTR_skinned_texcoord0 = { format = .FLOAT2 },
-							shaders.ATTR_skinned_joints    = { format = .UBYTE4 },
+							shaders.ATTR_skinned_joints    = { format = .FLOAT4 },
 							shaders.ATTR_skinned_weights   = { format = .FLOAT4 },
 						}
 					},

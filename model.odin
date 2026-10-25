@@ -1,9 +1,7 @@
 package main
 
-import "core:fmt"
 import "core:strings"
 import "core:math"
-import "core:terminal"
 import "core:math/linalg"
 import "base:runtime"
 import "core:image/png"
@@ -15,7 +13,7 @@ Model_Vertex :: struct {
 	position : [3]f32,
 	color    : [4]f32,
 	uv       : [2]f32,
-	joints   : [4]u8,
+	joints   : [4]f32,
 	weights  : [4]f32,
 }
 
@@ -141,8 +139,8 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 				vertex := Model_Vertex{
 					position = position[i],
 					uv       = uv[i],
-					color    = hsv(140, .5, 1), //{expand_values(color[i]), 1},
-					joints   = joints[i],
+					color    = {expand_values(color[i]), 1},
+					joints   = cast([4]f32)joints[i],
 					weights  = weights[i],
 				}
 				
