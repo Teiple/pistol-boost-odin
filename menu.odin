@@ -12,6 +12,7 @@ Menu :: union {
     Quit_Confirm_Popup_Menu,
     Language_Menu,
     Graphics_Menu,
+    Controls_Menu,
 }
 
 Menu_Callbacks_Any :: Menu_Callbacks(^Menu)
@@ -47,6 +48,8 @@ menu_get_callbacks :: proc(menu : ^Menu) -> Menu_Callbacks_Any {
             return convert_cbs(&m, LANGUAGE_MENU_CALLBACKS)
         case Graphics_Menu:
             return convert_cbs(&m, GRAPHICS_MENU_CALLBACKS)
+        case Controls_Menu:
+            return convert_cbs(&m, CONTROLS_MENU_CALLBACKS)
     }
     
     panic("Unreachable")

@@ -8,14 +8,16 @@ CONFIG_DIR       :: "."
 CONFIG_FILE      :: "config.json"
 CONFIG_FILE_PATH := CONFIG_DIR + "/" + CONFIG_FILE
 
-Game_Settings :: struct {
+Game_Settings :: struct #all_or_none {
     graphics : Graphics_Settings,
+    controls : Control_Settings,
     language : Language, 
 }
 
 GAME_SETTINGS_DEFAULT :: Game_Settings {
     graphics = GRAPHICS_SETTINGS_DEFAULT,
     language = LANGUAGE_DEFAULT,
+    controls = CONTROLS_DEFAULT,
 }
 
 LANGUAGE_DEFAULT :: Language.English
@@ -54,9 +56,15 @@ Audio_Settings :: struct {
 }
 
 Control_Settings :: struct {
-    horizontal_sensitivity : f32,
-    vertical_sensitivity   : f32,
+    horizontal_sensitivity : i32,
+    vertical_sensitivity   : i32,
     invert_y               : bool,
+}
+
+CONTROLS_DEFAULT :: Control_Settings {
+    horizontal_sensitivity = 3,
+    vertical_sensitivity   = 3,
+    invert_y               = false,
 }
 
 settings_save :: proc(settings : Game_Settings, allocator := context.temp_allocator) {
@@ -115,11 +123,13 @@ settings_apply :: proc {
     settings_apply_all,
     settings_apply_graphics,
     settings_apply_language,
+    settings_apply_controls,
 }
 
 settings_apply_all :: proc(settings : Game_Settings){
     settings_apply(settings.graphics)
     settings_apply(settings.language)
+    settings_apply(settings.controls)
 }
 
 settings_apply_graphics :: proc(config : Graphics_Settings) {
@@ -130,4 +140,12 @@ settings_apply_graphics :: proc(config : Graphics_Settings) {
 
 settings_apply_language :: proc(lang : Language) {
     game_switch_lang(lang)
+}
+
+settings_apply_controls :: proc(controls : Control_Settings) {
+    game_set_mouse_sensitivity({
+        cast(f32)controls.horizontal_sensitivity,
+        cast(f32)controls.vertical_sensitivity,
+    })
+    game_set_mouse_invert_y(controls.invert_y)
 }

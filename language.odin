@@ -39,10 +39,10 @@ Loc_Term :: enum {
 }
 
 LANGUAGE_SELECTIONS : [Language]string : {
-    .English           = "English",   
-    .Vietnamese        = "Tiếng Việt",
+    .English            = "English",   
+    .Vietnamese         = "Tiếng Việt",
     .Simplified_Chinese = "简体中文",   
-    .Japanese          = "日本語",     
+    .Japanese           = "日本語",     
 }
 
 UNDEFINED_TERM :: "<UNDEFINED!>"

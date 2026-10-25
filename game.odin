@@ -108,7 +108,7 @@ game_update :: proc(unscaled_dt : f32) {
 		ui_draw(&game.ui, &game.viewport)
 	}
 
-	mouse_input_endframe(&game.mouse)
+	mouse_input_end(&game.mouse)
 	
 	free_all(context.temp_allocator)
 
@@ -153,14 +153,6 @@ game_destroy :: proc() {
 	viewport_destroy(&game.viewport)
 }
 
-game_time :: proc() -> ^Game_Time {
-	return &game.time
-}
-
-game_request_quit :: proc() {
-	sapp.request_quit()
-}
-
 tr :: proc(term: Loc_Term, params : ..any, allocator := context.temp_allocator) -> string {
 	if len(params) > 0 {
 		return fmt.aprintf(loc_map[game.settings.language][term], params)
@@ -168,6 +160,21 @@ tr :: proc(term: Loc_Term, params : ..any, allocator := context.temp_allocator) 
 	return loc_map[game.settings.language][term]
 }
 
+// Accessing modules/module data
+
+game_time :: proc() -> ^Game_Time {
+	return &game.time
+}
+
+game_get_settings :: proc() -> ^Game_Settings {
+	return &game.settings
+}
+
+game_lang :: proc() -> Language {
+	return game.settings.language
+}
+
+// Utilities
 game_lang_is_cjk :: proc() -> bool {
 	#partial switch game.settings.language {
 		case .Japanese, .Simplified_Chinese:
@@ -181,8 +188,8 @@ game_switch_lang :: proc(lang : Language) {
 	game.settings.language = lang
 }
 
-game_lang :: proc() -> Language {
-	return game.settings.language
+game_request_quit :: proc() {
+	sapp.request_quit()
 }
 
 game_set_gamma :: proc(gamma : f32) {
@@ -201,14 +208,18 @@ game_request_size :: proc(size : [2]f32) {
 	viewport_request_size(&game.viewport, size)
 }
 
-game_get_settings :: proc() -> ^Game_Settings {
-	return &game.settings
-}
-
 game_save_settings :: proc() {
 	settings_save(game.settings)
 }
 
 game_audio :: proc() -> ^Audio {
 	return &game.audio
+}
+
+game_set_mouse_sensitivity :: proc(sensitivity: [2]f32) {
+	mouse_set_sensivity(&game.mouse, sensitivity)
+}
+
+game_set_mouse_invert_y :: proc(invert_y : bool) {
+	mouse_set_invert_y(&game.mouse, invert_y)
 }

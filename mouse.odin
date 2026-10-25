@@ -17,9 +17,11 @@ Mouse_Button :: enum {
 
 // confined mouse, never escape window
 Mouse_Input :: struct {
-    state    : [Mouse_Button]Mouse_Button_State,
-    position : [2]f32, // relative to the viewport 
-    delta    : [2]f32, // relative to the viewport
+    state       : [Mouse_Button]Mouse_Button_State,
+    position    : [2]f32, // relative to the viewport 
+    delta       : [2]f32, // relative to the viewport
+    sensitivity : [2]f32,
+    invert_y    : bool,
 }
 
 mouse_init :: proc(mouse : ^Mouse_Input) {
@@ -31,7 +33,7 @@ mouse_init :: proc(mouse : ^Mouse_Input) {
 
 mouse_input :: proc(mouse : ^Mouse_Input, vp : ^Viewport, ev : sapp.Event) {
     if ev.type == .MOUSE_MOVE {
-        mouse.position += viewport_get_vp_mouse_delta(vp, {ev.mouse_dx, ev.mouse_dy})
+        mouse.position += viewport_get_vp_mouse_delta(vp, mouse.sensitivity * {ev.mouse_dx, ev.mouse_dy * (mouse.invert_y ? -1 : 1)})
         mouse.position  = viewport_get_vp_confine_mouse_pos(vp, mouse.position)
     }
 
@@ -51,7 +53,15 @@ mouse_input :: proc(mouse : ^Mouse_Input, vp : ^Viewport, ev : sapp.Event) {
     }
 }
 
-mouse_input_endframe :: proc(mouse : ^Mouse_Input) {
+mouse_set_sensivity :: proc(mouse : ^Mouse_Input, sensitivity : [2]f32) {
+    mouse.sensitivity = sensitivity
+}
+
+mouse_set_invert_y :: proc(mouse : ^Mouse_Input, invert_y : bool) {
+    mouse.invert_y = invert_y
+}
+
+mouse_input_end :: proc(mouse : ^Mouse_Input) {
     for &mb in mouse.state {
         if mb == .Pressed {
             mb = .Down

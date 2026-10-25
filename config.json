@@ -2,7 +2,12 @@
 	"graphics": {
 		"resolution": "Resolution_960x540",
 		"fullscreen": true,
-		"gamma": 1.00000012
+		"gamma": 1.00000000
 	},
-	"language": "English"
+	"controls": {
+		"horizontal_sensitivity": 3,
+		"vertical_sensitivity": 3,
+		"invert_y": false
+	},
+	"language": "Vietnamese"
 }
