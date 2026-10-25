@@ -537,12 +537,25 @@ menu_helper_back_button :: proc(
             parent  = text_alignment,
         }
 
-        ui_push_text(
+        text_rect := ui_push_text(
             ui,
             text        = tr(label),
             anchor      = anchor,
             color       = hsv(140, 1, 0.8),
         )
+
+        ui_push_container(ui, text_rect)
+        {
+            defer ui_pop_container(ui)
+            
+            ui_push_rect(
+                ui,
+                icon   = .Left_Arrow,
+                sizing = { Fixed{32}, Fixed{32} },
+                anchor = { element = {1, .5}, parent = {0, .5}, offset = {-8, 0}},
+                color  = hsv(140, 1, 0.8)
+            )
+        }
     }
 
     return clicked

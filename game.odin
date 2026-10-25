@@ -17,6 +17,7 @@ Game :: struct {
 	camera     : Camera,
 	renderer   : Renderer,
 	ui         : Ui,
+	audio      : Audio,
 
 	mouse : Mouse_Input,
 	
@@ -51,6 +52,7 @@ game_init :: proc() {
 
 	camera_init_default(&game.camera, {0, .2, .5}, {0, 0, 0})
 	renderer_init(&game.renderer)
+	audio_init(&game.audio)
 	
 	game.settings = settings_load()
 	settings_apply_all(game.settings)
@@ -79,7 +81,6 @@ game_update :: proc(unscaled_dt : f32) {
 		// cursor drawed on top
 		ui_push_cursor(&game.ui,
 			position = game.mouse.position,
-			size     = 16,
 			tint     = hsv(200)
 		)
 		ui_end(&game.ui, &game.viewport)
@@ -146,6 +147,7 @@ game_destroy :: proc() {
 	scene_shutdown(&game.scene)
 
 	ui_destroy(&game.ui)
+	audio_destroy(&game.audio)
 	renderer_destroy(&game.renderer)
 	camera_destroy(&game.camera)
 	viewport_destroy(&game.viewport)
@@ -205,4 +207,8 @@ game_get_settings :: proc() -> ^Game_Settings {
 
 game_save_settings :: proc() {
 	settings_save(game.settings)
+}
+
+game_audio :: proc() -> ^Audio {
+	return &game.audio
 }

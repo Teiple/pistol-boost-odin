@@ -75,6 +75,8 @@ SCENE_MAIN_MENU_CALLBACKS : Scene_Callbacks(^Scene_Main_Menu) : {
     init = proc(scene : ^Scene_Main_Menu) {
         menu_stack_init(&scene.menu_stack)
         menu_stack_push_menu(&scene.menu_stack, Main_Menu{})
+
+        audio_play_music(game_audio(), .Main_Menu)
     },
     update_ui = proc(scene : ^Scene_Main_Menu, ui : ^Ui) {
         menu_stack_update_ui(&scene.menu_stack, ui)

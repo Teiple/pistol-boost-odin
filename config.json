@@ -1,8 +1,8 @@
 {
 	"graphics": {
 		"resolution": "Resolution_960x540",
-		"fullscreen": false,
-		"gamma": 1.00000000
+		"fullscreen": true,
+		"gamma": 1.00000012
 	},
 	"language": "English"
 }

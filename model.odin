@@ -223,7 +223,7 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 		png_bytes   := raw_buffer[buffer_view.byte_offset:][:buffer_view.byte_length]
 		
 		img, img_err := png.load_from_bytes(png_bytes, {.alpha_add_if_missing}, allocator = allocator)
-		assert(img_err != nil)
+		assert(img_err == nil)
 		
 		defer png.destroy(img)
 	

@@ -250,10 +250,10 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                     res.close = true
                                 }
 
-                                 ui_push_container(ui, rect)
+                                ui_push_container(ui, rect)
                                 {
                                     defer ui_pop_container(ui)
-                                    ui_push_text(
+                                    text_rect := ui_push_text(
                                         ui,
                                         text   = tr(.Back),
                                         anchor = text_anchor,
@@ -264,6 +264,19 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         ),
                                         padding = 32,
                                     )
+
+                                    ui_push_container(ui, text_rect)
+                                    {
+                                        defer ui_pop_container(ui)
+                                        
+                                        ui_push_rect(
+                                            ui,
+                                            icon   = .Left_Arrow,
+                                            sizing = { Fixed{32}, Fixed{32} },
+                                            anchor = { element = {1, .5}, parent = {0, .5}, offset = {-8 + 32, 0}},
+                                            color  = hsv(140, 1, .8),
+                                        )
+                                    }
                                 }
                             case .Defaults:
                                 rect, _, is_clicked := ui_push_rect(

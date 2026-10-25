@@ -22,8 +22,9 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         append(&scene.meshes, mesh_create_box({2, 1, 1}))
     
         menu_stack_init(&scene.menu_stack)
-
         model_init_from_gltf(&scene.test_model, #load("assets/models/pistol.glb"))
+        
+        audio_play_sound(game_audio(), .Fire_Primary)
     },
     destroy = proc(scene : ^Scene_Gameplay) {
         model_destroy(&scene.test_model)

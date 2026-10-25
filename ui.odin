@@ -1,6 +1,9 @@
 package main
-// A very mininal anchor based ui system
+
 import "core:fmt"
+import "base:runtime"
+import "core:image/png"
+// A very mininal anchor based ui system
 // It must do everything in one pass
 // Mouse input only accounts for explicit ids
 // There will be no implicit ids
@@ -45,6 +48,12 @@ Font_Id :: enum {
     Normal
 }
 
+Ui_Icon :: enum {
+    Cursor,
+    Left_Arrow,
+    Right_Arrow,
+}
+
 Font :: struct {
     packed_chars  : [dynamic]tt.packedchar,
     atlas_size    : [2]i32,
@@ -66,14 +75,25 @@ Ui_Builder :: struct {
     input_captured  : bool,
 }
 
+@(rodata)
+ui_icon_files : [Ui_Icon][]byte = {
+    .Cursor      = #load("assets/images/cursor.png"),
+    .Left_Arrow  = #load("assets/images/left_arrow.png"),
+    .Right_Arrow = #load("assets/images/right_arrow.png"),
+}
+
 Ui :: struct {
     pipeline    : sg.Pipeline,
     shader      : sg.Shader,
     bindings    : sg.Bindings,
     
     // for drawing rects
-    rect_img    : sg.Image,
+    rect_image  : sg.Image,
     rect_view   : sg.View,
+
+    // for drawing icons
+    icon_images : [Ui_Icon]sg.Image,
+    icon_views   : [Ui_Icon]sg.View,
 
     lang_fonts : [Language][Font_Id]Font,
     language   : Language,
@@ -104,7 +124,7 @@ Lang_Font_Config :: struct {
     base_size       : f32,
 }
 
-ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config) {
+ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config, allocator := context.allocator) {
     ui.shader   = sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
     
     ui.pipeline = sg.make_pipeline({
@@ -162,7 +182,7 @@ ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config) {
 
     white_pixel : []u32 = {0xFFFFFFFF}
     
-    ui.rect_img = sg.make_image({
+    ui.rect_image = sg.make_image({
         width = 1, height = 1,
         data = {
             mip_levels = {
@@ -176,11 +196,36 @@ ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config) {
     })
 
     ui.rect_view = sg.make_view({
-        texture = { image = ui.rect_img }
+        texture = { image = ui.rect_image }
     })
 
     ui.builder.commands        = make([dynamic]Ui_Cmd, 0, 8)
     ui.builder.container_stack = make([dynamic][4]f32, 0, 8)
+
+    // Loading icons 
+    for _, icon in ui.icon_images {
+        img, err := png.load(ui_icon_files[icon], {.alpha_add_if_missing}, allocator = allocator)
+        assert(err == nil)
+        defer png.destroy(img)
+
+        ui.icon_images[icon] = sg.make_image({
+            width  = cast(i32)img.width,
+            height = cast(i32)img.height,
+            data   = {
+                mip_levels = {
+                    0 = {
+                        ptr  = raw_data(img.pixels.buf),
+                        size = cast(uint)slice.size(img.pixels.buf[:]),
+                    }
+                }
+            }
+        })
+        ui.icon_views[icon] = sg.make_view({
+            texture = {
+                image = ui.icon_images[icon]
+            }
+        }) 
+    }
 }
 
 ui_destroy :: proc(ui : ^Ui) {
@@ -190,7 +235,12 @@ ui_destroy :: proc(ui : ^Ui) {
         }
     }
 
-    sg.destroy_image(ui.rect_img)
+    for _, icon in ui.icon_images {
+        sg.destroy_image(ui.icon_images[icon])
+        sg.destroy_view(ui.icon_views[icon])
+    }
+
+    sg.destroy_image(ui.rect_image)
     sg.destroy_view(ui.rect_view)
 
     sg.destroy_sampler(ui.bindings.samplers[0])
@@ -364,6 +414,7 @@ ui_push_rect :: proc(
     sizing : [2]Sizing    = {},
     anchor : Anchor       = {},
     color : [4]f32 = 0,
+    icon  : Maybe(Ui_Icon) = nil,
     interactive : Maybe(struct {
         id            : Ui_Id,
         hovered_color : Maybe([4]f32),
@@ -450,7 +501,7 @@ ui_push_rect :: proc(
     append(&ui.indices,  ..i[:])
 
     append(&ui.builder.commands, {
-        view        = ui.rect_view,
+        view        = icon == nil ? ui.rect_view : ui.icon_views[icon.?],
         start_index = start_index,
         num_indices = len(ui.indices) - start_index,
     })
@@ -688,22 +739,23 @@ ui_wrap_text :: proc(
 }
 
 ui_push_cursor :: proc(
-    ui       : ^Ui,
-    position : [2]f32,
-    size     : [2]f32 = 16,
-    tint     : [4]f32 = 1,
+    ui        : ^Ui,
+    position  : [2]f32,
+    size      : [2]f32 = 32,
+    tint      : [4]f32 = 1,
+    alignment : [2]f32  = {0, 0}
 ) {
     start_index := len(ui.indices)
     start_vert  := len(ui.vertices)
     base_index  := u16(start_vert)
 
-    v,i := ui_get_quad(position - size * .5, base_index, size, color = tint)
+    v,i := ui_get_quad(position - size * alignment, base_index, size, color = tint)
 
     append(&ui.vertices, ..v[:])
     append(&ui.indices,  ..i[:])
 
     append(&ui.builder.commands, {
-        view        = ui.rect_view,
+        view        = ui.icon_views[.Cursor],
         start_index = start_index,
         num_indices = len(ui.indices) - start_index,
     })
