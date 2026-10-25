@@ -1,13 +1,13 @@
 {
 	"graphics": {
-		"resolution": "Resolution_960x540",
+		"resolution": "Resolution_1280x720",
 		"fullscreen": true,
-		"gamma": 1.00000000
+		"gamma": 1.30000007
 	},
 	"controls": {
 		"horizontal_sensitivity": 3,
 		"vertical_sensitivity": 3,
 		"invert_y": false
 	},
-	"language": "Vietnamese"
+	"language": "English"
 }

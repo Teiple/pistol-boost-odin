@@ -5,11 +5,15 @@ import ma "vendor:miniaudio"
 Sound_Id :: enum {
 	Fire_Primary,
 	Fire_Secondary,
+	Ui_Mouse_Click,
+	Ui_Click,
 }
 
 sound_files : [Sound_Id][]byte = {
 	.Fire_Primary   = #load("assets/sounds/fire_primary.mp3"),
 	.Fire_Secondary = #load("assets/sounds/fire_secondary.mp3"),
+	.Ui_Mouse_Click = #load("assets/sounds/ui_mouse_click.ogg"),
+	.Ui_Click       = #load("assets/sounds/ui_click.ogg"),
 }
 
 Music_Id :: enum {

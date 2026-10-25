@@ -446,6 +446,8 @@ menu_helper_label_menu :: proc(
             if is_clicked {
                 selected_option = item_enum
                 selected        = true
+                
+                audio_play_sound(game_audio(), .Ui_Click)
             }
 
             ui_push_container(ui, rect)

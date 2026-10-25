@@ -23,50 +23,57 @@ Viewport :: struct {
 	offscreen_color_img : sg.Image,
 	offscreen_depth_img : sg.Image,
 
-	display_pass   : sg.Pass,
+	display_pass     : sg.Pass,
 	display_bindings : sg.Bindings,
+}
+
+viewport_init_offscreen_size :: proc(vp : ^Viewport) {
+	vp.offscreen_color_img = sg.make_image({
+		usage  = {
+			color_attachment = true,
+		},
+		width  = i32(vp.base_size.x),
+		height = i32(vp.base_size.y),
+		pixel_format = .RGBA8,
+	})
+
+	vp.offscreen_depth_img = sg.make_image({
+		usage  = {
+			depth_stencil_attachment = true,
+		},
+		width  = i32(vp.base_size.x),
+		height = i32(vp.base_size.y),
+		pixel_format = .DEPTH,
+	})
+
+	vp.offscreen_pass.attachments.colors[0]     = sg.make_view({
+		color_attachment = {
+			image = vp.offscreen_color_img
+		},
+	})
+
+	vp.offscreen_pass.attachments.depth_stencil = sg.make_view({
+		depth_stencil_attachment = {
+			image = vp.offscreen_depth_img
+		},
+	})
+}
+
+viewport_destroy_offscreen_sizing :: proc(vp : ^Viewport) {
+	sg.destroy_view(vp.offscreen_pass.attachments.colors[0])
+	sg.destroy_view(vp.offscreen_pass.attachments.depth_stencil)
+	sg.destroy_image(vp.offscreen_color_img)
+	sg.destroy_image(vp.offscreen_depth_img)
 }
 
 viewport_init :: proc(vp : ^Viewport, base_size : [2]f32, window_size : [2]f32) {
 	vp.base_size = base_size
 
 	// Offscreen pipeline & bindingns
-	{
-		offscreen_size := cast([2]i32)vp.base_size
-		vp.offscreen_color_img = sg.make_image({
-			usage  = {
-				color_attachment = true,
-			},
-			width  = offscreen_size.x,
-			height = offscreen_size.y,
-			pixel_format = .RGBA8,
-		})
-
-		vp.offscreen_depth_img = sg.make_image({
-			usage  = {
-				depth_stencil_attachment = true,
-			},
-			width  = offscreen_size.x,
-			height =  offscreen_size.y,
-			pixel_format = .DEPTH,
-		})
-
-		vp.offscreen_pass.attachments.colors[0]     = sg.make_view({
-			color_attachment = {
-				image = vp.offscreen_color_img
-			},
-		})
-
-		vp.offscreen_pass.attachments.depth_stencil = sg.make_view({
-			depth_stencil_attachment = {
-				image = vp.offscreen_depth_img
-			},
-		})
-
-		vp.offscreen_pass.action.colors[0] = {
-			load_action = .CLEAR,
-			clear_value = VIEWPORT_CLEAR_COLOR,
-		}
+	viewport_init_offscreen_size(vp)
+	vp.offscreen_pass.action.colors[0] = {
+		load_action = .CLEAR,
+		clear_value = VIEWPORT_CLEAR_COLOR,
 	}
 
 	// Display pipeline & bindings
@@ -95,7 +102,6 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32, window_size : [2]f32) 
 			primitive_type = .TRIANGLES,
 			cull_mode      = .NONE,
 		})
-		
 
 		// the quad that covers the screen 
 		// the uv is rotated since shader coordinate use bottom left as origin
@@ -116,17 +122,12 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32, window_size : [2]f32) 
 				size = cast(uint)slice.size(vertices), 
 			}	
 		})
-		vp.display_bindings.samplers[shaders.SMP_unlit_smp] = sg.make_sampler({
+
+		vp.display_bindings.samplers[0] = sg.make_sampler({
 			min_filter = .LINEAR,
 			mag_filter = .LINEAR,
 			wrap_u     = .CLAMP_TO_EDGE,
 			wrap_v     = .CLAMP_TO_EDGE,
-		})
-		
-		vp.display_bindings.views[shaders.VIEW_unlit_tex] = sg.make_view({
-			texture = {
-				image = vp.offscreen_color_img
-			},
 		})
 
 		vp.display_pass.action.colors[0] = {
@@ -134,6 +135,13 @@ viewport_init :: proc(vp : ^Viewport, base_size : [2]f32, window_size : [2]f32) 
 			clear_value = WINDOW_CLEAR_COLOR,
 		}
 	}
+
+	// Apply view to offscreen texture
+	vp.display_bindings.views[0] = sg.make_view({
+		texture = {
+			image = vp.offscreen_color_img
+		},
+	})
 
 	// Some system relies on .scale or .dest_rect supper early on
 	viewport_calculate_aspect(vp, window_size)	
@@ -152,7 +160,22 @@ viewport_calculate_aspect :: proc(vp : ^Viewport, window_size : [2]f32){
 
 viewport_begin :: proc(vp : ^Viewport, window_size : [2]f32) {
 	if vp.pending_base_size != 0 {
-		vp.base_size         = vp.pending_base_size
+		// Destroy the old offscreen with old size
+		viewport_destroy_offscreen_sizing(vp)
+		// Destroy to old view to old size
+		sg.destroy_view(vp.display_bindings.views[0])
+		
+		vp.base_size = vp.pending_base_size
+		
+		// Init new size
+		viewport_init_offscreen_size(vp)
+		// Init new view to new size
+		vp.display_bindings.views[0] = sg.make_view({
+			texture = {
+				image = vp.offscreen_color_img
+			},
+		})
+
 		vp.pending_base_size = 0
 	}
 	
@@ -196,15 +219,11 @@ viewport_end :: proc(vp : ^Viewport) {
 }
 
 viewport_destroy :: proc(vp : ^Viewport) {
-	sg.destroy_image(vp.offscreen_color_img)
-	sg.destroy_image(vp.offscreen_depth_img)
-	
-	sg.destroy_view(vp.offscreen_pass.attachments.colors[0])
-	sg.destroy_view(vp.offscreen_pass.attachments.depth_stencil)
-	sg.destroy_view(vp.display_bindings.views[shaders.VIEW_unlit_tex])
+	viewport_destroy_offscreen_sizing(vp)
+	sg.destroy_view(vp.display_bindings.views[0])
 
 	sg.destroy_buffer(vp.display_bindings.vertex_buffers[0])
-	sg.destroy_sampler(vp.display_bindings.samplers[shaders.SMP_unlit_smp])
+	sg.destroy_sampler(vp.display_bindings.samplers[0])
 	
 	sg.destroy_shader(vp.display_shader)
 	sg.destroy_pipeline(vp.display_pipeline)

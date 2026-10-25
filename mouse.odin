@@ -44,6 +44,7 @@ mouse_input :: proc(mouse : ^Mouse_Input, vp : ^Viewport, ev : sapp.Event) {
                 case .RIGHT : mouse.state[.Right]  = .Pressed
                 case .MIDDLE: mouse.state[.Middle] = .Pressed
             }
+            audio_play_sound(game_audio(), .Ui_Mouse_Click)
         case .MOUSE_UP:
             #partial switch ev.mouse_button {
                 case .LEFT  : mouse.state[.Left]   = .Released
