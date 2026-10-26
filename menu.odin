@@ -13,6 +13,7 @@ Menu :: union {
     Language_Menu,
     Graphics_Menu,
     Controls_Menu,
+    Audio_Menu,
 }
 
 Menu_Callbacks_Any :: Menu_Callbacks(^Menu)
@@ -50,6 +51,8 @@ menu_get_callbacks :: proc(menu : ^Menu) -> Menu_Callbacks_Any {
             return convert_cbs(&m, GRAPHICS_MENU_CALLBACKS)
         case Controls_Menu:
             return convert_cbs(&m, CONTROLS_MENU_CALLBACKS)
+        case Audio_Menu:
+            return convert_cbs(&m, AUDIO_MENU_CALLBACKS)
     }
     
     panic("Unreachable")
@@ -346,6 +349,164 @@ menu_helper_item_spinner :: proc(
                 }
                 return new_value, new_value != current_value
             }
+        }
+    }
+
+    return
+}
+
+
+menu_helper_item_progress_bar :: proc(
+    ui : ^Ui,
+
+    item_id   : string,
+    item_term : Loc_Term,
+
+    current_value : $T,
+    min           : T,
+    max           : T,
+    step          : T,
+
+    total_bar_width   : f32,
+
+    left_control_id  : Ui_Id,
+    right_control_id : Ui_Id,
+    bar_id           : Ui_Id,
+
+    is_active   : bool,
+    anchor      : Anchor,
+    item_height : f32,
+    switch_next : bool,
+    switch_prev : bool,
+
+    format      : string,
+
+    allocator   := context.temp_allocator
+) -> (new_value : T, changed : bool) where ins.type_is_numeric(T) {
+    current_value := math.clamp(current_value, min, max) 
+
+    rect, _, _ := ui_push_rect(
+        ui,
+        sizing      = { Grow{}, Fixed{item_height} },
+        anchor      = anchor,
+        interactive = {
+            id            = item_id,
+            hovered_color = hsv(140, 0.5, 1, 0.2),
+            held_color    = hsv(140, 0.5, 0.5, 0.2),
+        },
+    )
+
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+    
+        ui_push_text(
+            ui,
+            text   = tr(item_term),
+            anchor = { element = {0, .5}, parent = {0, .5}, offset = {8, 0} },
+            color  = is_active ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
+        )
+
+        bar_rect, _, _ := ui_push_rect(
+            ui,
+            sizing = {Fixed{total_bar_width}, Grow{}},
+            anchor = {element = {1, .5}, parent = {1, .5}},
+        )
+
+        ui_push_container(ui, bar_rect)
+        {
+            defer ui_pop_container(ui)
+            
+            control_width :: 32
+
+            control_sizing : [2]Sizing : {Fixed{control_width}, Fixed{control_width}}
+
+            // Bar
+            full_bar_width := total_bar_width - control_width * 2
+            // (Backdrop)
+            ui_push_rect(
+                ui,
+                sizing = {Fixed{full_bar_width}, Grow{}},
+                anchor = {element = {0, .5}, parent = {0, .5}, offset = {control_width, 0}},
+                color  = hsv(140, .1, .1),
+                interactive = {id = bar_id}
+            )
+            
+            ui_push_rect(
+                ui,
+                sizing = {Fixed{full_bar_width * f32(current_value) / f32(max - min)}, Grow{}},
+                anchor = {element = {0, .5}, parent = {0, .5}, offset = {control_width, 0}},
+                color  = hsv(140, .5, 1),
+            )
+
+            // Left control 
+            left_control_rect, _, left_control_clicked := ui_push_rect(
+                ui,
+                sizing = control_sizing,
+                anchor = {element = {0, .5}, parent = {0, .5}},
+                // color  = hsv(140, .5, 1),
+                interactive = {
+                    id            = left_control_id,
+                    hovered_color = hsv(140, .5,  1, 0.2),
+                    held_color    = hsv(140, .5, .5, 0.2),
+                }
+            )
+
+            ui_push_container(ui, left_control_rect)
+            {
+                defer ui_pop_container(ui)
+
+                left_control_rect, _, _ := ui_push_rect(
+                    ui,
+                    sizing = {Grow{}, Grow{}},
+                    anchor = {element = {.5, .5}, parent = {.5, .5}},
+                    color  = hsv(140, .5, 1),
+                    icon   = .Minus,
+                )
+            }
+
+            // Right control 
+            right_control_rect, _, right_control_clicked := ui_push_rect(
+                ui,
+                sizing = control_sizing,
+                anchor = {element = {1, .5}, parent = {1, .5}},
+                // color  = hsv(140, .5, 1),
+                interactive = {
+                    id            = right_control_id,
+                    hovered_color = hsv(140, .5,  1, .2),
+                    held_color    = hsv(140, .5, .5, .2),
+                }
+            )
+
+            ui_push_container(ui, right_control_rect)
+            {
+                defer ui_pop_container(ui)
+
+                ui_push_rect(
+                    ui,
+                    sizing = control_sizing,
+                    anchor = {element = {.5, .5}, parent = {.5, .5}},
+                    color  = hsv(140, .5, 1),
+                    icon   = .Plus,
+                )
+            }
+
+            if is_active {
+                if switch_next || right_control_clicked {
+                    new_value := current_value + step
+                    if new_value > max {
+                        new_value = max
+                    }
+                    return new_value, new_value != current_value
+                } else if switch_prev || left_control_clicked {
+                    new_value := current_value - step
+                    if new_value < min {
+                        new_value = min
+                    }
+                    return new_value, new_value != current_value
+                }
+            }
+
         }
     }
 
@@ -806,10 +967,10 @@ menu_helper_settings_input :: proc(menu : ^$T/Settings_Sub_Menu($S), ui : ^Ui, e
 
 menu_helper_settings_footer :: proc(
     ui               : ^Ui,
-    menu             : $T,
+    menu             : ^$T/Settings_Sub_Menu($S),
     is_focused       : bool,
-    settings         : ^$S,
-    settings_default : S,
+    settings         : ^$U,
+    settings_default : U,
     back_id          : string,
     defaults_id      : string,
 ) -> (should_close : bool) {

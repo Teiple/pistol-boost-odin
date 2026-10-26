@@ -52,6 +52,8 @@ Ui_Icon :: enum {
     Cursor,
     Left_Arrow,
     Right_Arrow,
+    Plus,
+    Minus,
 }
 
 Font :: struct {
@@ -80,6 +82,8 @@ ui_icon_files : [Ui_Icon][]byte = {
     .Cursor      = #load("assets/images/cursor.png"),
     .Left_Arrow  = #load("assets/images/left_arrow.png"),
     .Right_Arrow = #load("assets/images/right_arrow.png"),
+    .Plus        = #load("assets/images/plus.png"),
+    .Minus       = #load("assets/images/minus.png"),
 }
 
 Ui :: struct {
@@ -490,6 +494,8 @@ ui_push_rect :: proc(
                     is_clicked = true
                 }
             } 
+
+            mouse_state = mouse.state[.Left]
         } else {
             mouse_state = .None
         }
@@ -844,4 +850,17 @@ ui_is_capturing_input :: proc(ui : ^Ui) -> bool {
 
 ui_set_lang :: proc(ui : ^Ui, lang : Language) {
     ui.language = lang
+}
+
+ui_get_local_mouse_position :: proc(ui : ^Ui, rect : [4]f32) -> (local_position : [2]f32, inside: bool) {
+    if (
+        ui.builder.mouse.position.x >= rect.x &&
+        ui.builder.mouse.position.x <= rect.x + rect.z &&
+        ui.builder.mouse.position.y >= rect.y &&
+        ui.builder.mouse.position.y <= rect.y + rect.w
+    ) {
+        return ui.builder.mouse.position - rect.xy, true
+    }
+
+    return
 }

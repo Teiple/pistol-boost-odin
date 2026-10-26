@@ -39,6 +39,9 @@ Loc_Term :: enum {
     Mouse_Invert_Y,
     Mouse_Horizontal_Sensitivity,
     Mouse_Vertical_Sensitivity,
+    Master_Volume,
+    Sound_Volume,
+    Music_Volume,
 }
 
 LANGUAGE_SELECTIONS : [Language]string : {
@@ -85,6 +88,10 @@ loc_map : [Language][Loc_Term]string = {
         .Mouse_Invert_Y = "Invert Y", 
         .Mouse_Horizontal_Sensitivity = "Horizontal Sensitivity", 
         .Mouse_Vertical_Sensitivity = "Vertical Sensitivity", 
+        
+        .Master_Volume = "Master Volume",
+        .Sound_Volume = "Sound Volume",
+        .Music_Volume = "Music Volume",
     },
     .Simplified_Chinese = #partial {
         .Undefined = UNDEFINED_TERM,

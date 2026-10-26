@@ -12,12 +12,14 @@ Game_Settings :: struct #all_or_none {
     graphics : Graphics_Settings,
     controls : Controls_Settings,
     language : Language, 
+    audio    : Audio_Settings,
 }
 
 GAME_SETTINGS_DEFAULT :: Game_Settings {
     graphics = GRAPHICS_SETTINGS_DEFAULT,
     language = LANGUAGE_DEFAULT,
     controls = CONTROLS_SETTINGS_DEFAULT,
+    audio    = AUDIO_SETTINGS_DEFAULT,
 }
 
 LANGUAGE_DEFAULT :: Language.English
@@ -50,9 +52,15 @@ resolution_map : [Resolution][2]f32 = {
 }
 
 Audio_Settings :: struct {
-    master     : f32,
-    music      : f32,
-    sfx        : f32,
+    master_volume : f32,
+    music_volume  : f32,
+    sound_volume  : f32,
+}
+
+AUDIO_SETTINGS_DEFAULT : Audio_Settings : {
+    master_volume = 1,
+    music_volume  = 1,
+    sound_volume  = 1,
 }
 
 Controls_Settings :: struct {
@@ -120,16 +128,17 @@ settings_load :: proc(allocator := context.allocator) -> (settings : Game_Settin
 }
 
 settings_apply :: proc {
-    settings_apply_all,
     settings_apply_graphics,
     settings_apply_language,
     settings_apply_controls,
+    settings_apply_audio,
 }
 
 settings_apply_all :: proc(settings : Game_Settings){
     settings_apply(settings.graphics)
     settings_apply(settings.language)
     settings_apply(settings.controls)
+    settings_apply(settings.audio)
 }
 
 settings_apply_graphics :: proc(config : Graphics_Settings) {
@@ -148,4 +157,10 @@ settings_apply_controls :: proc(controls : Controls_Settings) {
         cast(f32)controls.vertical_sensitivity,
     })
     game_set_mouse_invert_y(controls.invert_y)
+}
+
+settings_apply_audio :: proc(audio : Audio_Settings) {
+    audio_apply_master_volume(game_audio(), audio.master_volume)
+    audio_apply_sound_volume(game_audio(),  audio.sound_volume)
+    audio_apply_music_volume(game_audio(),  audio.music_volume)
 }

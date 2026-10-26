@@ -1,5 +1,6 @@
 package main
 import sapp "sokol-odin/sokol/app"
+import "core:fmt"
 import ins "base:intrinsics"
 
 Settings_Menu :: struct {
@@ -46,6 +47,8 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
                 res.next_menu = Graphics_Menu{}
             case .Controls:
                 res.next_menu = Controls_Menu{}
+            case .Audio:
+                res.next_menu = Audio_Menu{}
         }
 
         res.close = menu_helper_back_button(
@@ -112,7 +115,6 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
             switch focus_area {
                 case .Menu:
                     item_height :: 32
-                    widths      : [2]f32 : {200, 100}
                     spacing     :: 4
                     item_count  := cast(f32)len(Graphics_Menu_Item_Id)
                     
@@ -120,7 +122,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                     rect, _, _ := ui_push_rect(
                         ui, 
                         sizing = {
-                            Fixed{ widths[0] + widths[1] },
+                            Fixed{ 300 },
                             Fixed{
                                 item_height * item_count + (item_count - 1) * spacing,
                             }
@@ -247,7 +249,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
             switch focus_area {
                 case .Menu:
                     item_height :: 32
-                    widths      : [2]f32 : {300, 100}
+                    
                     spacing     :: 4
                     item_count  := cast(f32)len(Controls_Menu_Item_Id)
                     
@@ -255,7 +257,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                     rect, _, _ := ui_push_rect(
                         ui, 
                         sizing = {
-                            Fixed{ widths[0] + widths[1] },
+                            Fixed{ 400 },
                             Fixed{
                                 item_height * item_count + (item_count - 1) * spacing,
                             }
@@ -357,3 +359,146 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
 }
 
 
+Audio_Menu :: Settings_Sub_Menu(Audio_Menu_Item_Id)
+
+Audio_Menu_Item_Id :: enum {
+    Master_Volume,
+    Sound_Volume,
+    Music_Volume,
+}
+
+AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
+    update_ui = proc(menu : ^Audio_Menu, ui : ^Ui) -> (res: Menu_Result) {
+        defer {
+            menu.switch_next = false
+            menu.switch_prev = false
+        }
+
+        settings := &game_get_settings().audio
+
+        for focus_area in type_of(menu.focus_area) {
+            switch focus_area {
+                case .Menu:
+                    item_height :: 32
+                    
+                    spacing     :: 4
+                    item_count  := cast(f32)len(Audio_Menu_Item_Id)
+                    
+                    // option container
+                    rect, _, _ := ui_push_rect(
+                        ui, 
+                        sizing = {
+                            Fixed{ 450 },
+                            Fixed{
+                                item_height * item_count + (item_count - 1) * spacing,
+                            }
+                        },
+                        anchor = { parent = {.5, .5}, element = {.5, .5} },
+                    )
+                    
+                    current_item     := menu.current_menu_item
+                    has_current_item := menu.focus_area == focus_area
+
+                    ui_push_container(ui, rect)
+                    {
+                        defer ui_pop_container(ui)
+
+                        item_anchor : Anchor
+                        
+                        for item in Audio_Menu_Item_Id {
+                            is_active := has_current_item && current_item == item
+                            defer item_anchor.offset.y += item_height + spacing
+                            switch item {
+                                case .Master_Volume:
+                                    new_value, changed := menu_helper_item_progress_bar(
+                                        ui,
+                                        item_id          = "audio_menu:master_volume",
+                                        item_term        = .Master_Volume, 
+                                        current_value    = settings.master_volume,
+                                        min              = 0.0,
+                                        max              = 1.0,
+                                        step             = 0.1,
+                                        total_bar_width  = 200,
+                                        left_control_id  = "audio_menu:master_volume:left_control",
+                                        right_control_id = "audio_menu:master_volume:right_control",
+                                        bar_id           = "audio_menu:master_volume:bar",
+                                        format           = "%d",
+                                        is_active        = is_active,
+                                        anchor           = item_anchor,
+                                        switch_next      = menu.switch_next,
+                                        switch_prev      = menu.switch_prev,
+                                        item_height      = item_height,
+                                    )
+                                    if changed {
+                                        settings.master_volume = new_value
+                                        settings_apply(settings^)
+                                    }
+                                case .Sound_Volume:
+                                    new_value, changed := menu_helper_item_progress_bar(
+                                        ui,
+                                        item_id          = "audio_menu:sound_volume",
+                                        item_term        = .Sound_Volume, 
+                                        current_value    = settings.sound_volume,
+                                        min              = 0.0,
+                                        max              = 1.0,
+                                        step             = 0.1,
+                                        total_bar_width  = 200,
+                                        left_control_id  = "audio_menu:sound_volume:left_control",
+                                        right_control_id = "audio_menu:sound_volume:right_control",
+                                        bar_id           = "audio_menu:sound_volume:bar",
+                                        format           = "%d",
+                                        is_active        = is_active,
+                                        anchor           = item_anchor,
+                                        switch_next      = menu.switch_next,
+                                        switch_prev      = menu.switch_prev,
+                                        item_height      = item_height,
+                                    )
+                                    if changed {
+                                        settings.sound_volume = new_value
+                                        settings_apply(settings^)
+                                    }
+                                case .Music_Volume:
+                                    new_value, changed := menu_helper_item_progress_bar(
+                                        ui,
+                                        item_id          = "audio_menu:music_volume",
+                                        item_term        = .Music_Volume, 
+                                        current_value    = settings.music_volume,
+                                        min              = 0.0,
+                                        max              = 1.0,
+                                        step             = 0.1,
+                                        total_bar_width  = 200,
+                                        left_control_id  = "audio_menu:music_volume:left_control",
+                                        right_control_id = "audio_menu:music_volume:right_control",
+                                        bar_id           = "audio_menu:music_volume:bar",
+                                        format           = "%d",
+                                        is_active        = is_active,
+                                        anchor           = item_anchor,
+                                        switch_next      = menu.switch_next,
+                                        switch_prev      = menu.switch_prev,
+                                        item_height      = item_height,
+                                    )
+                                    if changed {
+                                        settings.music_volume = new_value
+                                        settings_apply(settings^)
+                                    }
+                            }
+                        }
+                    }
+                case .Footer:
+                    res.close = menu_helper_settings_footer(
+                        ui,
+                        menu,
+                        is_focused       = menu.focus_area == focus_area,
+                        settings         = settings,
+                        settings_default = AUDIO_SETTINGS_DEFAULT,
+                        back_id          = "audio_menu:back",
+                        defaults_id      = "audio_menu:defaults",
+                    )
+            }
+        }
+        return
+    },
+    input_ui = proc(menu : ^Audio_Menu, ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
+        return menu_helper_settings_input(menu, ui, ev)
+    },
+}

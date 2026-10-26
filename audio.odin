@@ -108,7 +108,7 @@ audio_make_audio_data  :: proc(
 		&aud.engine,
 		cast(^ma.data_source)(&audio_data.audio_buffer),
 		ma_sound_flags,
-		nil,
+		group,
 		&audio_data.ma_sound,
 	)
 }
