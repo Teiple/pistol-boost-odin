@@ -1,5 +1,6 @@
 package main
 import sapp "sokol-odin/sokol/app"
+import ins "base:intrinsics"
 
 Settings_Menu :: struct {
     show             : bool,
@@ -77,15 +78,17 @@ Settings_Footer_Item :: enum {
     Defaults,
 }
 
-Graphics_Menu :: struct {
-    current_menu_item   : Graphics_Menu_Item_Id,
+Settings_Menu_Focus_Area :: enum {
+    Menu,
+    Footer,
+}
+
+Settings_Sub_Menu :: struct($T : typeid) where ins.type_is_enum(T) {
+    current_menu_item   : T,
     current_footer_item : Settings_Footer_Item,
+    focus_area          : Settings_Menu_Focus_Area,
     switch_next         : bool,
     switch_prev         : bool,
-    focus_area          : enum {
-        Menu,
-        Footer,
-    }
 }
 
 Graphics_Menu_Item_Id :: enum {
@@ -93,6 +96,8 @@ Graphics_Menu_Item_Id :: enum {
     Fullscreen,
     Gamma,
 }
+
+Graphics_Menu :: Settings_Sub_Menu(Graphics_Menu_Item_Id)
 
 GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
     update_ui = proc(menu : ^Graphics_Menu, ui : ^Ui) -> (res: Menu_Result) {
@@ -202,191 +207,25 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                         }
                     }
                 case .Footer:
-                    has_current_item   := menu.focus_area == focus_area
-                    current_item       := menu.current_footer_item
-                    small_button_width :: 200
-                    
-                    items : [dynamic; len(Settings_Footer_Item)]Settings_Footer_Item = {
-                        .Back
-                    }
-
-                    has_changed_from_default := settings^ != GRAPHICS_SETTINGS_DEFAULT
-                    
-                    if has_changed_from_default {
-                        append(&items, .Defaults)
-                    }
-
-                    // Clamp current option
-                    {
-                        item_exist := false
-                        for it in items {
-                            if current_item == it {
-                                item_exist = true
-                                break
-                            }
-                        }
-                        
-                        if !item_exist {
-                            current_item = items[len(items) - 1]
-                            menu.current_footer_item = current_item
-                        }
-                    }
-
-                    for item, index in items {
-                        sizing, anchor, text_anchor := menu_helper_calculate_footer_layout(index, len(items))
-                        is_selected := menu.switch_next && has_current_item && current_item == item
-
-                        switch item {
-                            case .Back:
-                                rect, _, is_clicked := ui_push_rect(
-                                    ui, sizing, anchor,
-                                    interactive = {
-                                        id            = "graphics_menu:back",
-                                        hovered_color = hsv(140, 0.5, 1, 0.2),
-                                        held_color    = hsv(140, 0.5, 0.5, 0.2),
-                                    }
-                                )
-
-                                if is_clicked || is_selected {
-                                    game_save_settings()
-                                    res.close = true
-                                }
-
-                                ui_push_container(ui, rect)
-                                {
-                                    defer ui_pop_container(ui)
-                                    text_rect := ui_push_text(
-                                        ui,
-                                        text   = tr(.Back),
-                                        anchor = text_anchor,
-                                        color  = (
-                                            has_current_item && current_item == item ?
-                                            hsv(140, 0.5, 1) :
-                                            hsv(140, 1, 0.8)
-                                        ),
-                                        padding = 32,
-                                    )
-
-                                    ui_push_container(ui, text_rect)
-                                    {
-                                        defer ui_pop_container(ui)
-                                        
-                                        ui_push_rect(
-                                            ui,
-                                            icon   = .Left_Arrow,
-                                            sizing = { Fixed{32}, Fixed{32} },
-                                            anchor = { element = {1, .5}, parent = {0, .5}, offset = {-8 + 32, 0}},
-                                            color  = hsv(140, 1, .8),
-                                        )
-                                    }
-                                }
-                            case .Defaults:
-                                rect, _, is_clicked := ui_push_rect(
-                                    ui,
-                                    sizing = sizing,
-                                    anchor = anchor,
-                                    interactive = {
-                                        id            = "graphics_menu:defaults",
-                                        hovered_color = hsv(140, 0.5, 1, 0.2),
-                                        held_color    = hsv(140, 0.5, 0.5, 0.2),
-                                    }
-                                )
-
-                                if is_clicked || is_selected {
-                                    settings^ = GRAPHICS_SETTINGS_DEFAULT
-                                    settings_apply(settings^)
-                                }
-
-                                ui_push_container(ui, rect)
-                                {
-                                    defer ui_pop_container(ui)
-                                    ui_push_text(
-                                        ui,
-                                        text   = tr(.Defaults),
-                                        anchor = text_anchor,
-                                        color  = (
-                                            has_current_item && current_item == item ?
-                                            hsv(140, 0.5, 1) :
-                                            hsv(140, 1, 0.8)
-                                        ),
-                                        padding = 32,
-                                    )
-                                }
-                        }
-                    }
+                    res.close = menu_helper_settings_footer(
+                        ui,
+                        menu,
+                        is_focused       = menu.focus_area == focus_area,
+                        settings         = settings,
+                        settings_default = GRAPHICS_SETTINGS_DEFAULT,
+                        back_id          = "graphics_menu:back",
+                        defaults_id      = "graphics_menu:defaults",
+                    )
             }
         }
         return
     },
     input_ui = proc(menu : ^Graphics_Menu, ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
-        ui_capture_input(ui)
-
-        requested_to_close := false
-
-        if ev.type == .KEY_DOWN {
-            if ev.key_code == .ESCAPE {
-                requested_to_close = true
-            } else if ev.key_code == .TAB {
-                if (ev.modifiers & sapp.MODIFIER_SHIFT) != 0 {
-                    menu.focus_area   = enum_prev(menu.focus_area)
-                } else {
-                    menu.focus_area = enum_next(menu.focus_area)
-                }
-                
-            } else {
-                switch menu.focus_area {
-                    case .Menu:
-                        current_item := &menu.current_menu_item
-
-                        #partial switch ev.key_code {
-                            case .DOWN:
-                                current_item^ = enum_next(current_item^)
-                            case .UP:
-                                current_item^ = enum_prev(current_item^)
-                            case .SPACE, .ENTER, .RIGHT:
-                                menu.switch_next = true
-                            case .LEFT:
-                                menu.switch_prev = true         
-                            case .ESCAPE:
-                                requested_to_close = true
-                        }
-                    case .Footer:
-                        current_item := &menu.current_footer_item
-
-                        #partial switch ev.key_code {
-                            case .DOWN, .RIGHT:
-                                current_item^ = enum_next(current_item^)
-                            case .UP, .LEFT:
-                                current_item^ = enum_prev(current_item^)
-                            case .SPACE, .ENTER:
-                                menu.switch_next = true         
-                            case .ESCAPE:
-                                requested_to_close = true
-                        }
-                }
-
-            }
-        }
-
-        if requested_to_close {
-            res.close = true 
-            game_save_settings()
-        }
-        
-        return
+        return menu_helper_settings_input(menu, ui, ev)
     },
 }
 
-Controls_Menu :: struct {
-    current_menu_item   : Controls_Menu_Item_Id,
-    current_footer_item : Settings_Footer_Item,
-    switch_next         : bool,
-    switch_prev         : bool,
-    focus_area          : enum {
-        Menu,
-        Footer,
-    }
-}
+Controls_Menu :: Settings_Sub_Menu(Controls_Menu_Item_Id)
 
 Controls_Menu_Item_Id :: enum {
     Mouse_Invert_Y,
@@ -408,7 +247,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
             switch focus_area {
                 case .Menu:
                     item_height :: 32
-                    widths      : [2]f32 : {200, 100}
+                    widths      : [2]f32 : {300, 100}
                     spacing     :: 4
                     item_count  := cast(f32)len(Controls_Menu_Item_Id)
                     
@@ -441,7 +280,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                     new_value, changed := menu_helper_item_toggle(
                                         ui,
                                         item_id   = "controls_menu:invert_y",
-                                        item_term = .Undefined,
+                                        item_term = .Mouse_Invert_Y,
                                         on_term   = .On,
                                         off_term  = .Off,
                                         current_value = settings.invert_y,
@@ -459,7 +298,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                     new_value, changed := menu_helper_item_spinner(
                                         ui,
                                         item_id       = "controls_menu:mouse_horizontal_sensitivity", 
-                                        item_term     = .Undefined, 
+                                        item_term     = .Mouse_Horizontal_Sensitivity, 
                                         current_value = settings.horizontal_sensitivity,
                                         min           = 1,
                                         max           = 10,
@@ -479,7 +318,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                     new_value, changed := menu_helper_item_spinner(
                                         ui,
                                         item_id       = "controls_menu:mouse_vertical_sensitivity", 
-                                        item_term     = .Undefined, 
+                                        item_term     = .Mouse_Vertical_Sensitivity, 
                                         current_value = settings.vertical_sensitivity,
                                         min           = 1,
                                         max           = 10,
@@ -499,178 +338,21 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                         }
                     }
                 case .Footer:
-                    has_current_item   := menu.focus_area == focus_area
-                    current_item       := menu.current_footer_item
-                    small_button_width :: 200
-                    
-                    items : [dynamic; len(Settings_Footer_Item)]Settings_Footer_Item = {
-                        .Back
-                    }
-
-                    has_changed_from_default := settings^ != CONTROLS_SETTINGS_DEFAULT
-                    
-                    if has_changed_from_default {
-                        append(&items, .Defaults)
-                    }
-
-                    // Clamp current option
-                    {
-                        item_exist := false
-                        for it in items {
-                            if current_item == it {
-                                item_exist = true
-                                break
-                            }
-                        }
-                        
-                        if !item_exist {
-                            current_item = items[len(items) - 1]
-                            menu.current_footer_item = current_item
-                        }
-                    }
-
-                    for item, index in items {
-                        sizing, anchor, text_anchor := menu_helper_calculate_footer_layout(index, len(items))
-                        is_selected := menu.switch_next && has_current_item && current_item == item
-
-                        switch item {
-                            case .Back:
-                                rect, _, is_clicked := ui_push_rect(
-                                    ui, sizing, anchor,
-                                    interactive = {
-                                        id            = "controls_menu:back",
-                                        hovered_color = hsv(140, 0.5, 1, 0.2),
-                                        held_color    = hsv(140, 0.5, 0.5, 0.2),
-                                    }
-                                )
-
-                                if is_clicked || is_selected {
-                                    game_save_settings()
-                                    res.close = true
-                                }
-
-                                ui_push_container(ui, rect)
-                                {
-                                    defer ui_pop_container(ui)
-                                    text_rect := ui_push_text(
-                                        ui,
-                                        text   = tr(.Back),
-                                        anchor = text_anchor,
-                                        color  = (
-                                            has_current_item && current_item == item ?
-                                            hsv(140, 0.5, 1) :
-                                            hsv(140, 1, 0.8)
-                                        ),
-                                        padding = 32,
-                                    )
-
-                                    ui_push_container(ui, text_rect)
-                                    {
-                                        defer ui_pop_container(ui)
-                                        
-                                        ui_push_rect(
-                                            ui,
-                                            icon   = .Left_Arrow,
-                                            sizing = { Fixed{32}, Fixed{32} },
-                                            anchor = { element = {1, .5}, parent = {0, .5}, offset = {-8 + 32, 0}},
-                                            color  = hsv(140, 1, .8),
-                                        )
-                                    }
-                                }
-                            case .Defaults:
-                                rect, _, is_clicked := ui_push_rect(
-                                    ui,
-                                    sizing = sizing,
-                                    anchor = anchor,
-                                    interactive = {
-                                        id            = "controls_menu:defaults",
-                                        hovered_color = hsv(140, 0.5, 1, 0.2),
-                                        held_color    = hsv(140, 0.5, 0.5, 0.2),
-                                    }
-                                )
-
-                                if is_clicked || is_selected {
-                                    settings^ = CONTROLS_SETTINGS_DEFAULT
-                                    settings_apply(settings^)
-                                }
-
-                                ui_push_container(ui, rect)
-                                {
-                                    defer ui_pop_container(ui)
-                                    ui_push_text(
-                                        ui,
-                                        text   = tr(.Defaults),
-                                        anchor = text_anchor,
-                                        color  = (
-                                            has_current_item && current_item == item ?
-                                            hsv(140, 0.5, 1) :
-                                            hsv(140, 1, 0.8)
-                                        ),
-                                        padding = 32,
-                                    )
-                                }
-                        }
-                    }
+                    res.close = menu_helper_settings_footer(
+                        ui,
+                        menu,
+                        is_focused       = menu.focus_area == focus_area,
+                        settings         = settings,
+                        settings_default = CONTROLS_SETTINGS_DEFAULT,
+                        back_id          = "controls_menu:back",
+                        defaults_id      = "controls_menu:defaults",
+                    )
             }
         }
         return
     },
     input_ui = proc(menu : ^Controls_Menu, ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
-        ui_capture_input(ui)
-
-        requested_to_close := false
-
-        if ev.type == .KEY_DOWN {
-            if ev.key_code == .ESCAPE {
-                requested_to_close = true
-            } else if ev.key_code == .TAB {
-                if (ev.modifiers & sapp.MODIFIER_SHIFT) != 0 {
-                    menu.focus_area   = enum_prev(menu.focus_area)
-                } else {
-                    menu.focus_area = enum_next(menu.focus_area)
-                }
-                
-            } else {
-                switch menu.focus_area {
-                    case .Menu:
-                        current_item := &menu.current_menu_item
-
-                        #partial switch ev.key_code {
-                            case .DOWN:
-                                current_item^ = enum_next(current_item^)
-                            case .UP:
-                                current_item^ = enum_prev(current_item^)
-                            case .SPACE, .ENTER, .RIGHT:
-                                menu.switch_next = true
-                            case .LEFT:
-                                menu.switch_prev = true         
-                            case .ESCAPE:
-                                requested_to_close = true
-                        }
-                    case .Footer:
-                        current_item := &menu.current_footer_item
-
-                        #partial switch ev.key_code {
-                            case .DOWN, .RIGHT:
-                                current_item^ = enum_next(current_item^)
-                            case .UP, .LEFT:
-                                current_item^ = enum_prev(current_item^)
-                            case .SPACE, .ENTER:
-                                menu.switch_next = true         
-                            case .ESCAPE:
-                                requested_to_close = true
-                        }
-                }
-
-            }
-        }
-
-        if requested_to_close {
-            res.close = true 
-            game_save_settings()
-        }
-        
-        return
+        return menu_helper_settings_input(menu, ui, ev)
     },
 }
 

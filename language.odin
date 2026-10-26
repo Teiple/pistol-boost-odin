@@ -36,6 +36,9 @@ Loc_Term :: enum {
     Gamma,
     Particles,
     Decals,
+    Mouse_Invert_Y,
+    Mouse_Horizontal_Sensitivity,
+    Mouse_Vertical_Sensitivity,
 }
 
 LANGUAGE_SELECTIONS : [Language]string : {
@@ -78,8 +81,12 @@ loc_map : [Language][Loc_Term]string = {
         .Gamma = "Gamma",
         .Particles = "Particles",
         .Decals = "Decals",
+
+        .Mouse_Invert_Y = "Invert Y", 
+        .Mouse_Horizontal_Sensitivity = "Horizontal Sensitivity", 
+        .Mouse_Vertical_Sensitivity = "Vertical Sensitivity", 
     },
-    .Simplified_Chinese = {
+    .Simplified_Chinese = #partial {
         .Undefined = UNDEFINED_TERM,
         .New_Game = "新游戏",
         .Continue = "继续",
@@ -109,7 +116,7 @@ loc_map : [Language][Loc_Term]string = {
         .Particles = "粒子",
         .Decals = "贴花",
     },
-    .Vietnamese = {
+    .Vietnamese = #partial {
         .Undefined = UNDEFINED_TERM,
         .New_Game = "Game mới",
         .Continue = "Tiếp tục",
@@ -139,7 +146,7 @@ loc_map : [Language][Loc_Term]string = {
         .Particles = "Hiệu ứng hạt",
         .Decals = "Đề-can",
     },
-    .Japanese = {
+    .Japanese = #partial {
         .Undefined = UNDEFINED_TERM,
         .New_Game = "新しいゲーム",
         .Continue = "続ける",

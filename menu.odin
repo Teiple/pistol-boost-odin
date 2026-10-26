@@ -724,7 +724,7 @@ menu_helper_confirmation_input :: proc(
     ui               : ^Ui,
     ev               : sapp.Event,
     selected_current : ^bool,
-    current_item   : ^bool,
+    current_item     : ^bool,
 ) -> (requested_to_close : bool)
 {
     ui_capture_input(ui)
@@ -739,6 +739,189 @@ menu_helper_confirmation_input :: proc(
                 selected_current^ = true           
             case .ESCAPE:
                 requested_to_close = true
+        }
+    }
+
+    return
+}
+
+
+menu_helper_settings_input :: proc(menu : ^$T/Settings_Sub_Menu($S), ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
+    ui_capture_input(ui)
+
+    requested_to_close := false
+
+    if ev.type == .KEY_DOWN {
+        if ev.key_code == .ESCAPE {
+            requested_to_close = true
+        } else if ev.key_code == .TAB {
+            if (ev.modifiers & sapp.MODIFIER_SHIFT) != 0 {
+                menu.focus_area = enum_prev(menu.focus_area)
+            } else {
+                menu.focus_area = enum_next(menu.focus_area)
+            }
+            
+        } else {
+            switch menu.focus_area {
+                case .Menu:
+                    current_item := &menu.current_menu_item
+
+                    #partial switch ev.key_code {
+                        case .DOWN:
+                            current_item^ = enum_next(current_item^)
+                        case .UP:
+                            current_item^ = enum_prev(current_item^)
+                        case .SPACE, .ENTER, .RIGHT:
+                            menu.switch_next = true
+                        case .LEFT:
+                            menu.switch_prev = true         
+                        case .ESCAPE:
+                            requested_to_close = true
+                    }
+                case .Footer:
+                    current_item := &menu.current_footer_item
+
+                    #partial switch ev.key_code {
+                        case .DOWN, .RIGHT:
+                            current_item^ = enum_next(current_item^)
+                        case .UP, .LEFT:
+                            current_item^ = enum_prev(current_item^)
+                        case .SPACE, .ENTER:
+                            menu.switch_next = true         
+                        case .ESCAPE:
+                            requested_to_close = true
+                    }
+            }
+
+        }
+    }
+
+    if requested_to_close {
+        res.close = true 
+        game_save_settings()
+    }
+    
+    return
+} 
+
+menu_helper_settings_footer :: proc(
+    ui               : ^Ui,
+    menu             : $T,
+    is_focused       : bool,
+    settings         : ^$S,
+    settings_default : S,
+    back_id          : string,
+    defaults_id      : string,
+) -> (should_close : bool) {
+    current_item       := menu.current_footer_item
+    small_button_width :: 200
+    
+    items : [dynamic; len(Settings_Footer_Item)]Settings_Footer_Item = {
+        .Back
+    }
+
+    has_changed_from_default := settings^ != settings_default
+    
+    if has_changed_from_default {
+        append(&items, .Defaults)
+    }
+
+    // Clamp current option
+    {
+        item_exist := false
+        for it in items {
+            if current_item == it {
+                item_exist = true
+                break
+            }
+        }
+        
+        if !item_exist {
+            current_item = items[len(items) - 1]
+            menu.current_footer_item = current_item
+        }
+    }
+
+    for item, index in items {
+        sizing, anchor, text_anchor := menu_helper_calculate_footer_layout(index, len(items))
+        is_selected := menu.switch_next && is_focused && current_item == item
+
+        switch item {
+            case .Back:
+                rect, _, is_clicked := ui_push_rect(
+                    ui, sizing, anchor,
+                    interactive = {
+                        id            = back_id,
+                        hovered_color = hsv(140, 0.5, 1, 0.2),
+                        held_color    = hsv(140, 0.5, 0.5, 0.2),
+                    }
+                )
+
+                if is_clicked || is_selected {
+                    game_save_settings()
+                    should_close = true
+                }
+
+                ui_push_container(ui, rect)
+                {
+                    defer ui_pop_container(ui)
+                    text_rect := ui_push_text(
+                        ui,
+                        text   = tr(.Back),
+                        anchor = text_anchor,
+                        color  = (
+                            is_focused && current_item == item ?
+                            hsv(140, 0.5, 1) :
+                            hsv(140, 1, 0.8)
+                        ),
+                        padding = 32,
+                    )
+
+                    ui_push_container(ui, text_rect)
+                    {
+                        defer ui_pop_container(ui)
+                        
+                        ui_push_rect(
+                            ui,
+                            icon   = .Left_Arrow,
+                            sizing = { Fixed{32}, Fixed{32} },
+                            anchor = { element = {1, .5}, parent = {0, .5}, offset = {-8 + 32, 0}},
+                            color  = hsv(140, 1, .8),
+                        )
+                    }
+                }
+            case .Defaults:
+                rect, _, is_clicked := ui_push_rect(
+                    ui,
+                    sizing = sizing,
+                    anchor = anchor,
+                    interactive = {
+                        id            = defaults_id,
+                        hovered_color = hsv(140, 0.5, 1, 0.2),
+                        held_color    = hsv(140, 0.5, 0.5, 0.2),
+                    }
+                )
+
+                if is_clicked || is_selected {
+                    settings^ = settings_default
+                    settings_apply(settings^)
+                }
+
+                ui_push_container(ui, rect)
+                {
+                    defer ui_pop_container(ui)
+                    ui_push_text(
+                        ui,
+                        text   = tr(.Defaults),
+                        anchor = text_anchor,
+                        color  = (
+                            is_focused && current_item == item ?
+                            hsv(140, 0.5, 1) :
+                            hsv(140, 1, 0.8)
+                        ),
+                        padding = 32,
+                    )
+                }
         }
     }
 

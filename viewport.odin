@@ -5,8 +5,8 @@ import sg "sokol-odin/sokol/gfx"
 import sglue "sokol-odin/sokol/glue"
 import "shaders"
 
-WINDOW_CLEAR_COLOR     : sg.Color : {0, 0, 0, 0}
-VIEWPORT_CLEAR_COLOR   : sg.Color : {0.02, 0.078, 0.078, 1}
+WINDOW_CLEAR_COLOR   : sg.Color : {0, 0, 0, 0}
+VIEWPORT_CLEAR_COLOR : sg.Color : {0.02, 0.078, 0.078, 1}
 
 Viewport :: struct {
 	base_size : [2]f32,

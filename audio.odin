@@ -25,9 +25,11 @@ music_files : [Music_Id][]byte = {
 }
 
 Audio :: struct{
-	engine     : ma.engine,
-	sound_map  : [Sound_Id]Sound,
-	music_map  : [Music_Id]Music,
+	engine      : ma.engine,
+	sound_group : ma.sound_group,
+	music_group : ma.sound_group, 
+	sound_map   : [Sound_Id]Sound,
+	music_map   : [Music_Id]Music,
 }
 
 Audio_Data :: struct {
@@ -67,6 +69,7 @@ audio_make_audio_data  :: proc(
 	audio_data : ^Audio_Data,
 	file_data  : []byte,
     loop       : bool,
+	group      : ^ma.sound_group,
 ) {
 	frame_count: u64
 
@@ -126,6 +129,7 @@ audio_make_sound  :: proc(
         &aud.sound_map[sound_id].audio_data,
         file_data,
         false,
+		&aud.sound_group,
     )
 }
 
@@ -138,7 +142,8 @@ audio_make_music  :: proc(
         aud,
         &aud.music_map[music_id].audio_data,
         file_data,
-        true
+        true,
+		&aud.music_group,
     )
 }
 
@@ -185,4 +190,16 @@ audio_play_music :: proc(aud : ^Audio, music_id : Music_Id){
 	ma_sound := &aud.music_map[music_id].ma_sound
 	ma.sound_seek_to_pcm_frame(ma_sound, 0)
 	ma.sound_start(ma_sound)
+}
+
+audio_apply_master_volume :: proc(aud : ^Audio, linear_volume : f32) {
+	ma.engine_set_volume(&aud.engine, linear_volume)
+}
+
+audio_apply_music_volume :: proc(aud : ^Audio, linear_volume : f32) {
+	ma.sound_group_set_volume(&aud.music_group, linear_volume)
+}
+
+audio_apply_sound_volume :: proc(aud : ^Audio, linear_volume : f32) {
+	ma.sound_group_set_volume(&aud.sound_group, linear_volume)
 }

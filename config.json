@@ -2,7 +2,7 @@
 	"graphics": {
 		"resolution": "Resolution_1280x720",
 		"fullscreen": true,
-		"gamma": 1.30000007
+		"gamma": 1.00000000
 	},
 	"controls": {
 		"horizontal_sensitivity": 3,
