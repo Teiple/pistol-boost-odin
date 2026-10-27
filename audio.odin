@@ -55,10 +55,16 @@ audio_init  :: proc(aud : ^Audio) {
 	res := ma.engine_init(nil, &aud.engine)
 	assert(res == .SUCCESS)
 
-    for sound_bytes, id in sound_files {
+	res = ma.sound_group_init(&aud.engine, {}, nil, &aud.sound_group)
+    assert(res == .SUCCESS)
+
+	for sound_bytes, id in sound_files {
         audio_make_sound(aud, id, sound_bytes)
     }
 
+	res = ma.sound_group_init(&aud.engine, {}, nil, &aud.music_group)
+    assert(res == .SUCCESS)
+	
     for music_bytes, id in music_files {
         audio_make_music(aud, id, music_bytes)
     }
@@ -176,6 +182,9 @@ audio_destroy  :: proc(aud : ^Audio) {
 	for _, id in aud.music_map {
 		audio_destroy_music(aud, id)
 	}
+
+	ma.sound_group_uninit(&aud.sound_group)
+	ma.sound_group_uninit(&aud.music_group)
 	
 	ma.engine_uninit(&aud.engine)
 }

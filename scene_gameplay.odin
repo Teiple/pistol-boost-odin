@@ -13,7 +13,8 @@ Scene_Gameplay :: struct {
     init       : Scene_Init,
     test_model : Model,
     meshes     : [dynamic]Mesh,
-    menu_stack : Menu_Stack,    
+    menu_stack : Menu_Stack,
+    physics    : Physics,
 }
 
 SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
@@ -24,17 +25,21 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         menu_stack_init(&scene.menu_stack)
         model_init_from_gltf(&scene.test_model, #load("assets/models/pistol.glb"))
         
-        audio_play_sound(game_audio(), .Fire_Primary)
+        physics_init(&scene.physics)
     },
     destroy = proc(scene : ^Scene_Gameplay) {
-        model_destroy(&scene.test_model)
+        physics_destroy(&scene.physics)
 
+        model_destroy(&scene.test_model)
         menu_stack_destroy(&scene.menu_stack)
         
         for &m in scene.meshes {
             mesh_destroy(&m)
         }
         delete(scene.meshes)
+    },
+    update_3d = proc(scene : ^Scene_Gameplay, dt : f32) {
+        physics_update_3d(&scene.physics, dt)
     },
     update_ui = proc(scene : ^Scene_Gameplay, ui : ^Ui) {
         ui_push_text(
@@ -46,16 +51,6 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         menu_stack_update_ui(&scene.menu_stack, ui)
     },
     draw_3d = proc(scene : ^Scene_Gameplay, renderer : ^Renderer) {
-        // for &m in scene.meshes {
-        //     renderer_draw_mesh(renderer, &m, 
-        //         {}, linalg.quaternion_from_pitch_yaw_roll(
-        //             game_time().scaled_time,
-        //             game_time().scaled_time * .25,
-        //             game_time().scaled_time * .5,
-        //         )
-        //     )
-        // }
-
         model_sample_bone_animation(
             model           = &scene.test_model,
             animation_index = 0,
