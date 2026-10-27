@@ -41,3 +41,32 @@ camera_view_projection_matrix :: proc(camera: ^Camera, vp: ^Viewport) -> matrix[
 
 	return proj * view
 }
+
+Follow_Camera :: struct {
+	enabled    : bool,
+	target     : [3]f32,
+	offset     : [3]f32,
+	smoothness : f32,
+}
+
+follow_camera_init :: proc(follow_cam: ^Follow_Camera, offset: [3]f32 = {0, 0, 3.0}, smoothness: f32 = 12.0) {
+	follow_cam^ = {
+		enabled    = true,
+		offset     = offset,
+		smoothness = smoothness,
+	}
+}
+
+follow_camera_update_3d :: proc(follow_cam: ^Follow_Camera, camera: ^Camera, target_pos: [3]f32, dt: f32) {
+	if !follow_cam.enabled do return
+
+	follow_cam.target = linalg.lerp(
+		follow_cam.target,
+		target_pos,
+		clamp(follow_cam.smoothness * dt, 0, 1),
+	)
+
+	camera.target   = follow_cam.target
+	camera.position = follow_cam.target + follow_cam.offset
+	camera.up       = {0, 1, 0}
+}

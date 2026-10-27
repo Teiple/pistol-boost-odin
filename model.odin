@@ -10,18 +10,18 @@ import gltf "glTF2"
 import sg "sokol-odin/sokol/gfx"
 
 Model_Vertex :: struct {
-	position : [3]f32,
 	color    : [4]f32,
-	uv       : [2]f32,
 	joints   : [4]f32,
 	weights  : [4]f32,
+	position : [3]f32,
+	uv       : [2]f32,
 }
 
 Model_Bone :: struct {
-	parent         : int,
-	local_position : [3]f32, 
-	local_rotation : quaternion128,
 	model_matrix   : matrix[4,4]f32,
+	local_rotation : quaternion128,
+	local_position : [3]f32, 
+	parent         : int,
 }
 
 Model_Animation_Channel :: union {
@@ -30,15 +30,15 @@ Model_Animation_Channel :: union {
 }
 
 Model_Animation_Position_Channel :: struct {
-	bone_index : int,
-	timestamps : [dynamic]f32,
 	positions  : [dynamic][3]f32,
+	timestamps : [dynamic]f32,
+	bone_index : int,
 }
 
 Model_Animation_Rotation_Channel :: struct {
-	bone_index : int,
-	timestamps : [dynamic]f32,
 	rotations  : [dynamic]quaternion128,
+	timestamps : [dynamic]f32,
+	bone_index : int,
 }
 
 Model_Animation :: struct {
@@ -74,7 +74,6 @@ MODEL_ATTRIBUTES :: [Model_Attribute]string {
 model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := context.allocator) {
 	dat, err := gltf.parse(file_data, { is_glb = true })
 	assert(err == nil)
-	
 	defer gltf.unload(dat)
 
 	skin := dat.skins[0]
