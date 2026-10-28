@@ -150,10 +150,10 @@ player_update_aim :: proc(
 		x_axis.y, y_axis.y, z_axis.y,
 		x_axis.z, y_axis.z, z_axis.z,
 	}
-	target_quat := linalg.quaternion_from_matrix3(mat)
+	target_quat  := linalg.quaternion_from_matrix3(mat)
 	current_quat := b3.Body_GetRotation(player.body)
 
-	diff_quat := target_quat * linalg.quaternion_inverse(current_quat)
+	diff_quat   := target_quat * linalg.quaternion_inverse(current_quat)
 	angle, axis := linalg.angle_axis_from_quaternion(diff_quat)
 
 	if angle > math.PI do angle -= math.TAU
@@ -170,12 +170,9 @@ player_draw_3d :: proc(player: ^Player, renderer : ^Renderer) {
 
 	body_mat   := linalg.matrix4_translate_f32(pos) * linalg.matrix4_from_quaternion(rot)
 	visual_mat := linalg.matrix4_translate_f32(player.visual_offset.position) * linalg.matrix4_from_quaternion(player.visual_offset.rotation)
-	final_mat   := body_mat * visual_mat
+	final_mat  := body_mat * visual_mat
 
-	final_position := [3]f32{final_mat[0, 3], final_mat[1, 3], final_mat[2, 3]}
-	final_rotation := linalg.quaternion_from_matrix4(final_mat)
-
-    renderer_draw_model(renderer, player.model, final_position, final_rotation)
+    renderer_draw_model(renderer, player.model, final_mat)
 }
 
 player_get_position :: proc(player: ^Player) -> [3]f32 {

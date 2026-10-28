@@ -33,8 +33,8 @@ mouse_init :: proc(mouse : ^Mouse_Input) {
 
 mouse_input :: proc(mouse : ^Mouse_Input, vp : ^Viewport, ev : sapp.Event) {
     if ev.type == .MOUSE_MOVE {
-        mouse.position += viewport_get_vp_mouse_delta(vp, mouse.sensitivity * {ev.mouse_dx, ev.mouse_dy * (mouse.invert_y ? -1 : 1)})
-        mouse.position  = viewport_get_vp_confine_mouse_pos(vp, mouse.position)
+        mouse.position += viewport_get_viewport_mouse_delta(vp, mouse.sensitivity * {ev.mouse_dx, ev.mouse_dy * (mouse.invert_y ? -1 : 1)})
+        mouse.position  = viewport_confine_mouse_pos(vp, mouse.position)
     }
 
     #partial switch ev.type {

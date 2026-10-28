@@ -133,21 +133,20 @@ renderer_draw_mesh :: proc(
 	sg.draw(0, mesh.index_count, 1)
 }
 
-renderer_draw_model :: proc(
-	renderer : ^Renderer,
-	model    : Model,
-	position: [3]f32,
-	rotation : quaternion128,
-) {
-	camera   := renderer.camera
-	viewport := renderer.viewport
+renderer_draw_model :: proc {
+	renderer_draw_model_by_matrix,
+	renderer_draw_model_by_transform,
+}
 
+renderer_draw_model_by_matrix :: proc(
+	renderer     : ^Renderer,
+	model        : Model,
+	model_matrix : matrix[4, 4]f32,
+) {
 	sg.apply_pipeline(renderer.pip_resources[.Skinned_Unlit_Triangles].pipeline)
 	
-	model_matrix := linalg.matrix4_translate(position) * linalg.matrix4_from_quaternion(rotation)
-
 	params : shaders.Skinned_Vs_Params = {
-		mvp   = camera_view_projection_matrix(camera, viewport) * model_matrix,
+		mvp = camera_view_projection_matrix(renderer.camera, renderer.viewport) * model_matrix,
 	}
 
 	assert(len(model.model_to_bone_matrix) <= len(params.bones))
@@ -160,4 +159,15 @@ renderer_draw_model :: proc(
 	sg.apply_bindings(model.bindings)
 
 	sg.draw(0, model.index_count, 1)
+}
+
+renderer_draw_model_by_transform :: proc(
+	renderer : ^Renderer,
+	model    : Model,
+	position: [3]f32,
+	rotation : quaternion128,
+) {
+	model_matrix := linalg.matrix4_translate(position) * linalg.matrix4_from_quaternion(rotation)
+	
+	renderer_draw_model_by_matrix(renderer, model, model_matrix)
 }
