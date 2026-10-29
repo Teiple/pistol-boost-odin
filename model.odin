@@ -46,6 +46,10 @@ Model_Animation :: struct {
 	name       : string,
 }
 
+Animation_Loop_Mode :: enum {
+	Once, Loop, Hold
+}
+
 Model :: struct {
 	bones                : [dynamic]Model_Bone,
 	model_to_bone_matrix : [dynamic]matrix[4,4]f32, 
@@ -353,4 +357,54 @@ model_calculate_hierachy :: proc(model: ^Model) {
 			bone.model_matrix = model.bones[bone.parent].model_matrix * local_matrix
 		}
 	}
+}
+
+
+Model_Animation_Play :: struct {
+	animation_index : int,
+	current_time    : f32,
+	loop_mode       : Animation_Loop_Mode,
+}
+
+model_play_animation :: proc(
+	anim_play  : ^Model_Animation_Play,
+	anim_index : int,
+	loop       : Animation_Loop_Mode = .Hold
+) {
+	anim_play.animation_index = anim_index
+	anim_play.current_time    = 0
+	anim_play.loop_mode       = loop
+}
+
+model_play_animation_by_name :: proc(model: ^Model, name: string, loop: Animation_Loop_Mode = .Loop) -> bool {
+	for anim, idx in model.animations {
+		if anim.name == name {
+			model_play_animation(model, idx, loop)
+			return true
+		}
+	}
+	return false
+}
+
+model_update_animation :: proc(model: ^Model, dt: f32) {
+	if !model.is_animating || len(model.animations) == 0 do return
+
+	anim := &model.animations[model.current_animation]
+	if anim.duration <= 0 do return
+
+	model.current_time += dt
+
+	if model.current_time >= anim.duration {
+		switch model.loop_mode {
+		case .Loop:
+			model.current_time = math.mod(model.current_time, anim.duration)
+		case .Once:
+			model.current_time = anim.duration
+			model.is_animating = false
+		case .Hold:
+			model.current_time = anim.duration
+		}
+	}
+
+	model_sample_animation(model, model.current_animation, model.current_time)
 }

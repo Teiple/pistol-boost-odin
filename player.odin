@@ -103,21 +103,28 @@ player_destroy :: proc(player: ^Player) {
 	model_destroy(&player.model)
 }
 
-player_update :: proc(player: ^Player, camera: ^Camera, vp: ^Viewport, audio: ^Audio, dt: f32) {
+player_update_3d :: proc(
+	player   : ^Player,
+	camera   : ^Camera,
+	viewport : ^Viewport,
+	mouse    : ^Mouse_Input,
+	audio    : ^Audio,
+	dt       : f32,
+) {
 	model_update_animation(&player.model, dt)
 
-	target_pos := viewport_get_mouse_world_position_on_zplane(vp, camera, 0)
+	target_pos := viewport_get_mouse_world_position_on_zplane(viewport, camera, 0)
 	player_update_aim(player, target_pos)
 
-	if is_mouse_pressed(.Left) {
-		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_offset)
+	if mouse.state[.Left] == .Pressed {
+		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
 		recoil_dir := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2.0, recoil_point, true)
 
 		audio_play_sound(audio, .Fire_Primary)
 		model_play_animation_by_name(&player.model, "fire", .Once)
-	} else if is_mouse_pressed(.Right) {
-		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_offset)
+	} else if mouse.state[.Right] == .Pressed {
+		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
 		recoil_dir := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 4.0, recoil_point, true)
 
