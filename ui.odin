@@ -749,7 +749,7 @@ ui_push_cursor :: proc(
     position  : [2]f32,
     size      : [2]f32 = 32,
     tint      : [4]f32 = 1,
-    alignment : [2]f32  = {0, 0}
+    alignment : [2]f32 = {0, 0}
 ) {
     start_index := len(ui.indices)
     start_vert  := len(ui.vertices)

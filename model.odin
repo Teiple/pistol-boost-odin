@@ -10,11 +10,11 @@ import gltf "glTF2"
 import sg "sokol-odin/sokol/gfx"
 
 Model_Vertex :: struct {
+	position : [3]f32,
 	color    : [4]f32,
+	uv       : [2]f32,
 	joints   : [4]f32,
 	weights  : [4]f32,
-	position : [3]f32,
-	uv       : [2]f32,
 }
 
 Model_Bone :: struct {
@@ -44,10 +44,12 @@ Model_Animation_Rotation_Channel :: struct {
 Model_Animation :: struct {
 	channels   : [dynamic]Model_Animation_Channel,
 	name       : string,
+	duration   : f32,
 }
 
 Animation_Loop_Mode :: enum {
-	Once, Loop, Hold
+	Once,
+	Loop
 }
 
 Model :: struct {
@@ -132,7 +134,7 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 			assert(len(color)   == vert_count)
 			assert(len(uv)      == vert_count)
 			assert(len(weights) == vert_count)
-			assert(len(joints) == vert_count)
+			assert(len(joints)  == vert_count)
 			
 			indices := gltf.buffer_slice(dat, prim.indices.?).([]u16)
 			
@@ -168,6 +170,8 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 			)
 		}
 
+		duration : f32 = 0 
+
 		for channel_index in 0..<len(anim.channels) {
 			channel := anim.channels[channel_index]
 			node, is_animating_node := channel.target.node.?
@@ -177,11 +181,17 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 			
 			sampler := anim.samplers[channel.sampler]
 			
+			raw_timestamps := gltf.buffer_slice(dat, sampler.input).([]f32)
+
+			if len(raw_timestamps) > 0 {
+				duration = max(raw_timestamps[len(raw_timestamps) - 1], duration)
+			}
+			
 			#partial switch channel.target.path {
 				case .Translation:
 					append(&model.animations[i].channels, {
 						bone_index = bone_index,
-						timestamps = slice.clone_to_dynamic(gltf.buffer_slice(dat, sampler.input).([]f32), allocator = allocator),
+						timestamps = slice.clone_to_dynamic(raw_timestamps, allocator = allocator),
 						positions  = slice.clone_to_dynamic(gltf.buffer_slice(dat, sampler.output).([][3]f32), allocator = allocator),
 					})
 				case .Rotation:
@@ -195,11 +205,13 @@ model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := co
 
 					append(&model.animations[i].channels, {
 						bone_index = bone_index,
-						timestamps = slice.clone_to_dynamic(gltf.buffer_slice(dat, sampler.input).([]f32), allocator = allocator),
+						timestamps = slice.clone_to_dynamic(raw_timestamps, allocator = allocator),
 						rotations  = clone_to_quaternions(gltf.buffer_slice(dat, sampler.output).([][4]f32), allocator = allocator),
 					})
 			}
 		}
+
+		model.animations[i].duration = duration
 	}
 
 	model.index_count = i32(len(model_indices))
@@ -361,50 +373,40 @@ model_calculate_hierachy :: proc(model: ^Model) {
 
 
 Model_Animation_Play :: struct {
-	animation_index : int,
 	current_time    : f32,
+	animation_index : int,
 	loop_mode       : Animation_Loop_Mode,
+	is_active       : bool,
 }
 
-model_play_animation :: proc(
-	anim_play  : ^Model_Animation_Play,
-	anim_index : int,
-	loop       : Animation_Loop_Mode = .Hold
-) {
-	anim_play.animation_index = anim_index
-	anim_play.current_time    = 0
-	anim_play.loop_mode       = loop
-}
-
-model_play_animation_by_name :: proc(model: ^Model, name: string, loop: Animation_Loop_Mode = .Loop) -> bool {
-	for anim, idx in model.animations {
-		if anim.name == name {
-			model_play_animation(model, idx, loop)
-			return true
-		}
+model_update_animation_play :: proc(model: ^Model, play : ^Model_Animation_Play, dt: f32) {
+	if !play.is_active {
+		return
 	}
-	return false
-}
 
-model_update_animation :: proc(model: ^Model, dt: f32) {
-	if !model.is_animating || len(model.animations) == 0 do return
-
-	anim := &model.animations[model.current_animation]
-	if anim.duration <= 0 do return
-
-	model.current_time += dt
-
-	if model.current_time >= anim.duration {
-		switch model.loop_mode {
-		case .Loop:
-			model.current_time = math.mod(model.current_time, anim.duration)
+	model_sample_bone_animation(model, play.animation_index, play.current_time)
+	play.current_time += dt	
+	anim := &model.animations[play.animation_index]
+	
+	switch play.loop_mode {
 		case .Once:
-			model.current_time = anim.duration
-			model.is_animating = false
-		case .Hold:
-			model.current_time = anim.duration
+			play.current_time = math.min(play.current_time, anim.duration)
+		case .Loop:
+			play.current_time = math.mod(play.current_time, anim.duration)
+	}
+}
+
+model_play_animation :: proc(model : ^Model, play : ^Model_Animation_Play, animation_name : string, loop_mode : Animation_Loop_Mode) {
+	for &anim, index in model.animations {
+		if anim.name == animation_name {
+			play^ = {
+				animation_index = index,
+				current_time    = 0,
+				is_active       = true,
+				loop_mode       = loop_mode,
+			}
+			return
 		}
 	}
-
-	model_sample_animation(model, model.current_animation, model.current_time)
+	panic("Cannot found animation!")
 }

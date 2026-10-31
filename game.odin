@@ -81,7 +81,7 @@ game_update :: proc(unscaled_dt : f32) {
 		// cursor drawed on top
 		ui_push_cursor(&game.ui,
 			position = game.mouse.position,
-			tint     = hsv(200)
+			tint     = hsv(0, 0, 1)
 		)
 		ui_end(&game.ui, &game.viewport)
 	}
@@ -174,6 +174,22 @@ game_lang :: proc() -> Language {
 	return game.settings.language
 }
 
+game_audio :: proc() -> ^Audio {
+	return &game.audio
+}
+
+game_camera :: proc() -> ^Camera {
+	return &game.camera
+}
+
+game_viewport :: proc() -> ^Viewport {
+	return &game.viewport
+}
+
+game_mouse :: proc() -> ^Mouse_Input {
+	return &game.mouse
+}
+
 // Utilities
 game_lang_is_cjk :: proc() -> bool {
 	#partial switch game.settings.language {
@@ -210,10 +226,6 @@ game_request_size :: proc(size : [2]f32) {
 
 game_save_settings :: proc() {
 	settings_save(game.settings)
-}
-
-game_audio :: proc() -> ^Audio {
-	return &game.audio
 }
 
 game_set_mouse_sensitivity :: proc(sensitivity: [2]f32) {

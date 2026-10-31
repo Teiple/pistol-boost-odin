@@ -10,11 +10,12 @@ Scene_Init :: struct {
 }
 
 Scene_Gameplay :: struct {
-    init       : Scene_Init,
-    test_model : Model,
     meshes     : [dynamic]Mesh,
-    menu_stack : Menu_Stack,
     physics    : Physics,
+    init       : Scene_Init,
+    menu_stack : Menu_Stack,
+    test_model : Model,
+    player     : Player,
 }
 
 SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
@@ -26,8 +27,10 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         model_init_from_gltf(&scene.test_model, #load("assets/models/pistol.glb"))
         
         physics_init(&scene.physics)
+        player_init(&scene.player, scene.physics.world, {0, 0, 0})
     },
     destroy = proc(scene : ^Scene_Gameplay) {
+        player_destroy(&scene.player)
         physics_destroy(&scene.physics)
 
         model_destroy(&scene.test_model)
@@ -39,6 +42,15 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         delete(scene.meshes)
     },
     update_3d = proc(scene : ^Scene_Gameplay, dt : f32) {
+        player_update_3d(
+            &scene.player,
+            game_camera(),
+            game_viewport(),
+            game_mouse(),
+            game_audio(),
+            dt
+        )
+
         physics_update_3d(&scene.physics, dt)
     },
     update_ui = proc(scene : ^Scene_Gameplay, ui : ^Ui) {
@@ -51,22 +63,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         menu_stack_update_ui(&scene.menu_stack, ui)
     },
     draw_3d = proc(scene : ^Scene_Gameplay, renderer : ^Renderer) {
-        model_sample_bone_animation(
-            model           = &scene.test_model,
-            animation_index = 0,
-            at_timestamp    = math.mod(game_time().scaled_time, 1.0),
-        )
-
-        renderer_draw_model(
-            renderer,
-            model    = scene.test_model,
-            position = 0,
-            rotation = linalg.quaternion_from_pitch_yaw_roll(
-                game_time().scaled_time * .25,
-                game_time().scaled_time * .5,
-                game_time().scaled_time,
-            )
-        )
+        player_draw_3d(&scene.player, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ui: ^Ui, ev : sapp.Event) {
         if menu_stack_top(&scene.menu_stack) != nil {
