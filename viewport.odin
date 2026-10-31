@@ -97,11 +97,17 @@ viewport_init :: proc(viewport : ^Viewport, base_size : [2]f32, window_size : [2
 				} 
 			},
 			depth = {
+				pixel_format  = .NONE,
 				write_enabled = false,
 				compare       = .ALWAYS,
 			},
 			primitive_type = .TRIANGLES,
 			cull_mode      = .NONE,
+			// colors         = {
+			// 	0 = {
+			// 		pixel_format = .RGBA8,
+			// 	}
+			// }
 		})
 
 		// the quad that covers the screen 
