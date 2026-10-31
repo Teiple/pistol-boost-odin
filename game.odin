@@ -54,7 +54,7 @@ game_init :: proc() {
 		clear_color = VIEWPORT_DEFAULT_CLEAR_COLOR,
 	)
 
-	camera_init_default(&game.camera, {0, .2, .5}, {0, 0, 0})
+	camera_init_default(&game.camera, {0, .2, 2}, {0, 0, 0})
 	renderer_init(&game.renderer)
 	audio_init(&game.audio)
 	

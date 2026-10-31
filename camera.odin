@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import math "core:math"
 import linalg "core:math/linalg"
 
@@ -26,14 +27,14 @@ camera_destroy :: proc(camera : ^Camera) {
 }
 
 camera_view_projection_matrix :: proc(camera: ^Camera, vp: ^Viewport) -> matrix[4, 4]f32 {
-	proj := linalg.matrix4_perspective_f32(
-		fovy   = math.to_radians_f32(camera.fovy_degrees),
+	proj := linalg.matrix4_perspective(
+		fovy   = math.to_radians(camera.fovy_degrees),
 		aspect = viewport_get_aspect(vp),
 		near   = camera.near,
 		far    = camera.far,
 	)
 
-	view := linalg.matrix4_look_at_f32(
+	view := linalg.matrix4_look_at(
 		eye    = camera.position,
 		centre = camera.target,
 		up     = camera.up,
@@ -58,12 +59,14 @@ follow_camera_init :: proc(follow_cam: ^Follow_Camera, offset: [3]f32 = {0, 0, 3
 }
 
 follow_camera_update_3d :: proc(follow_cam: ^Follow_Camera, camera: ^Camera, target_pos: [3]f32, dt: f32) {
-	if !follow_cam.enabled do return
+	if !follow_cam.enabled {
+		return
+	}
 
 	follow_cam.target = linalg.lerp(
 		follow_cam.target,
 		target_pos,
-		clamp(follow_cam.smoothness * dt, 0, 1),
+		follow_cam.smoothness * dt,
 	)
 	
 	camera.target   = follow_cam.target

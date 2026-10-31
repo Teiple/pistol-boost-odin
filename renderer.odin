@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import "core:slice"
 import "core:math/linalg"
 import sg "sokol-odin/sokol/gfx"

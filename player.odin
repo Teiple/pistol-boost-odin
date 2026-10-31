@@ -33,7 +33,6 @@ player_init :: proc(
 	body_def.position            = position
 	body_def.rotation            = linalg.QUATERNIONF32_IDENTITY
 	body_def.motionLocks.linearZ = true
-	body_def.gravityScale        = 0
 
 	player.body = b3.CreateBody(physics.world, body_def)
 
@@ -117,14 +116,21 @@ player_destroy :: proc(player: ^Player) {
 	model_destroy(&player.model)
 }
 
-player_update_3d :: proc(
-	player   : ^Player,
+Player_Context :: struct {
 	camera   : ^Camera,
 	viewport : ^Viewport,
 	mouse    : ^Mouse_Input,
-	audio    : ^Audio,
+	audio    : ^Audio,	
+}
+
+player_update_3d :: proc(
+	player   : ^Player,
+	ctx      : Player_Context,
 	dt       : f32,
 ) {
+	// Made me remeber the Javascript days
+	camera, viewport, mouse, audio := expand_values(ctx)
+
 	model_update_animation_play(&player.model, &player.animation_play, dt)
 
 	target_pos := viewport_get_mouse_world_position_on_zplane(viewport, camera, mouse.position)
@@ -133,14 +139,14 @@ player_update_3d :: proc(
 	if mouse.state[.Left] == .Pressed {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
 		recoil_dir   := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
-		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2.0, recoil_point, true)
+		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2., recoil_point, true)
 
 		audio_play_sound(audio, .Fire_Primary)
 		model_play_animation(&player.model, &player.animation_play, "fire", .Once) 
 	} else if mouse.state[.Right] == .Pressed {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
 		recoil_dir   := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
-		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 4.0, recoil_point, true)
+		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 4., recoil_point, true)
 
 		audio_play_sound(audio, .Fire_Secondary)
 		model_play_animation(&player.model, &player.animation_play, "fire", .Once) 
