@@ -61,6 +61,7 @@ renderer_init :: proc(renderer : ^Renderer) {
 					},
 					cull_mode   = .BACK,
 					depth       = {
+						pixel_format  = .DEPTH,
 						write_enabled = true,
 						compare       = .LESS_EQUAL
 					},
@@ -81,6 +82,7 @@ renderer_init :: proc(renderer : ^Renderer) {
 					},
 					cull_mode   = .BACK,
 					depth       = {
+						pixel_format  = .DEPTH,
 						write_enabled = true,
 						compare       = .LESS_EQUAL
 					},

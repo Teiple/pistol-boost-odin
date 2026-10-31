@@ -148,6 +148,7 @@ ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config, allocator := cont
         },
         colors      = {
             0 = {
+                pixel_format = .RGBA8, // must specify since Windows and stuff
                 blend = {
                     enabled = true,
                     // standard color overlay i guess
