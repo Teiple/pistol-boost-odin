@@ -42,13 +42,17 @@ game_init :: proc() {
 
 	game_time_init(&game.time)
 
-	viewport_init(&game.viewport, {
+	viewport_init(&game.viewport,
+		base_size   = {
 			VIEWPORT_BASE_WIDTH,
 			VIEWPORT_BASE_HEIGHT
-		}, {
+		},
+		window_size = {
 			sapp.widthf(),
 			sapp.heightf(),
-	})
+		},
+		clear_color = VIEWPORT_DEFAULT_CLEAR_COLOR,
+	)
 
 	camera_init_default(&game.camera, {0, .2, .5}, {0, 0, 0})
 	renderer_init(&game.renderer)
@@ -119,6 +123,9 @@ game_update :: proc(unscaled_dt : f32) {
 		game.scene = game.pending_scene.?
 		game.pending_scene = nil
 		
+		// Reset clear color
+		viewport_set_clear_color(&game.viewport, VIEWPORT_DEFAULT_CLEAR_COLOR)
+
 		game.scene_callbacks = scene_boot(&game.scene)
 		game_time_reset_time_scale(&game.time)
 	}

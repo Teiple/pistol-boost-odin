@@ -65,7 +65,7 @@ follow_camera_update_3d :: proc(follow_cam: ^Follow_Camera, camera: ^Camera, tar
 		target_pos,
 		clamp(follow_cam.smoothness * dt, 0, 1),
 	)
-
+	
 	camera.target   = follow_cam.target
 	camera.position = follow_cam.target + follow_cam.offset
 	camera.up       = {0, 1, 0}

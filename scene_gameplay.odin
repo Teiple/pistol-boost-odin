@@ -1,8 +1,5 @@
 package main
 
-import "core:math"
-import "core:fmt"
-import "core:math/linalg"
 import sapp "sokol-odin/sokol/app"
 
 Scene_Init :: struct {
@@ -10,12 +7,13 @@ Scene_Init :: struct {
 }
 
 Scene_Gameplay :: struct {
-    meshes     : [dynamic]Mesh,
-    physics    : Physics,
-    init       : Scene_Init,
-    menu_stack : Menu_Stack,
-    test_model : Model,
-    player     : Player,
+    meshes        : [dynamic]Mesh,
+    physics       : Physics,
+    follow_camera : Follow_Camera,
+    init          : Scene_Init,
+    menu_stack    : Menu_Stack,
+    test_model    : Model,
+    player        : Player,
 }
 
 SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
@@ -27,7 +25,10 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         model_init_from_gltf(&scene.test_model, #load("assets/models/pistol.glb"))
         
         physics_init(&scene.physics)
-        player_init(&scene.player, scene.physics.world, {0, 0, 0})
+        player_init(&scene.player, &scene.physics, {0, 0, 0})
+        follow_camera_init(&scene.follow_camera)
+
+        viewport_set_clear_color(game_viewport(), hsv(140, 0.4, 0.2))
     },
     destroy = proc(scene : ^Scene_Gameplay) {
         player_destroy(&scene.player)
@@ -42,6 +43,10 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         delete(scene.meshes)
     },
     update_3d = proc(scene : ^Scene_Gameplay, dt : f32) {
+        physics_update_3d(
+            &scene.physics,dt
+        )
+        
         player_update_3d(
             &scene.player,
             game_camera(),
@@ -51,7 +56,16 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
             dt
         )
 
-        physics_update_3d(&scene.physics, dt)
+        follow_camera_update_3d(
+            &scene.follow_camera,
+            game_camera(),
+            player_get_interpolated_position(
+                &scene.player,
+                &scene.physics,
+            ),
+            dt,
+        )
+
     },
     update_ui = proc(scene : ^Scene_Gameplay, ui : ^Ui) {
         ui_push_text(
@@ -63,7 +77,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         menu_stack_update_ui(&scene.menu_stack, ui)
     },
     draw_3d = proc(scene : ^Scene_Gameplay, renderer : ^Renderer) {
-        player_draw_3d(&scene.player, renderer)
+        player_draw_3d(&scene.player, &scene.physics, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ui: ^Ui, ev : sapp.Event) {
         if menu_stack_top(&scene.menu_stack) != nil {

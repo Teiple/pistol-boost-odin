@@ -6,13 +6,13 @@ import sglue "sokol-odin/sokol/glue"
 import "shaders"
 import linalg "core:math/linalg"
 
-WINDOW_CLEAR_COLOR   : sg.Color : {0, 0, 0, 0}
-VIEWPORT_CLEAR_COLOR : sg.Color : {0.02, 0.078, 0.078, 1}
+WINDOW_CLEAR_COLOR           : sg.Color : {0, 0, 0, 0}
+VIEWPORT_DEFAULT_CLEAR_COLOR : [4]f32   : {0.02, 0.078, 0.078, 1}
 
 Viewport :: struct {
-	base_size : [2]f32,
+	base_size         : [2]f32,
 	pending_base_size : [2]f32,
-	dest_rect : [4]f32,
+	dest_rect         : [4]f32,
 
 	scale : f32,
 	gamma : f32,
@@ -67,14 +67,14 @@ viewport_destroy_offscreen_sizing :: proc(viewport : ^Viewport) {
 	sg.destroy_image(viewport.offscreen_depth_img)
 }
 
-viewport_init :: proc(viewport : ^Viewport, base_size : [2]f32, window_size : [2]f32) {
-	viewport.base_size = base_size
+viewport_init :: proc(viewport : ^Viewport, base_size : [2]f32, window_size : [2]f32, clear_color : [4]f32) {
+	viewport.base_size   = base_size
 
 	// Offscreen pipeline & bindingns
 	viewport_init_offscreen_size(viewport)
 	viewport.offscreen_pass.action.colors[0] = {
 		load_action = .CLEAR,
-		clear_value = VIEWPORT_CLEAR_COLOR,
+		clear_value = {expand_values(clear_color)},
 	}
 
 	// Display pipeline & bindings
@@ -274,4 +274,11 @@ viewport_get_mouse_world_position_on_zplane :: proc(viewport: ^Viewport, camera:
 
 	t := (z_plane - p_near.z) / ray_dir.z
 	return p_near + ray_dir * t
+}
+
+viewport_set_clear_color :: proc(viewport : ^Viewport, color : [4]f32) {
+	viewport.offscreen_pass.action.colors[0] = {
+		load_action = .CLEAR,
+		clear_value = {expand_values(color)},
+	}
 }

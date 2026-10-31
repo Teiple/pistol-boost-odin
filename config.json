@@ -1,7 +1,7 @@
 {
 	"graphics": {
 		"resolution": "Resolution_1280x720",
-		"fullscreen": true,
+		"fullscreen": false,
 		"gamma": 1.00000000
 	},
 	"controls": {
@@ -12,7 +12,7 @@
 	"language": "English",
 	"audio": {
 		"master_volume": 1.00000000,
-		"music_volume": 0.00000000,
-		"sound_volume": 1.00000000
+		"music_volume": 0.69999993,
+		"sound_volume": 0.69999993
 	}
 }

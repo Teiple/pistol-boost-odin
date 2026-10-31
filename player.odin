@@ -12,11 +12,13 @@ Player :: struct {
     recoil_pivot   : [3]f32,
     body           : b3.BodyId,
 	animation_play : Model_Animation_Play,
+	
+	visual_interpolation_index : int 
 }
 
 player_init :: proc(
 	player: ^Player,
-	world: b3.WorldId,
+	physics : ^Physics,
 	position: [3]f32,
 	allocator := context.allocator
 ) {
@@ -33,7 +35,7 @@ player_init :: proc(
 	body_def.motionLocks.linearZ = true
 	body_def.gravityScale        = 0
 
-	player.body = b3.CreateBody(world, body_def)
+	player.body = b3.CreateBody(physics.world, body_def)
 
 	box_colliders := [?]struct {
 		size:     [3]f32,
@@ -105,6 +107,10 @@ player_init :: proc(
 			{1, 1, 1},
 		)
 	}
+
+	player.visual_interpolation_index = physics_add_interpolatable_body(
+		physics, player.body
+	)
 }
 
 player_destroy :: proc(player: ^Player) {
@@ -121,19 +127,19 @@ player_update_3d :: proc(
 ) {
 	model_update_animation_play(&player.model, &player.animation_play, dt)
 
-	target_pos := viewport_get_mouse_world_position_on_zplane(viewport, camera, 0)
+	target_pos := viewport_get_mouse_world_position_on_zplane(viewport, camera, mouse.position)
 	player_update_aim(player, target_pos)
 
 	if mouse.state[.Left] == .Pressed {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
-		recoil_dir := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
+		recoil_dir   := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2.0, recoil_point, true)
 
 		audio_play_sound(audio, .Fire_Primary)
 		model_play_animation(&player.model, &player.animation_play, "fire", .Once) 
 	} else if mouse.state[.Right] == .Pressed {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
-		recoil_dir := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
+		recoil_dir   := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 4.0, recoil_point, true)
 
 		audio_play_sound(audio, .Fire_Secondary)
@@ -142,10 +148,10 @@ player_update_3d :: proc(
 }
 
 player_update_aim :: proc(
-	player         : ^Player,
-	target_pos     : [3]f32,
-	max_turn_speed : f32 = 25.0,
-	turn_multiplier      : f32 = 1.0,
+	player          : ^Player,
+	target_pos      : [3]f32,
+	max_turn_speed  : f32 = 25.0,
+	turn_multiplier : f32 = 1.0,
 ) {
 	player_pos := b3.Body_GetPosition(player.body)
 	look_vec   := target_pos - player_pos
@@ -181,17 +187,20 @@ player_update_aim :: proc(
 	b3.Body_SetAngularVelocity(player.body, target_angular_velocity)
 }
 
-player_draw_3d :: proc(player: ^Player, renderer : ^Renderer) {
-	pos := b3.Body_GetPosition(player.body)
-	rot := b3.Body_GetRotation(player.body)
+player_draw_3d :: proc(player: ^Player, physics : ^Physics, renderer : ^Renderer) {
+	apply_position, apply_rotation := physics_get_interpolated_transform(
+		physics,
+		player.visual_interpolation_index
+	)
 
-	body_mat   := linalg.matrix4_translate_f32(pos) * linalg.matrix4_from_quaternion(rot)
+	body_mat   := linalg.matrix4_translate_f32(apply_position) * linalg.matrix4_from_quaternion(apply_rotation)
 	visual_mat := linalg.matrix4_translate_f32(player.visual_offset.position) * linalg.matrix4_from_quaternion(player.visual_offset.rotation)
 	final_mat  := body_mat * visual_mat
 
     renderer_draw_model(renderer, player.model, final_mat)
 }
 
-player_get_position :: proc(player: ^Player) -> [3]f32 {
-	return b3.Body_GetPosition(player.body)
+player_get_interpolated_position :: proc(player: ^Player, physics : ^Physics) -> (position : [3]f32) {
+	position, _ = physics_get_interpolated_transform(physics, player.visual_interpolation_index)
+	return
 }
