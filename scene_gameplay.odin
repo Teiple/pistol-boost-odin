@@ -1,8 +1,6 @@
 package main
 
-import "core:fmt"
 import sapp "sokol-odin/sokol/app"
-import b3 "vendor:box3d"
 
 Scene_Init :: struct {
     selected_level : int,
@@ -16,7 +14,7 @@ Scene_Gameplay :: struct {
     menu_stack    : Menu_Stack,
     test_model    : Model,
     player        : Player,
-    environment   : Environment,
+    arena         : Arena,
 }
 
 SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
@@ -33,10 +31,10 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
 
         viewport_set_clear_color(game_viewport(), hsv(140, 0.4, 0.2))
 
-        environment_init(&scene.environment, &scene.physics)
+        arena_init(&scene.arena, &scene.physics)
     },
     destroy = proc(scene : ^Scene_Gameplay) {
-        environment_destroy(&scene.environment)
+        arena_destroy(&scene.arena)
         
         player_destroy(&scene.player)
         physics_destroy(&scene.physics)
@@ -85,7 +83,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         menu_stack_update_ui(&scene.menu_stack, ui)
     },
     draw_3d = proc(scene : ^Scene_Gameplay, renderer : ^Renderer) {
-        environment_draw(&scene.environment, renderer)
+        arena_draw(&scene.arena, renderer)
         player_draw_3d(&scene.player, &scene.physics, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ui: ^Ui, ev : sapp.Event) {

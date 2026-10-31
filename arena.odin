@@ -3,22 +3,23 @@ package main
 import b3 "vendor:box3d"
 import linalg "core:math/linalg"
 
-Environment_Geometry :: struct {
+Arena_Geometry :: struct {
     position : [3]f32,
     mesh     : Mesh,
 }
-Environment :: struct {
+
+Arena :: struct {
 	body   : b3.BodyId,
-    geometries : [dynamic]Environment_Geometry
+    geometries : [dynamic]Arena_Geometry
 }
 
-environment_init :: proc(env: ^Environment, physics: ^Physics, allocator := context.allocator) {
-    env.geometries = make([dynamic]Environment_Geometry, allocator = allocator)
+arena_init :: proc(arena: ^Arena, physics: ^Physics, allocator := context.allocator) {
+    arena.geometries = make([dynamic]Arena_Geometry, allocator = allocator)
 
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .staticBody
 	body_def.position = {0, 0, 0}
-	env.body = b3.CreateBody(physics.world, body_def)
+	arena.body = b3.CreateBody(physics.world, body_def)
 
 	platforms := [?]struct{ size : [3]f32, position : [3]f32 } {
 		{size = {12.0, 0.4, 2.0}, position = {0, -1.0, 0}},
@@ -42,30 +43,30 @@ environment_init :: proc(env: ^Environment, physics: ^Physics, allocator := cont
 
         
 		_ = b3.CreateTransformedHullShape(
-            env.body,
+            arena.body,
 			shape_def,
 			&box_hull.base,
 			{p = p.position, q = linalg.QUATERNIONF32_IDENTITY},
 			{1, 1, 1},
 		)
 
-        append(&env.geometries, {
+        append(&arena.geometries, {
             position = p.position,
             mesh     = mesh_create_box(p.size * .5)
         })
 	}
 }
 
-environment_destroy :: proc(env: ^Environment) {
-    for &geometry in env.geometries {
+arena_destroy :: proc(arena: ^Arena) {
+    for &geometry in arena.geometries {
         mesh_destroy(&geometry.mesh)
     }
-    delete(env.geometries)
-    b3.DestroyBody(env.body)
+    delete(arena.geometries)
+    b3.DestroyBody(arena.body)
 }
 
-environment_draw :: proc(env: ^Environment, renderer : ^Renderer) {
-    for &geometry in env.geometries {
+arena_draw :: proc(arena: ^Arena, renderer : ^Renderer) {
+    for &geometry in arena.geometries {
         renderer_draw_mesh(renderer, &geometry.mesh, geometry.position, 1)
     }
 }

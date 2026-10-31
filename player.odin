@@ -33,6 +33,9 @@ player_init :: proc(
 	body_def.position            = position
 	body_def.rotation            = linalg.QUATERNIONF32_IDENTITY
 	body_def.motionLocks.linearZ = true
+	body_def.gravityScale        = 0
+	body_def.linearDamping       = .25
+	body_def.angularDamping      = .25
 
 	player.body = b3.CreateBody(physics.world, body_def)
 
@@ -139,14 +142,14 @@ player_update_3d :: proc(
 	if mouse.state[.Left] == .Pressed {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
 		recoil_dir   := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
-		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2., recoil_point, true)
+		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 1.5, recoil_point, true)
 
 		audio_play_sound(audio, .Fire_Primary)
 		model_play_animation(&player.model, &player.animation_play, "fire", .Once) 
 	} else if mouse.state[.Right] == .Pressed {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
 		recoil_dir   := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
-		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 4., recoil_point, true)
+		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2.3, recoil_point, true)
 
 		audio_play_sound(audio, .Fire_Secondary)
 		model_play_animation(&player.model, &player.animation_play, "fire", .Once) 
