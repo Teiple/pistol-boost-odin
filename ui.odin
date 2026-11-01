@@ -143,6 +143,7 @@ ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config, allocator := cont
         },
         cull_mode   = .NONE,
         depth       = {
+            pixel_format  = .DEPTH,
             write_enabled = false,
             compare       = .ALWAYS
         },

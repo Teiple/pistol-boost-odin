@@ -65,6 +65,11 @@ renderer_init :: proc(renderer : ^Renderer) {
 						write_enabled = true,
 						compare       = .LESS_EQUAL
 					},
+					colors      = {
+						0 = {
+							pixel_format = .RGBA8,
+						}
+					}
 				})
 			case .Skinned_Unlit_Triangles:
 				pip_res.shader   = sg.make_shader(shaders.skinned_shader_desc(sg.query_backend()))
@@ -86,6 +91,11 @@ renderer_init :: proc(renderer : ^Renderer) {
 						write_enabled = true,
 						compare       = .LESS_EQUAL
 					},
+					colors      = {
+						0 = {
+							pixel_format = .RGBA8,
+						}
+					}
 				})
 		}
 	}
