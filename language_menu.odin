@@ -1,11 +1,10 @@
 package main
 
-import "core:flags"
 import sapp "sokol-odin/sokol/app"
 
 Language_Menu :: struct {
-    show             : bool,
     current_item     : Language,
+    show             : bool,
     selected_current : bool,
 }
 

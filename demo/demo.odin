@@ -1,8 +1,7 @@
-package main
+package demo
 
 import "core:fmt"
 
-world : [bool]string
-
 main :: proc() {
+    fmt.printfln("Hello World")   
 }

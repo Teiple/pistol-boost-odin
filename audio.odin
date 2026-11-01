@@ -77,6 +77,8 @@ audio_make_audio_data  :: proc(
     loop       : bool,
 	group      : ^ma.sound_group,
 ) {
+	// An hassle way to be able to use #load for our audio files,
+	// you must write the logic in more details
 	frame_count: u64
 
 	channels    := ma.engine_get_channels(&aud.engine)

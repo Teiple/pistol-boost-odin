@@ -373,9 +373,9 @@ model_calculate_hierachy :: proc(model: ^Model) {
 
 
 Model_Animation_Play :: struct {
+	loop_mode       : Animation_Loop_Mode,
 	current_time    : f32,
 	animation_index : int,
-	loop_mode       : Animation_Loop_Mode,
 	is_active       : bool,
 }
 

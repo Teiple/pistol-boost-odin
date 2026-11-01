@@ -290,3 +290,7 @@ viewport_set_clear_color :: proc(viewport : ^Viewport, color : [4]f32) {
 		clear_value = {expand_values(color)},
 	}
 }
+
+viewport_position_normalized :: proc(viewport : ^Viewport, position :[2]f32) -> [2]f32 {
+	return position / viewport.base_size
+}

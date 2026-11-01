@@ -68,7 +68,7 @@ game_init :: proc() {
 
 	mouse_init(&game.mouse)
 	
-	game.scene = Scene_Main_Menu{}
+	game.scene = Scene_Editor{}
 	game.scene_callbacks = scene_boot(&game.scene)
 }
 

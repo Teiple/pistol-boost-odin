@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import "base:runtime"
 import "core:image/png"
 // A very mininal anchor based ui system

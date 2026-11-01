@@ -7,6 +7,7 @@ Scene :: union #no_nil {
 	Scene_Title,
 	Scene_Main_Menu,
 	Scene_Gameplay,
+	Scene_Editor,
 }
 
 // actually this could just be Scene_Callbacks(rawptr)
@@ -41,6 +42,8 @@ scene_get_callbacks :: proc(scene : ^Scene) -> Scene_Callbacks_Any {
 			return convert_cbs(&s, SCENE_GAMEPLAY_CALLBACKS)
 		case Scene_Main_Menu:
 			return convert_cbs(&s, SCENE_MAIN_MENU_CALLBACKS)
+		case Scene_Editor:
+			return convert_cbs(&s, SCENE_DEBUG_CALLBACKS)
 	}
 	panic("Unreachable")
 }
