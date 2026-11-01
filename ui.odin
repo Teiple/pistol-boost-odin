@@ -795,9 +795,12 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     // a projection to base size, can be cached but nahh
     mvp : shaders.Unlit_Vs_Params = {
         mvp = linalg.matrix_ortho3d(
-            0, viewport.base_size.x,
-            viewport.base_size.y, 0,
-            0, -1,
+            left   = 0,
+            right  = viewport.base_size.x,
+            top    = 0,
+            bottom = viewport.base_size.y,
+            near   = -1,
+            far    = 1,
         )
     }
     sg.apply_uniforms(0, { ptr = &mvp, size = size_of(mvp) })
@@ -819,7 +822,7 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
 ui_begin :: proc(ui : ^Ui, viewport : ^Viewport, mouse : ^Mouse_Input, lang : Language) {
     ui_push_container(ui, {0, 0, viewport.base_size.x, viewport.base_size.y})
     ui.builder.mouse = mouse
-    ui.language = lang
+    ui.language      = lang
 }
 
 ui_push_container :: proc(ui : ^Ui, rect : [4]f32){

@@ -105,17 +105,25 @@ viewport_init :: proc(viewport : ^Viewport, base_size : [2]f32, window_size : [2
 		})
 
 		// the quad that covers the screen 
-		// the uv is rotated since shader coordinate use bottom left as origin
-		// while the image pixel data starts from top left 
+		// Something like this
+		// |\
+		// |__\
+		// |__|_\
+		// Sokol won't automatically switch sample position for offscreen texture
+		// In OpenGL texture origin is bottom left
+		// In D3D11  texture origin is top left
+		origin_top_left := sg.query_features().origin_top_left 
 		vertices : []struct {
 			position : [3]f32,
 			color    : [4]f32,
 			uv 	     : [2]f32,
 		} = {
-			0 = { {-1, -1, 0}, 1, {0, 0} },
-			1 = { {-1,  3, 0}, 1, {0, 2} },
-			2 = { { 3, -1, 0}, 1, {2, 0} },
+			0 = { {-1, -1, 0}, 1, {0, origin_top_left ?  2 : 0} },
+			1 = { {-1,  3, 0}, 1, {0, origin_top_left ?  0 : 2} },
+			2 = { { 3, -1, 0}, 1, {2, origin_top_left ?  2 : 0} },
 		}
+
+		// sg.query_features().origin_top_left
 
 		viewport.display_bindings.vertex_buffers[0] = sg.make_buffer({
 			data = {
