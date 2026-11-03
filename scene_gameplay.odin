@@ -12,9 +12,10 @@ Scene_Gameplay :: struct {
     follow_camera : Follow_Camera,
     init          : Scene_Init,
     menu_stack    : Menu_Stack,
-    test_model    : Model,
     player        : Player,
     arena         : Arena,
+    debug_draw    : Debug_Draw, 
+    
 }
 
 SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
@@ -23,7 +24,6 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         append(&scene.meshes, mesh_create_box({2, 1, 1}))
     
         menu_stack_init(&scene.menu_stack)
-        model_init_from_gltf(&scene.test_model, #load("assets/models/pistol.glb"))
         
         physics_init(&scene.physics)
         player_init(&scene.player, &scene.physics, {0, 0, 0})
@@ -32,6 +32,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         viewport_set_clear_color(game_viewport(), hsv(140, 0.4, 0.2))
 
         arena_init(&scene.arena, &scene.physics)
+        debug_draw_init(&scene.debug_draw)
     },
     destroy = proc(scene : ^Scene_Gameplay) {
         arena_destroy(&scene.arena)
@@ -39,7 +40,6 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         player_destroy(&scene.player)
         physics_destroy(&scene.physics)
 
-        model_destroy(&scene.test_model)
         menu_stack_destroy(&scene.menu_stack)
         
         for &m in scene.meshes {
@@ -48,6 +48,8 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         delete(scene.meshes)
     },
     update_3d = proc(scene : ^Scene_Gameplay, dt : f32) {
+        debug_draw_begin(&scene.debug_draw)
+        
         physics_update_3d(
             &scene.physics,dt
         )
@@ -85,6 +87,8 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
     draw_3d = proc(scene : ^Scene_Gameplay, renderer : ^Renderer) {
         arena_draw(&scene.arena, renderer)
         player_draw_3d(&scene.player, &scene.physics, renderer)
+
+        debug_draw_end(&scene.debug_draw, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ui: ^Ui, ev : sapp.Event) {
         if menu_stack_top(&scene.menu_stack) != nil {

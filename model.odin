@@ -77,7 +77,7 @@ MODEL_ATTRIBUTES :: [Model_Attribute]string {
 	.Weights  = "WEIGHTS_0",
 }
 
-model_init_from_gltf :: proc(model : ^Model, file_data : []byte, allocator := context.allocator) {
+model_init_from_glb :: proc(model : ^Model, file_data : []byte, allocator := context.allocator) {
 	dat, err := gltf.parse(file_data, { is_glb = true })
 	assert(err == nil)
 	defer gltf.unload(dat)

@@ -90,6 +90,29 @@ mesh_create_box :: proc(half_size : [3]f32) -> Mesh {
     return mesh_create_from_data({vertices, indices})
 }
 
+// convert any triangle indices to line indices that can be used for wire drawing
+// used dynamic here since it keeps the allocator so we don't need to keep track of it
+// also llm wrote this
+mesh_create_line_indices :: proc(tri_indices: []u16, allocator := context.allocator) -> [dynamic]u16 {
+	tri_count    := len(tri_indices) / 3
+	line_indices := make([dynamic]u16, tri_count * 6)
+
+	for i in 0 ..< tri_count {
+		i0 := tri_indices[i * 3 + 0]
+		i1 := tri_indices[i * 3 + 1]
+		i2 := tri_indices[i * 3 + 2]
+
+		line_indices[i * 6 + 0] = i0
+		line_indices[i * 6 + 1] = i1
+		line_indices[i * 6 + 2] = i1
+		line_indices[i * 6 + 3] = i2
+		line_indices[i * 6 + 4] = i2
+		line_indices[i * 6 + 5] = i0
+	}
+
+	return line_indices
+}
+
 mesh_destroy :: proc(mesh : ^Mesh) {
     sg.destroy_buffer(mesh.bindings.vertex_buffers[0])
     sg.destroy_buffer(mesh.bindings.index_buffer)

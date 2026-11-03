@@ -7,6 +7,7 @@ import shaders "shaders"
 
 Pipeline_Type :: enum {
 	Unlit_Triangles,
+	Unlit_Lines,
 	Skinned_Unlit_Triangles,
 }
 
@@ -26,7 +27,8 @@ Renderer :: struct {
 // For .RGBA8 pixel format
 @(rodata)
 white_pixel : []u32 = { 0xFFFFFFFF }
-// This would be managed by the renderer, can be used as a temporal sample image
+// This would be managed by the renderer, so its usage must be bound to
+// renderer life time, can be used as a temporal sample image
 sg_placeholder_image : sg.Image
 
 renderer_init :: proc(renderer : ^Renderer) {
@@ -44,11 +46,14 @@ renderer_init :: proc(renderer : ^Renderer) {
 		}
 	})
 
+	unlit_shader         := sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
+	unlit_skinned_shader := sg.make_shader(shaders.skinned_shader_desc(sg.query_backend()))
+	
 	for pipeline_type in Pipeline_Type {
 		pip_res := &renderer.pip_resources[pipeline_type]
 		switch pipeline_type {
 			case .Unlit_Triangles:
-				pip_res.shader   = sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
+				pip_res.shader   = unlit_shader
 				pip_res.pipeline = sg.make_pipeline({
 					index_type  = .UINT16,
 					shader      = pip_res.shader,
@@ -69,10 +74,35 @@ renderer_init :: proc(renderer : ^Renderer) {
 						0 = {
 							pixel_format = .RGBA8,
 						}
-					}
+					},
+					primitive_type = .TRIANGLES,
+				})
+			case .Unlit_Lines:
+				pip_res.shader   = unlit_shader 
+				pip_res.pipeline = sg.make_pipeline({
+					index_type  = .UINT16,
+					shader      = pip_res.shader,
+					layout      = {
+						attrs   = {
+							shaders.ATTR_unlit_pos       = { format = .FLOAT3 },
+							shaders.ATTR_unlit_color0    = { format = .FLOAT4 },
+							shaders.ATTR_unlit_texcoord0 = { format = .FLOAT2 },
+						}
+					},
+					cull_mode   = .NONE,
+					depth       = {
+						write_enabled = false,
+						compare       = .LESS_EQUAL
+					},
+					colors      = {
+						0 = {
+							pixel_format = .RGBA8,
+						}
+					},
+					primitive_type = .LINES,
 				})
 			case .Skinned_Unlit_Triangles:
-				pip_res.shader   = sg.make_shader(shaders.skinned_shader_desc(sg.query_backend()))
+				pip_res.shader   = unlit_skinned_shader
 				pip_res.pipeline = sg.make_pipeline({
 					index_type  = .UINT16,
 					shader      = pip_res.shader,
@@ -95,7 +125,8 @@ renderer_init :: proc(renderer : ^Renderer) {
 						0 = {
 							pixel_format = .RGBA8,
 						}
-					}
+					},
+					primitive_type = .TRIANGLES,
 				})
 		}
 	}
@@ -181,4 +212,23 @@ renderer_draw_model_by_transform :: proc(
 	model_matrix := linalg.matrix4_translate(position) * linalg.matrix4_from_quaternion(rotation)
 	
 	renderer_draw_model_by_matrix(renderer, model, model_matrix)
+}
+
+renderer_draw_bindings :: proc(
+	renderer    : ^Renderer,
+	bindings    : sg.Bindings,
+	index_count : int, 
+	pipeline    : Pipeline_Type,
+) {
+	sg.apply_pipeline(renderer.pip_resources[pipeline].pipeline)
+	
+	params : shaders.Unlit_Vs_Params = {
+		mvp = camera_view_projection_matrix(renderer.camera, renderer.viewport),
+	}
+	
+	// Warning: This assumes alot, that all pipelines must use mvp and the ub index is 0
+	sg.apply_uniforms(0, {ptr = &params, size = size_of(params)})
+	sg.apply_bindings(bindings)
+
+	sg.draw(0, index_count, 1)
 }

@@ -22,7 +22,7 @@ player_init :: proc(
 	position: [3]f32,
 	allocator := context.allocator
 ) {
-	model_init_from_gltf(&player.model, #load("assets/models/pistol.glb"), allocator = allocator)
+	model_init_from_glb(&player.model, #load("assets/models/pistol.glb"), allocator = allocator)
 	
 	player.visual_offset.position = {0.030, -0.039, 0}
 	player.visual_offset.rotation = euler_degrees_to_quat({0, 90, 0})
