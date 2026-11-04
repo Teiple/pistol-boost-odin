@@ -1,5 +1,6 @@
 package main
 import "core:slice"
+import "base:runtime"
 
 Language :: enum {
     English,
@@ -214,12 +215,12 @@ lang_font_declares : [Language]Lang_Font_Declare = {
     },
 } 
 
-load_lang_font_configs :: proc() -> []Lang_Font_Config {
-    font_cfgs := make([]Lang_Font_Config, len(Language))
+load_lang_font_configs :: proc(allocator : runtime.Allocator) -> []Lang_Font_Config {
+    font_cfgs := make([]Lang_Font_Config, len(Language), allocator = allocator)
     language_selections := LANGUAGE_SELECTIONS
     
     for lang_decl, lang in lang_font_declares {
-        non_ascii_runes := make([dynamic]rune)
+        non_ascii_runes := make([dynamic]rune, allocator = allocator)
         
         for trans in loc_map[lang] {
             for r in trans {
@@ -267,9 +268,9 @@ load_lang_font_configs :: proc() -> []Lang_Font_Config {
     return font_cfgs[:]
 }
 
-unload_lang_font_configs :: proc(font_cfgs : []Lang_Font_Config) {
+unload_lang_font_configs :: proc(font_cfgs : []Lang_Font_Config, allocator : runtime.Allocator) {
     for config in font_cfgs {
-        delete(config.non_ascii_runes)
+        delete(config.non_ascii_runes, allocator = allocator)
     }
-    delete(font_cfgs)
+    delete(font_cfgs, allocator = allocator)
 }
