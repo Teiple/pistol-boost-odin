@@ -284,6 +284,31 @@ viewport_get_mouse_world_position_on_zplane :: proc(viewport: ^Viewport, camera:
 	return p_near + ray_dir * t
 }
 
+viewport_get_mouse_world_ray :: proc(
+	viewport: ^Viewport,
+	camera: ^Camera,
+	mouse_position : [2]f32,
+) -> (ray_origin : [3]f32, ray_direction : [3]f32) {
+	// llm made this i don't understand this
+	
+	// normalize screen space mouse position to ndc space
+	ndc_x := (mouse_position.x / viewport.base_size.x) * 2.0 - 1.0
+	ndc_y := 1.0 - (mouse_position.y / viewport.base_size.y) * 2.0
+	
+	inversed_viewport := linalg.matrix4_inverse(
+		camera_view_projection_matrix(camera, viewport)
+	)
+
+	near_clip := inversed_viewport * [4]f32{ndc_x, ndc_y, -1.0, 1.0}
+	far_clip  := inversed_viewport * [4]f32{ndc_x, ndc_y,  1.0, 1.0}
+
+	p_near := near_clip.xyz / near_clip.w
+	p_far  := far_clip.xyz  / far_clip.w
+
+	return p_near, linalg.normalize(p_far - p_near) 	
+}
+
+
 viewport_set_clear_color :: proc(viewport : ^Viewport, color : [4]f32) {
 	viewport.offscreen_pass.action.colors[0] = {
 		load_action = .CLEAR,

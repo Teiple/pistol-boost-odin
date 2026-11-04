@@ -1,5 +1,6 @@
 package main
 
+import "core:math"
 import sapp "sokol-odin/sokol/app"
 
 Platform :: struct{
@@ -26,18 +27,30 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             enabled    = true,
             move_speed = 3,
             look_speed = 10,
+            yaw        = math.PI,
         }
 
-        game_camera().position = {0, 0, -3}
+        game_camera().position = {0, 0, 3}
     },
     destroy = proc(scene : ^Scene_Editor) {
         debug_draw_destroy(&scene.debug_draw)
     },
     update_3d = proc(scene : ^Scene_Editor, dt : f32) {
         debug_draw_begin(&scene.debug_draw)
+        
+        ray_origin, ray_direction := viewport_get_mouse_world_ray(
+            game_viewport(),
+            game_camera(),
+            game_mouse().position
+        )
+
         for p in scene.platforms {
-            debug_draw_box(&scene.debug_draw, p.size * .5, hsv(200))
+            debug_draw_wire_box(&scene.debug_draw, p.size * .5, hsv(200, 0.4, 0.4), p.position)
+            debug_draw_box(&scene.debug_draw, p.size * .5, hsv(200), p.position)
+            // draggable box to resize the platform
+            debug_draw_wire_box(&scene.debug_draw, .1, hsv(200, 0.4, 0.4), p.position + {1, 0, 0} * p.size * .5)
         }
+
         free_camera_update_3d(&scene.free_cam, game_camera(), dt)
     },
     draw_3d = proc(scene : ^Scene_Editor, renderer : ^Renderer) {

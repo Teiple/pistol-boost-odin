@@ -50,8 +50,6 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
     update_3d = proc(scene : ^Scene_Gameplay, dt : f32) {        
         debug_draw_begin(&scene.debug_draw)
 
-        debug_draw_wire_box(&scene.debug_draw, .1, hsv(200))
-        
         physics_update_3d(
             &scene.physics,dt
         )

@@ -1,12 +1,14 @@
 package main
 
-import "core:fmt"
+import "core:math/linalg"
 import "core:slice"
 import sg "sokol-odin/sokol/gfx"
 
 
 Debug_Draw_Mode :: enum u8{
-    Line, Triangle
+    // Must order this way, solid then wire on top
+    Triangle,
+    Line,
 }
 
 Debug_Draw_Mode_Resource :: struct {
@@ -143,7 +145,13 @@ debug_draw_3d :: proc(draw : ^Debug_Draw, renderer : ^Renderer) {
     }
 }
 
-debug_draw_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f32) {
+debug_draw_box :: proc(
+    draw      : ^Debug_Draw,
+    half_size : [3]f32,
+    color     : [4]f32,
+    position  : [3]f32 = 0,
+    rotation  : quaternion128 = 1,
+) {
     assert(draw.active)
 
     // cube vertex buffer
@@ -184,8 +192,10 @@ debug_draw_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f32) {
     }
 
     for &v in vertices {
-    	v.color      = color
-    	v.position  *= half_size
+    	v.color    = color
+    	v.position = linalg.quaternion128_mul_vector3(
+            rotation, v.position
+        ) * half_size + position
     }
 
     cur_vbuf_len := len(draw.modes[.Triangle].vertices)
@@ -193,6 +203,9 @@ debug_draw_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f32) {
 
     cur_ibuf_len := len(draw.modes[.Triangle].indices)
     index_count  := len(indices)
+
+    // offset other vertices that has been added
+    indices += u16(cur_vbuf_len)
     
     assert(
         uint(cur_vbuf_len + vertex_count) <= draw.modes[.Triangle].current_vbuf_cap,
@@ -209,7 +222,13 @@ debug_draw_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f32) {
 }
 
 
-debug_draw_wire_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f32) {
+debug_draw_wire_box :: proc(
+    draw      : ^Debug_Draw,
+    half_size : [3]f32,
+    color     : [4]f32,
+    position  : [3]f32 = 0,
+    rotation  : quaternion128 = 1,
+) {
     assert(draw.active)
 
     vertices := [?]Vertex {
@@ -229,8 +248,10 @@ debug_draw_wire_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f
     }
 
     for &v in vertices {
-    	v.color      = color
-    	v.position  *= half_size
+    	v.color    = color
+        v.position = linalg.quaternion128_mul_vector3(
+            rotation, v.position
+        ) * half_size + position
     }
 
     cur_vbuf_len := len(draw.modes[.Line].vertices)
@@ -238,6 +259,9 @@ debug_draw_wire_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f
 
     cur_ibuf_len := len(draw.modes[.Line].indices)
     index_count  := len(indices)
+
+    // offset other vertices that has been added
+    indices += u16(cur_vbuf_len)
 
     assert(
         uint(cur_vbuf_len + vertex_count) <= draw.modes[.Line].current_vbuf_cap,
