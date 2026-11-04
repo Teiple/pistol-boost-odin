@@ -9,6 +9,7 @@ import slog "sokol-odin/sokol/log"
 VIEWPORT_BASE_WIDTH  :: 960
 VIEWPORT_BASE_HEIGHT :: 540
 GAME_VERSION         :: "0.0.0"
+GAME_STARTUP_SCENE   :: Scene_Editor{}
 
 Game :: struct {
 	viewport   : Viewport,
@@ -68,7 +69,7 @@ game_init :: proc() {
 
 	mouse_init(&game.mouse)
 	
-	game.scene = Scene_Gameplay{}
+	game.scene = GAME_STARTUP_SCENE
 	game.scene_callbacks = scene_boot(&game.scene)
 }
 

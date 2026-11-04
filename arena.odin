@@ -22,13 +22,14 @@ arena_init :: proc(arena: ^Arena, physics: ^Physics, allocator := context.alloca
 	arena.body = b3.CreateBody(physics.world, body_def)
 
 	platforms := [?]struct{ size : [3]f32, position : [3]f32 } {
-		{size = {12.0, 0.4, 2.0}, position = {0, -1.0, 0}},
-		{size = {0.4, 8.0, 2.0}, position = {-6.0, 3.0, 0}},
-		{size = {0.4, 8.0, 2.0}, position = {6.0, 3.0, 0}},
-		{size = {12.0, 0.4, 2.0}, position = {0, 7.0, 0}},
-		{size = {3.0, 0.3, 2.0}, position = {-2.5, 1.5, 0}},
-		{size = {3.0, 0.3, 2.0}, position = {2.5, 3.5, 0}},
+		{size = {12.0, 0.4, 2.0}, position = {0,   -1.0, 0}},
+		{size = {0.4,  8.0, 2.0}, position = {-6.0, 3.0, 0}},
+		{size = {0.4,  8.0, 2.0}, position = {6.0,  3.0, 0}},
+		{size = {12.0, 0.4, 2.0}, position = {0,    7.0, 0}},
+		{size = {3.0,  0.3, 2.0}, position = {-2.5, 1.5, 0}},
+		{size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
 	}
+	
 
 	for p in platforms {
 		half      := p.size * 0.5
@@ -41,12 +42,11 @@ arena_init :: proc(arena: ^Arena, physics: ^Physics, allocator := context.alloca
             {.Player_Physics, .Enemy_Physics}
         )
 
-        
 		_ = b3.CreateTransformedHullShape(
             arena.body,
 			shape_def,
 			&box_hull.base,
-			{p = p.position, q = linalg.QUATERNIONF32_IDENTITY},
+			{p = p.position, q = 1},
 			{1, 1, 1},
 		)
 
