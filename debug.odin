@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:slice"
 import sg "sokol-odin/sokol/gfx"
 
@@ -24,7 +25,7 @@ Debug_Draw :: struct {
     modes          : [Debug_Draw_Mode]Debug_Draw_Mode_Resource,
     shared_view    : sg.View,
     shared_sampler : sg.Sampler,
-    
+    active         : bool,
 }
 
 debug_draw_init :: proc(draw : ^Debug_Draw, allocator := context.allocator) {
@@ -41,8 +42,8 @@ debug_draw_init :: proc(draw : ^Debug_Draw, allocator := context.allocator) {
                 mode.current_ibuf_cap = 1024
                 mode.current_vbuf_cap = 1024
                 
-                mode.vertices  = make([dynamic]Vertex, mode.current_vbuf_cap, allocator = allocator)
-                mode.indices   = make([dynamic]u16,    mode.current_ibuf_cap, allocator = allocator)
+                mode.vertices  = make([dynamic]Vertex, len = 0, cap = mode.current_vbuf_cap, allocator = allocator)
+                mode.indices   = make([dynamic]u16,    len = 0, cap = mode.current_ibuf_cap, allocator = allocator)
 
                 mode.bindings.index_buffer = sg.make_buffer({
                     // write_transient allows us to update the buffer later 
@@ -64,8 +65,8 @@ debug_draw_init :: proc(draw : ^Debug_Draw, allocator := context.allocator) {
                 mode.current_ibuf_cap = 1024
                 mode.current_vbuf_cap = 1024
                 
-                mode.vertices  = make([dynamic]Vertex, mode.current_vbuf_cap, allocator = allocator)
-                mode.indices   = make([dynamic]u16,    mode.current_ibuf_cap, allocator = allocator)
+                mode.vertices  = make([dynamic]Vertex, len = 0, cap = mode.current_vbuf_cap, allocator = allocator)
+                mode.indices   = make([dynamic]u16,    len = 0, cap = mode.current_ibuf_cap, allocator = allocator)
 
                 mode.bindings.index_buffer = sg.make_buffer({
                     // write_transient allows us to update the buffer later 
@@ -101,13 +102,18 @@ debug_draw_destroy :: proc(draw : ^Debug_Draw) {
 }
 
 debug_draw_begin :: proc(draw : ^Debug_Draw) {
+    draw.active = true
+    
     for &mode in draw.modes {
         clear(&mode.indices)
         clear(&mode.vertices)
     }
 }
 
-debug_draw_end :: proc(draw : ^Debug_Draw, renderer : ^Renderer) {
+debug_draw_3d :: proc(draw : ^Debug_Draw, renderer : ^Renderer) {
+    assert(draw.active)
+    defer draw.active = false
+    
     for &mode in draw.modes {
         if uint(len(mode.indices)) > mode.current_ibuf_cap {
             panic("Exceed ibuf cap!")
@@ -137,8 +143,10 @@ debug_draw_end :: proc(draw : ^Debug_Draw, renderer : ^Renderer) {
     }
 }
 
-debug_draw_box :: proc(draw : ^Debug_Draw, half_size : [3]f32) {
-	// cube vertex buffer
+debug_draw_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f32) {
+    assert(draw.active)
+
+    // cube vertex buffer
     vertices := [?]Vertex {
         {{-1.0, -1.0, -1.0}, 1, { 0, 0 }},  
         {{ 1.0, -1.0, -1.0}, 1, { 1, 0 }},  
@@ -176,8 +184,7 @@ debug_draw_box :: proc(draw : ^Debug_Draw, half_size : [3]f32) {
     }
 
     for &v in vertices {
-    	v.color      = {v.position.x, v.position.y, v.position.z, 1}
-    	v.color.rgb  = v.color.xyz * 0.5 + 0.5
+    	v.color      = color
     	v.position  *= half_size
     }
 
@@ -186,23 +193,25 @@ debug_draw_box :: proc(draw : ^Debug_Draw, half_size : [3]f32) {
 
     cur_ibuf_len := len(draw.modes[.Triangle].indices)
     index_count  := len(indices)
-
+    
     assert(
-        uint(cur_vbuf_len + vertex_count) > draw.modes[.Triangle].current_vbuf_cap,
+        uint(cur_vbuf_len + vertex_count) <= draw.modes[.Triangle].current_vbuf_cap,
         "Exceed vbuf cap!",
     )
 
     assert(
-        uint(cur_ibuf_len + index_count) > draw.modes[.Triangle].current_ibuf_cap,
+        uint(cur_ibuf_len + index_count) <= draw.modes[.Triangle].current_ibuf_cap,
         "Exceed ibuf cap!",
     )
 
-    copy(draw.modes[.Triangle].vertices[cur_vbuf_len:][:vertex_count], vertices[:])
-    copy(draw.modes[.Triangle].vertices[cur_ibuf_len:][:index_count],  vertices[:])
+    append(&draw.modes[.Triangle].vertices, ..vertices[:])
+    append(&draw.modes[.Triangle].indices,  ..indices[:])
 }
 
 
-debug_draw_wire_box :: proc(draw : ^Debug_Draw, half_size : [3]f32) {
+debug_draw_wire_box :: proc(draw : ^Debug_Draw, half_size : [3]f32, color : [4]f32) {
+    assert(draw.active)
+
     vertices := [?]Vertex {
         {{-1.0, -1.0, -1.0}, 1, 0},
         {{ 1.0, -1.0, -1.0}, 1, 0},
@@ -220,8 +229,7 @@ debug_draw_wire_box :: proc(draw : ^Debug_Draw, half_size : [3]f32) {
     }
 
     for &v in vertices {
-    	v.color      = {v.position.x, v.position.y, v.position.z, 1}
-    	v.color.rgb  = v.color.xyz * 0.5 + 0.5
+    	v.color      = color
     	v.position  *= half_size
     }
 
@@ -232,15 +240,15 @@ debug_draw_wire_box :: proc(draw : ^Debug_Draw, half_size : [3]f32) {
     index_count  := len(indices)
 
     assert(
-        uint(cur_vbuf_len + vertex_count) > draw.modes[.Line].current_vbuf_cap,
+        uint(cur_vbuf_len + vertex_count) <= draw.modes[.Line].current_vbuf_cap,
         "Exceed vbuf cap!",
     )
 
     assert(
-        uint(cur_ibuf_len + index_count) > draw.modes[.Line].current_ibuf_cap,
+        uint(cur_ibuf_len + index_count) <= draw.modes[.Line].current_ibuf_cap,
         "Exceed ibuf cap!",
     )
 
-    copy(draw.modes[.Line].vertices[cur_vbuf_len:][:vertex_count], vertices[:])
-    copy(draw.modes[.Line].vertices[cur_ibuf_len:][:index_count],  vertices[:])
+    append(&draw.modes[.Line].vertices, ..vertices[:])
+    append(&draw.modes[.Line].indices,  ..indices[:])
 }

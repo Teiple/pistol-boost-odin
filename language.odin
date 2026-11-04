@@ -253,7 +253,7 @@ load_lang_font_configs :: proc(allocator : runtime.Allocator) -> []Lang_Font_Con
 
         font_cfgs[lang] = {            
             language        = lang,
-            non_ascii_runes = non_ascii_runes,
+            non_ascii_runes = non_ascii_runes[:],
             ttf_data        = lang_decl.ttf_data,
             atlas_width     = lang_decl.atlas_width,
             atlas_height    = lang_decl.atlas_height,

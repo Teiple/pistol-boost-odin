@@ -65,7 +65,7 @@ arena_destroy :: proc(arena: ^Arena) {
     b3.DestroyBody(arena.body)
 }
 
-arena_draw :: proc(arena: ^Arena, renderer : ^Renderer) {
+arena_draw_3d :: proc(arena: ^Arena, renderer : ^Renderer) {
     for &geometry in arena.geometries {
         renderer_draw_mesh(renderer, &geometry.mesh, geometry.position, 1)
     }

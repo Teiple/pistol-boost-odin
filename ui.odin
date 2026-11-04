@@ -120,7 +120,7 @@ Ui_Cmd :: struct {
 
 Lang_Font_Config :: struct {
     language        : Language,
-    non_ascii_runes : [dynamic]rune,
+    non_ascii_runes : []rune,
     ttf_data        : []byte,
     atlas_width     : i32,
     atlas_height    : i32,

@@ -47,8 +47,10 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         }
         delete(scene.meshes)
     },
-    update_3d = proc(scene : ^Scene_Gameplay, dt : f32) {
+    update_3d = proc(scene : ^Scene_Gameplay, dt : f32) {        
         debug_draw_begin(&scene.debug_draw)
+
+        debug_draw_wire_box(&scene.debug_draw, .1, hsv(200))
         
         physics_update_3d(
             &scene.physics,dt
@@ -85,10 +87,9 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         menu_stack_update_ui(&scene.menu_stack, ui)
     },
     draw_3d = proc(scene : ^Scene_Gameplay, renderer : ^Renderer) {
-        arena_draw(&scene.arena, renderer)
+        arena_draw_3d(&scene.arena, renderer)
         player_draw_3d(&scene.player, &scene.physics, renderer)
-
-        debug_draw_end(&scene.debug_draw, renderer)
+        debug_draw_3d(&scene.debug_draw, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ui: ^Ui, ev : sapp.Event) {
         if menu_stack_top(&scene.menu_stack) != nil {

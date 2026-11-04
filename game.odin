@@ -61,14 +61,14 @@ game_init :: proc() {
 	game.settings = settings_load()
 	settings_apply_all(game.settings)
 
-	font_configs := load_lang_font_configs()
-	defer unload_lang_font_configs(font_configs)
+	font_configs := load_lang_font_configs(allocator = context.allocator)
+	defer unload_lang_font_configs(font_configs, allocator = context.allocator)
 	
 	ui_init(&game.ui, font_configs)
 
 	mouse_init(&game.mouse)
 	
-	game.scene = Scene_Editor{}
+	game.scene = Scene_Gameplay{}
 	game.scene_callbacks = scene_boot(&game.scene)
 }
 
