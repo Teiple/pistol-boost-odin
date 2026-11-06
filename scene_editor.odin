@@ -1,12 +1,13 @@
 package main
 
-import "core:strings"
+import "core:slice"
 import "core:math"
 import sapp "sokol-odin/sokol/app"
 
+
 Platform :: struct{
     size     : [3]f32,
-    position : [3]f32
+    position : [3]f32,
 }
 
 Scene_Editor :: struct {
@@ -16,22 +17,26 @@ Scene_Editor :: struct {
 }
 
 SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
-    init = proc(scene : ^Scene_Editor) {
-        scene.platforms = make([dynamic]Platform)
-        
+    init = proc(scene : ^Scene_Editor) {        
         debug_draw_init(&scene.debug_draw)
-        append(&scene.platforms, {
-            size = { 2, 1, 1},
-        })
-
+        
         scene.free_cam = {
             enabled    = true,
             move_speed = 3,
-            look_speed = .001,
+            look_speed = .01,
             yaw        = math.PI,
         }
 
         game_camera().position = {0, 0, 3}
+
+        scene.platforms = slice.clone_to_dynamic([]Platform {
+            {size = {12.0, 0.4, 2.0}, position = {0,   -1.0, 0}},
+            {size = {0.4,  8.0, 2.0}, position = {-6.0, 3.0, 0}},
+            {size = {0.4,  8.0, 2.0}, position = {6.0,  3.0, 0}},
+            {size = {12.0, 0.4, 2.0}, position = {0,    7.0, 0}},
+            {size = {3.0,  0.3, 2.0}, position = {-2.5, 1.5, 0}},
+            {size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
+        })
     },
     destroy = proc(scene : ^Scene_Editor) {
         debug_draw_destroy(&scene.debug_draw)
@@ -58,49 +63,66 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 half_size = p.size * .5,
                 color     = hsv(200),
             )
-            // draggable box to resize the platform
-            {
-                box : type_of(p) = {
-                    position = p.position + {1, 0, 0} * p.size * .5,
-                    size     = .1
-                }
-
-                debug_draw_wire_box(
-                    &scene.debug_draw,
-                    position  = box.position,
-                    half_size = box.size * .5,
-                    color     = hsv(200, .4, .4),
-                )
-            }
         }
 
-        free_camera_update_3d(&scene.free_cam, game_camera(), game_mouse(), dt)
+        if !ui_is_capturing_input(game_ui()) {
+            free_camera_update_3d(&scene.free_cam, game_camera(), game_mouse(), dt)
+        }
     },
     draw_3d = proc(scene : ^Scene_Editor, renderer : ^Renderer) {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     update_ui = proc(scene : ^Scene_Editor, ui : ^Ui) {
-        text := strings.to_string(ui.text_edit.builder)
+        field_height :: 42
+        field_gap    :: 8
 
-        ui_push_text_edit(
-            ui,
-            text      = text,
-            id        = "test_edit_box",
-            font_id   = .Normal,
-            font_size =  32,
-            sizing    = {200, 48},
-            anchor    = { parent = {.5, .5}, element = {.5, .5} }
-        )
+        field_anchor : Anchor = {
+            parent  = {.5, .5},
+            element = {.5, .5}
+        }
 
-        ui_push_text_edit(
+        x, y, z := expand_values(scene.platforms[0].size)
+
+        if new, changed := ui_push_spinner(
             ui,
-            text      = text,
-            id        = "test_edit_box",
-            font_id   = .Normal,
-            font_size =  32,
-            sizing    = {200, 48},
-            anchor    = { parent = {.5, .5}, element = {.5, .5}, offset = {0, 52} }
-        )
+            id          = "spinner_1",
+            label       = "X", 
+            value       = x,
+            label_color = hsv(332),
+            height      = field_height,
+            width       = { 50, 50 },
+            anchor      = field_anchor,
+        ); changed do x = new
+
+        field_anchor.offset.y += field_height + field_gap
+
+        if new, changed := ui_push_spinner(
+            ui,
+            id          = "spinner_2",
+            label       = "Y", 
+            value       = y,
+            label_color = hsv(100),
+            height      = field_height,
+            width       = { 50, 50 },
+            anchor      = field_anchor,
+        ); changed do y  = new
+
+        field_anchor.offset.y += field_height + field_gap
+
+        if new, changed := ui_push_spinner(
+            ui,
+            id          = "spinner_3",
+            label       = "Z", 
+            value       = z,
+            label_color = hsv(200),
+            width       = { 50, 50 },
+            height      = field_height,
+            anchor      = { parent = {.5, .5}, element = {.5, .5}, offset = {0, 100} },
+        ); changed do y  = new
+
+        field_anchor.offset.y += field_height + field_gap
+
+        scene.platforms[0].size = {x, y, z}
     },
     input_ui =  proc(scene : ^Scene_Editor, ui : ^Ui, ev : sapp.Event) {
         ui_capture_input(ui)

@@ -109,14 +109,6 @@ free_camera_input :: proc(free_cam: ^Free_Camera, camera: ^Camera, ev : sapp.Eve
                 case .Q: free_cam.move_direction.y = 0
                 case .E: free_cam.move_direction.y = 0
             }
-            // case .MOUSE_MOVE: if (ev.modifiers & sapp.MODIFIER_RMB) != 0 {
-            //     free_cam.yaw   -= ev.mouse_dx * free_cam.look_speed
-            //     free_cam.pitch  = clamp(
-            //         free_cam.pitch - ev.mouse_dy * free_cam.look_speed,
-            //         math.to_radians_f32(-89.9),
-            //         math.to_radians_f32( 89.9),
-            //     )
-            // }
     }
 } 
 

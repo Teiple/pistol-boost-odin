@@ -392,38 +392,17 @@
 	"buffers":
 	[
 		{
-			"contents": "Package Control Messages\n========================\n\n\nLSP\n---\n\n  => 2.16.0\n  \n  # Features\n  \n  - Allow disabling the `lsp_save` key binding with the `disable_lsp_save` view setting (#3068) (Rafał Chłodnicki)\n  - Add `WindowManager.is_session_starting()` (#3081) (Rafał Chłodnicki)\n  \n  # Fixes\n  \n  - Don't start language servers in deleted workspace folders (#3073) (Rafał Chłodnicki)\n  - Add missing dynamic capability exceptions, fixing \"Format Selection\" with LSP-ruff (#3084) (Raoul Wols)\n  - Support `LocationLink` in `editor.action.showReferences` (#3080) (Rafał Chłodnicki)\n  - Apply all external configs registered within one debounce window (#3075) (Rafał Chłodnicki)\n  - Point the \"Restart Servers\" menu item at `lsp_restart_server` (#3083) (Roshan Ramani)\n  - Match the schema default of show_messages_panel_level to the setting (#3079) (Roshan Ramani)\n  - Forget diagnostic result IDs when clearing diagnostics for a URI (#3070) (Rafał Chłodnicki)\n  - Fix reading lines from files that are not valid UTF-8 (#3067) (Rafał Chłodnicki)\n  - Highlight method names containing periods in the server log (#3062) (Rafał Chłodnicki)\n  \n  # Refactors\n  \n  - Pass the reverse insert mode to `get_text_edit_range` (#3066) (Rafał Chłodnicki)\n",
+			"file": "shaders/skinned.glsl",
+			"file_size": 934,
+			"file_write_time": 134373229751307966,
 			"settings":
 			{
-				"buffer_size": 1241,
-				"line_ending": "Unix",
-				"name": "Package Control Messages",
-				"read_only": true,
-				"scratch": true
+				"buffer_size": 934,
+				"line_ending": "Unix"
 			},
 			"undo_stack":
 			[
-				[
-					1,
-					1,
-					"package_control_message",
-					{
-						"message": "\n\nLSP\n---\n\n  => 2.16.0\n  \n  # Features\n  \n  - Allow disabling the `lsp_save` key binding with the `disable_lsp_save` view setting (#3068) (Rafał Chłodnicki)\n  - Add `WindowManager.is_session_starting()` (#3081) (Rafał Chłodnicki)\n  \n  # Fixes\n  \n  - Don't start language servers in deleted workspace folders (#3073) (Rafał Chłodnicki)\n  - Add missing dynamic capability exceptions, fixing \"Format Selection\" with LSP-ruff (#3084) (Raoul Wols)\n  - Support `LocationLink` in `editor.action.showReferences` (#3080) (Rafał Chłodnicki)\n  - Apply all external configs registered within one debounce window (#3075) (Rafał Chłodnicki)\n  - Point the \"Restart Servers\" menu item at `lsp_restart_server` (#3083) (Roshan Ramani)\n  - Match the schema default of show_messages_panel_level to the setting (#3079) (Roshan Ramani)\n  - Forget diagnostic result IDs when clearing diagnostics for a URI (#3070) (Rafał Chłodnicki)\n  - Fix reading lines from files that are not valid UTF-8 (#3067) (Rafał Chłodnicki)\n  - Highlight method names containing periods in the server log (#3062) (Rafał Chłodnicki)\n  \n  # Refactors\n  \n  - Pass the reverse insert mode to `get_text_edit_range` (#3066) (Rafał Chłodnicki)\n"
-					},
-					"AQAAAAAAAAAAAAAA2QQAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/"
-				]
 			]
-		},
-		{
-			"file": "sokol-odin/examples/debugtext/main.odin",
-			"file_size": 2708,
-			"file_write_time": 134360081523266950,
-			"settings":
-			{
-				"buffer_size": 2708,
-				"line_ending": "Unix"
-			}
 		}
 	],
 	"build_system": "",
@@ -600,6 +579,10 @@
 	],
 	"file_history":
 	[
+		"/home/hongphuc/Personal/java_stuff/Biet Doi Sieu Robot Zero Xoay Map Key Sykeo99/0005.mid",
+		"/home/hongphuc/Personal/java_stuff/Biet Doi Sieu Robot Zero Xoay Map Key Sykeo99/0005.te",
+		"/home/hongphuc/Personal/java_stuff/Biet Doi Sieu Robot Zero Xoay Map Key Sykeo99/0006.ie",
+		"/home/hongphuc/Personal/java_stuff/Biet Doi Sieu Robot Zero Xoay Map Key Sykeo99/game/GameMIDlet.class",
 		"/mnt/fedora-extra/Personal/pistol_boost/renderer.odin",
 		"/mnt/fedora-extra/Personal/pistol_boost/camera.odin",
 		"/mnt/fedora-extra/Personal/pistol_boost/game.odin",
@@ -733,76 +716,31 @@
 			[
 				{
 					"buffer": 0,
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 1241,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								1241,
-								1241
-							]
-						],
-						"settings":
-						{
-							"auto_complete": false,
-							"auto_indent": false,
-							"gutter": false,
-							"lsp_uri": "buffer:42",
-							"syntax": "Packages/Text/Plain text.tmLanguage",
-							"tab_width": 2,
-							"word_wrap": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 1,
-					"stack_multiselect": false,
-					"type": "text"
-				},
-				{
-					"buffer": 1,
-					"file": "sokol-odin/examples/debugtext/main.odin",
+					"file": "shaders/skinned.glsl",
 					"selected": true,
 					"semi_transient": true,
 					"settings":
 					{
-						"buffer_size": 2708,
+						"buffer_size": 934,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								0,
-								0
+								652,
+								652
 							]
 						],
 						"settings":
 						{
-							"auto_complete_triggers":
-							[
-								{
-									"characters": "<",
-									"selector": "text.html, text.xml"
-								},
-								{
-									"rhs_empty": true,
-									"selector": "punctuation.accessor"
-								}
-							],
-							"lsp_uri": "file:///mnt/fedora-extra/Personal/pistol_boost/sokol-odin/examples/debugtext/main.odin",
-							"syntax": "Packages/Odin/Odin.sublime-syntax",
+							"lsp_uri": "file:///mnt/fedora-extra/Personal/pistol_boost/shaders/skinned.glsl",
+							"syntax": "Packages/OpenGL Shading Language (GLSL)/GLSL.sublime-syntax",
 							"tab_size": 4,
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 745.0,
+						"translation.y": 208.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,

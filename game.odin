@@ -246,3 +246,7 @@ game_set_mouse_sensitivity :: proc(sensitivity: [2]f32) {
 game_set_mouse_invert_y :: proc(invert_y : bool) {
 	mouse_set_invert_y(&game.mouse, invert_y)
 }
+
+game_ui :: proc() -> ^Ui {
+	return &game.ui
+}

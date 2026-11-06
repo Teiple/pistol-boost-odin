@@ -1,10 +1,9 @@
 package main
 
 import "core:fmt"
-import "base:intrinsics"
 import "core:math"
-import "core:time"
 import "core:strings"
+import "core:strconv"
 import "base:runtime"
 import "core:image/png"
 import "core:math/linalg"
@@ -27,11 +26,9 @@ Sizing :: union {Fixed, Grow, Percent, PercentOffset}
 
 Fixed :: f32
 
-ID_NONE :: ""
-
-Ui_Id :: union {
-    string,
+Ui_Id :: union #no_nil {
     int,
+    string,
 }
 
 Grow :: struct {}
@@ -47,6 +44,18 @@ PercentOffset :: struct {
 
 Font_Id :: enum {
     Normal
+}
+
+Focus_Action :: union #no_nil {
+    Focus_Action_None,
+    Focus_Action_Clear,
+    Focus_Action_Set,
+}
+
+Focus_Action_None  :: struct{}
+Focus_Action_Clear :: struct{}
+Focus_Action_Set   :: struct{
+    target_id : Ui_Id
 }
 
 Ui_Icon :: enum {
@@ -73,10 +82,17 @@ Font :: struct {
 Ui_Builder :: struct {
     container_stack : [dynamic][4]f32,
     commands        : [dynamic]Ui_Cmd,
-    held_id         : Ui_Id,
-    focused_id      : Ui_Id,
+    held_id         : Maybe(Ui_Id),
     mouse           : ^Mouse_Input,
     input_captured  : bool,
+    enter_pressed   : bool,
+    // Text edit is complex, in one pass we cannot both change
+    // the focus while still operate on the old text edit
+    focus           : struct {
+        action     : Focus_Action,
+        focused_id : Maybe(Ui_Id),
+        is_new     : bool,
+    },
 }
 
 @(rodata)
@@ -115,8 +131,9 @@ Ui :: struct {
     builder  : Ui_Builder,
 
     text_edit    : struct {
-        state     : edit.State,
-        builder   : strings.Builder,
+        state            : edit.State,
+        builder          : strings.Builder,
+        submit_requested : bool,
     },
 
     get_time : proc() -> f32,
@@ -443,7 +460,6 @@ ui_push_rect :: proc(
         id            : Ui_Id,
         hovered_color : Maybe([4]f32),
         held_color    : Maybe([4]f32),
-        focus_color   : Maybe([4]f32),
     }) = nil,
 ) -> (ele_rect : [4]f32, mouse_state : Mouse_Button_State, is_clicked : bool) {
     container := ui_top_container(ui)
@@ -487,7 +503,7 @@ ui_push_rect :: proc(
     color := color
     if i, ok := interactive.?; ok {
         assert(
-            i.id != ID_NONE,
+            i.id != 0,
             "Empty id on interactive element is not allowed!"
         )
 
@@ -510,19 +526,13 @@ ui_push_rect :: proc(
                 }
 
                 if mouse.state[.Left] == .Released {
-                    ui.builder.held_id    = ID_NONE
+                    ui.builder.held_id    = 0
                     is_clicked            = true
-                    ui.builder.focused_id = i.id
                 }
             } 
-
-            mouse_state = mouse.state[.Left]
-        } else {
-            if ui.builder.focused_id == i.id && i.focus_color != nil {
-                color = i.focus_color.?
-            }
-            mouse_state = .None
         }
+
+        mouse_state = mouse.state[.Left]
     }
 
     v,i := ui_get_quad(ele_rect.xy, base_index, ele_rect.zw, color = color)
@@ -863,8 +873,20 @@ ui_top_container :: proc(ui : ^Ui) -> [4]f32 {
 
 ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     if ui.builder.mouse.state[.Left] == .Released {
-        ui.builder.held_id = ID_NONE
+        ui.builder.held_id = nil
     }
+    // These record focused elements through frames
+    ui.builder.focus.is_new = false
+    if _, none := ui.builder.focus.action.(Focus_Action_None); !none {
+        if _, clear := ui.builder.focus.action.(Focus_Action_Clear); clear {
+            ui.builder.focus.focused_id = nil
+        } else {
+            ui.builder.focus.focused_id  = ui.builder.focus.action.(Focus_Action_Set).target_id
+            ui.builder.focus.is_new      = true
+        }
+        ui.builder.focus.action = Focus_Action_None{}
+    }
+    ui.text_edit.submit_requested = false
 }
 
 // You should call this inside a input/event callback, not frame callback
@@ -893,32 +915,9 @@ ui_get_local_mouse_position :: proc(ui : ^Ui, rect : [4]f32) -> (local_position 
     return
 }
 
-
-WINDOW_WIDTH  :: 800
-WINDOW_HEIGHT :: 200
-
-FONT_SIZE      :: 30
-FONT_SPACING   :: 2
-HINT_FONT_SIZE :: 20
-
-FIELD_PADDING :: 10
-FIELD_X       :: 40
-FIELD_Y       :: 80
-FIELD_W       :: WINDOW_WIDTH - 2 * FIELD_X
-FIELD_H       :: FONT_SIZE + 2 * FIELD_PADDING
-
-TEXT_X :: FIELD_X + FIELD_PADDING
-TEXT_Y :: FIELD_Y + FIELD_PADDING
-HINT_Y :: 40
-
-CARET_WIDTH      :: 2
-CARET_BLINK_RATE :: 0.5
-
-COLOR_BACKGROUND : [4]f32 : { 30 / 255,  30 / 255,  35 / 255, 1}
-COLOR_FIELD      : [4]f32 : { 20 / 255,  20 / 255,  24 / 255, 1}
-COLOR_BORDER     : [4]f32 : { 90 / 255,  90 / 255, 100 / 255, 1}
-COLOR_SELECTION  : [4]f32 : { 60 / 255,  90 / 255, 150 / 255, 1}
-COLOR_HINT       : [4]f32 : {140 / 255, 140 / 255, 150 / 255, 1}
+ui_mouse_is_inside_rect :: proc(ui : ^Ui, rect : [4]f32) -> bool {
+    return mouse_is_inside_rect(ui.builder.mouse, rect)
+}
 
 Ui_Text_Edit_Key_Binding :: struct {
 	key:   sapp.Keycode,
@@ -963,9 +962,6 @@ ui_text_edit_init :: proc(ui : ^Ui, allocator : runtime.Allocator) {
     )
 	ui.text_edit.builder = strings.builder_make(allocator = allocator)
 
-	strings.write_string(&ui.text_edit.builder, "Edit me!")
-
-    edit.setup_once(&ui.text_edit.state, &ui.text_edit.builder)
 	ui.text_edit.state.translate_by_grapheme = true
 
 	ui.text_edit.state.set_clipboard = proc(_: rawptr, text: string) -> bool {
@@ -981,8 +977,8 @@ ui_text_edit_init :: proc(ui : ^Ui, allocator : runtime.Allocator) {
 }
 
 ui_text_edit_input :: proc(
-    ui        : ^Ui,
-    ev        : sapp.Event,
+    ui : ^Ui,
+    ev : sapp.Event,
 ) {
 	edit.update_time(&ui.text_edit.state)
 
@@ -990,25 +986,98 @@ ui_text_edit_input :: proc(
 	shift := ev.modifiers & sapp.MODIFIER_SHIFT != 0
 
     if ev.type == .KEY_DOWN {
-        fmt.printfln("Keys: %v, Ctrl: %v, Shift: %v", ev.key_code, ctrl, shift)
         for binding in UI_TEXT_EDIT_KEY_BINDINGS {
             pressed := ev.key_code == binding.key
             if pressed && binding.ctrl == ctrl && binding.shift == shift {
-                if binding.cmd == .Select_All {
-                    fmt.println("Selected All")
-                }
                 edit.perform_command(&ui.text_edit.state, binding.cmd)
             }
+        }
+        if ev.key_code == .ENTER {
+            ui.text_edit.submit_requested = true
         }
     }
     
     // ignore unprintable ascii and the Enter
-    // to prevent clashing with the commands we ignores the char type
-    // when pressing ctrl
-    if !ctrl && ev.type == .CHAR && ev.char_code >= 32 && ev.char_code != 127 {
-        fmt.println("Chars: ", rune(ev.char_code))
+    // to prevent clashing with the commands
+    // we need to ignore the char type when pressing ctrl
+    if !ctrl && ev.type == .CHAR {
         edit.input_rune(&ui.text_edit.state, rune(ev.char_code))
     }
+}
+
+ui_push_spinner :: proc(
+    ui          : ^Ui,
+    id          : Ui_Id,
+    value       : f32,
+    label       : string,
+    width       : [2]f32 = { 100, 50 },
+    height      : f32    = 42,
+    label_color : [4]f32 = 1, 
+    anchor      : Anchor = {},
+) -> (new_value : f32, changed: bool) {
+    rect, _, _ := ui_push_rect(
+        ui,
+        anchor = anchor,
+        sizing = { width.x + width.y, height}, 
+        color  = hsv(0, 0, 0, .4),
+    )
+
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+
+        // Content rect
+        label_rect, _, _ := ui_push_rect(                
+            ui,
+            sizing = { width.x, height},
+            anchor = {
+                element = {0, .5},
+                parent  = {0, .5},
+            },
+        )
+        
+        ui_push_container(ui, label_rect)
+        {
+            defer ui_pop_container(ui)
+            
+            ui_push_text(
+                ui,
+                text           = label,
+                text_alignment = 0,
+                anchor = {
+                    element = {0, .5},
+                    parent  = {0, .5},
+                },
+                padding = {4, 0, 0, 0},
+                color   = label_color,
+            )
+        }
+
+        text := fmt.tprintf("%.2f", value)
+
+        new_text, submitted := ui_push_text_edit(
+            ui, 
+            id     = id,
+            text   = text,
+            sizing = { width.y, height },
+            anchor = {
+                element = {1, .5},
+                parent  = {1, .5},
+            },
+            padding_x = 4,
+        )
+
+        if submitted {
+            parsed, is_valid := strconv.parse_f32(new_text)
+            fmt.println("Submitted ", parsed, id)
+            if is_valid {
+                new_value = parsed
+                changed   = new_value != value
+            }
+        }
+    }
+
+    return
 }
 
 ui_push_text_edit :: proc(
@@ -1020,42 +1089,88 @@ ui_push_text_edit :: proc(
     padding_x  : f32 = 4,
     sizing     : [2]Sizing = { 200, 42 },
     anchor     : Anchor    = {},
-) {
-	font  := &ui.lang_fonts[ui.language][font_id]
-
+) -> (current_text: string, submitted : bool) {
+	font        := &ui.lang_fonts[ui.language][font_id]
+        
     rect, mouse_state, is_clicked := ui_push_rect(
         ui,
         sizing      = sizing,
         anchor      = anchor,
         color       = hsv(220, 0.2, 0.2),
         interactive = {
-            id          = id,
-            focus_color = hsv(0),
+            id = id,
         }
     )
+
+    if is_clicked {
+        ui_focus_set(ui, id)
+    }
+    
+    is_focused  := ui.builder.focus.focused_id == id
+
+    // When just focused
+    if is_focused && ui.builder.focus.is_new {
+        // Setup text edit
+        edit.clear_all(&ui.text_edit.state)
+        strings.write_string(&ui.text_edit.builder, text)
+        edit.setup_once(&ui.text_edit.state, &ui.text_edit.builder)
+
+        // Caret positioning
+        local_mouse_pos, _ := ui_get_local_mouse_position(ui, rect)
+        local_mouse_pos.x  -= padding_x
+
+        // if click on the padding we don't want to position the caret 
+        if local_mouse_pos.x >= 0 && local_mouse_pos.x <= rect.z - padding_x {
+            caret   := ui_text_edit_set_caret(
+                font          = &ui.lang_fonts[ui.language][font_id],
+                font_size     = font_size,
+                text          = strings.to_string(ui.text_edit.state.builder^),
+                local_mouse_x = local_mouse_pos.x,
+            )
+            ui.text_edit.state.selection = {caret, caret}
+        }
+    }
+
+    // On focus loss (clicked outside)
+    if is_focused &&
+        mouse_state == .Released &&
+        !ui_mouse_is_inside_rect(ui, rect) 
+    {
+        ui_focus_clear(ui)
+        submitted ||= true
+    }
+    
+    // text edit sb shouldn't be altered from this point anyway,
+    // we can just return this text as current text
+    current_text = is_focused ? strings.to_string(ui.text_edit.builder) : text 
+    submitted    ||= is_focused && ui.text_edit.submit_requested
+
     ui_push_container(ui, rect)
     {
         defer ui_pop_container(ui)
-        // Draw text selection
-        if lo, hi := edit.sorted_selection(&ui.text_edit.state); lo != hi {
-            lo_x := ui_text_width(font, text[:lo], font_size)
-            hi_x := ui_text_width(font, text[:hi], font_size)
+        
+        if is_focused {
+            // Draw text selection
+            if lo, hi := edit.sorted_selection(&ui.text_edit.state); lo != hi {
+                lo_x := ui_text_width(font, current_text[:lo], font_size)
+                hi_x := ui_text_width(font, current_text[:hi], font_size)
 
-            ui_push_rect(
-                ui,
-                sizing = { hi_x - lo_x, font_size },
-                color  = hsv(215),
-                anchor = {
-                    parent = {0, .5},
-                    element= {0, .5},
-                    offset = {padding_x + lo_x, 0} 
-                }
-            )
+                ui_push_rect(
+                    ui,
+                    sizing = { hi_x - lo_x, font_size },
+                    color  = hsv(215),
+                    anchor = {
+                        parent = {0, .5},
+                        element= {0, .5},
+                        offset = {padding_x + lo_x, 0} 
+                    }
+                )
+            }
         }
 
         ui_push_text(
             ui,
-            text           = text,
+            text           = current_text,
             font_id        = font_id,
             font_size      = font_size,
             color          = hsv(0, 0, 1),
@@ -1068,8 +1183,15 @@ ui_push_text_edit :: proc(
             }
         )
 
-        if int(ui.get_time() / CARET_BLINK_RATE) % 2 == 0 {
-            caret_x := padding_x + ui_text_width(font, text[:ui.text_edit.state.selection[0]], font_size)
+        // !is_just_focused check prevent first frame glitch
+        CARET_BLINK_RATE :: .1
+
+        if is_focused && int(ui.get_time() / CARET_BLINK_RATE) % 2 == 0 {
+            caret_x := padding_x + ui_text_width(
+                font      = font,
+                text      = current_text[:ui.text_edit.state.selection[0]],
+                font_size = font_size
+            )
             
             ui_push_rect(
                 ui,
@@ -1084,20 +1206,24 @@ ui_push_text_edit :: proc(
         }
     }
 
-    if is_clicked {
-        local_mouse_pos, _ := ui_get_local_mouse_position(ui, rect)
-        local_mouse_pos.x  -= padding_x
+    if submitted {
+        ui_focus_clear(ui)
+    }
 
-        // if click on the padding we don't want to position the caret 
-        if local_mouse_pos.x >= 0 && local_mouse_pos.x <= rect.z - padding_x {
-            caret   := ui_text_edit_set_caret(
-                font          = &ui.lang_fonts[ui.language][font_id],
-                font_size     = font_size,
-                text          = strings.to_string(ui.text_edit.state.builder^),
-                local_mouse_x = local_mouse_pos.x,
-            )
-            ui.text_edit.state.selection = {caret, caret}
-        }
+    return
+}
+
+ui_focus_set :: proc(ui: ^Ui, id : Ui_Id) {
+    // Don't override existing action unless it's a clear action
+    if _, set := ui.builder.focus.action.(Focus_Action_Set); !set {
+        ui.builder.focus.action = Focus_Action_Set{id}
+    }
+}
+
+ui_focus_clear :: proc(ui: ^Ui) {
+    // Don't clear existing set action (e.g. some elements in the same frame may require focuses)
+    if _, none := ui.builder.focus.action.(Focus_Action_None); none {
+        ui.builder.focus.action = Focus_Action_Clear{}
     }
 }
 
