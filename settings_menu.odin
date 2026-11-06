@@ -122,10 +122,8 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                     rect, _, _ := ui_push_rect(
                         ui, 
                         sizing = {
-                            Fixed{ 300 },
-                            Fixed{
-                                item_height * item_count + (item_count - 1) * spacing,
-                            }
+                            300,
+                            item_height * item_count + (item_count - 1) * spacing,
                         },
                         anchor = { parent = {.5, .5}, element = {.5, .5} },
                     )
@@ -257,10 +255,8 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                     rect, _, _ := ui_push_rect(
                         ui, 
                         sizing = {
-                            Fixed{ 400 },
-                            Fixed{
-                                item_height * item_count + (item_count - 1) * spacing,
-                            }
+                            400,
+                            item_height * item_count + (item_count - 1) * spacing,
                         },
                         anchor = { parent = {.5, .5}, element = {.5, .5} },
                     )
@@ -388,10 +384,8 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
                     rect, _, _ := ui_push_rect(
                         ui, 
                         sizing = {
-                            Fixed{ 450 },
-                            Fixed{
-                                item_height * item_count + (item_count - 1) * spacing,
-                            }
+                            450,
+                            item_height * item_count + (item_count - 1) * spacing,
                         },
                         anchor = { parent = {.5, .5}, element = {.5, .5} },
                     )

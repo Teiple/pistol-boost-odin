@@ -181,13 +181,19 @@ debug_draw_box :: proc(
         {{ 1.0,  1.0,  1.0}, 1, { 1, 1 }},  
         {{ 1.0,  1.0, -1.0}, 1, { 0, 1 }},  
     }
-    // create an index buffer for the cube
+    // 6 faces of the cube, 2 tris each face 
     indices := [?]u16 {
-         0,  1,  2,   0,  2,  3,
-         6,  5,  4,   7,  6,  4,
-         8,  9, 10,   8, 10, 11,
+        // back -z, from 0
+        0,  1,  2,   0,  2,  3,
+        // front +z, from 6
+        6,  5,  4,   7,  6,  4,
+        // left -x, from 12
+        8,  9, 10,   8, 10, 11,
+        // right +x, from 18
         14, 13, 12,  15, 14, 12,
+        // bottom -y, from 24
         16, 17, 18,  16, 18, 19,
+        // top +y, from 30
         22, 21, 20,  23, 22, 20,
     }
 
@@ -225,9 +231,9 @@ debug_draw_box :: proc(
 debug_draw_wire_box :: proc(
     draw      : ^Debug_Draw,
     half_size : [3]f32,
-    color     : [4]f32,
     position  : [3]f32 = 0,
     rotation  : quaternion128 = 1,
+    color     : [4]f32 = {1, 0, 0, 1},
 ) {
     assert(draw.active)
 

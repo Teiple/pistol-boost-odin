@@ -4,7 +4,7 @@
     {
       "label": "Run",
       "type": "shell",
-      "command": "odin run . -thread-count:2 -linker:lld -o:none -show-timings",
+      "command": "odin run . -debug -thread-count:2 -linker:lld -o:none -show-timings",
       "group": {
         "kind": "build",
         "isDefault": true

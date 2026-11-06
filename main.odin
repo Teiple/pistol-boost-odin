@@ -21,6 +21,8 @@ main :: proc() {
 		window_title     = "Pistol Boost",
 		width            = WINDOW_INITIAL_WIDTH,
 		height           = WINDOW_INITIAL_HEIGHT,
+		enable_clipboard = true,
+		clipboard_size   = 1024,
 		// disable_vsync    = true,
 		init_cb    = proc "c" () {
 			context = odin_ctx

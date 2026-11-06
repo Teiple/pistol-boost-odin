@@ -5,6 +5,7 @@ import sapp "sokol-odin/sokol/app"
 import sg "sokol-odin/sokol/gfx"
 import sglue "sokol-odin/sokol/glue"
 import slog "sokol-odin/sokol/log"
+import stime "sokol-odin/sokol/time"
 
 VIEWPORT_BASE_WIDTH  :: 960
 VIEWPORT_BASE_HEIGHT :: 540
@@ -65,7 +66,9 @@ game_init :: proc() {
 	font_configs := load_lang_font_configs(allocator = context.allocator)
 	defer unload_lang_font_configs(font_configs, allocator = context.allocator)
 	
-	ui_init(&game.ui, font_configs)
+	ui_init(&game.ui, font_configs, proc() -> f32 {
+		return game.time.scaled_time
+	})
 
 	mouse_init(&game.mouse)
 	
@@ -113,7 +116,7 @@ game_update :: proc(unscaled_dt : f32) {
 		ui_draw(&game.ui, &game.viewport)
 	}
 
-	mouse_input_end(&game.mouse)
+	mouse_input_frame_end(&game.mouse)
 	
 	free_all(context.temp_allocator)
 

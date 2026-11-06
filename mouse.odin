@@ -33,7 +33,10 @@ mouse_init :: proc(mouse : ^Mouse_Input) {
 
 mouse_input :: proc(mouse : ^Mouse_Input, vp : ^Viewport, ev : sapp.Event) {
     if ev.type == .MOUSE_MOVE {
-        mouse.position += viewport_get_viewport_mouse_delta(vp, mouse.sensitivity * {ev.mouse_dx, ev.mouse_dy * (mouse.invert_y ? -1 : 1)})
+        // Accumlate not replace the mouse.delta here, since there may be more than 1 input 
+        // call for one frame 
+        mouse.delta    += viewport_get_viewport_mouse_delta(vp, mouse.sensitivity * {ev.mouse_dx, ev.mouse_dy * (mouse.invert_y ? -1 : 1)})
+        mouse.position += mouse.delta 
         mouse.position  = viewport_confine_mouse_pos(vp, mouse.position)
     }
 
@@ -62,7 +65,7 @@ mouse_set_invert_y :: proc(mouse : ^Mouse_Input, invert_y : bool) {
     mouse.invert_y = invert_y
 }
 
-mouse_input_end :: proc(mouse : ^Mouse_Input) {
+mouse_input_frame_end :: proc(mouse : ^Mouse_Input) {
     for &mb in mouse.state {
         if mb == .Pressed {
             mb = .Down
@@ -70,6 +73,7 @@ mouse_input_end :: proc(mouse : ^Mouse_Input) {
             mb = .None
         }
     }
+    mouse.delta = 0
 }
 
 mouse_is_inside_rect :: proc(mouse : ^Mouse_Input, rect : [4]f32) -> bool {

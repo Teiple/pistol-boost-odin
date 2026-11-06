@@ -88,9 +88,9 @@ free_camera_input :: proc(free_cam: ^Free_Camera, camera: ^Camera, ev : sapp.Eve
         return
     }
 
-    if (ev.modifiers & sapp.MODIFIER_RMB) != 0 {
-        #partial switch ev.type {
-            case .KEY_DOWN:
+    
+    #partial switch ev.type {
+        case .KEY_DOWN: if (ev.modifiers & sapp.MODIFIER_RMB) != 0 { 
                 #partial switch ev.key_code {
                     case .W: free_cam.move_direction.z =  1
                     case .S: free_cam.move_direction.z = -1
@@ -99,30 +99,39 @@ free_camera_input :: proc(free_cam: ^Free_Camera, camera: ^Camera, ev : sapp.Eve
                     case .Q: free_cam.move_direction.y = -1
                     case .E: free_cam.move_direction.y =  1
                 }
-            case .KEY_UP:
-                #partial switch ev.key_code {
-                    case .W: free_cam.move_direction.z = 0
-                    case .S: free_cam.move_direction.z = 0
-                    case .A: free_cam.move_direction.x = 0
-                    case .D: free_cam.move_direction.x = 0
-                    case .Q: free_cam.move_direction.y = 0
-                    case .E: free_cam.move_direction.y = 0
-                }
-            case .MOUSE_MOVE:
-                normalized_mouse_move := viewport_position_normalized(game_viewport(), {ev.mouse_dx, ev.mouse_dy})
-                free_cam.yaw   -= normalized_mouse_move.x * free_cam.look_speed
-                free_cam.pitch  = clamp(
-                    free_cam.pitch - normalized_mouse_move.y * free_cam.look_speed,
-                    math.to_radians_f32(-89.9),
-                    math.to_radians_f32( 89.9),
-                )
-        }
+            }
+        case .KEY_UP:
+            #partial switch ev.key_code {
+                case .W: free_cam.move_direction.z = 0
+                case .S: free_cam.move_direction.z = 0
+                case .A: free_cam.move_direction.x = 0
+                case .D: free_cam.move_direction.x = 0
+                case .Q: free_cam.move_direction.y = 0
+                case .E: free_cam.move_direction.y = 0
+            }
+            // case .MOUSE_MOVE: if (ev.modifiers & sapp.MODIFIER_RMB) != 0 {
+            //     free_cam.yaw   -= ev.mouse_dx * free_cam.look_speed
+            //     free_cam.pitch  = clamp(
+            //         free_cam.pitch - ev.mouse_dy * free_cam.look_speed,
+            //         math.to_radians_f32(-89.9),
+            //         math.to_radians_f32( 89.9),
+            //     )
+            // }
     }
 } 
 
-free_camera_update_3d :: proc(free_cam: ^Free_Camera, camera: ^Camera, dt : f32) {
+free_camera_update_3d :: proc(free_cam: ^Free_Camera, camera: ^Camera, mouse : ^Mouse_Input, dt : f32) {
     if !free_cam.enabled {
         return
+    }
+
+    if mouse.state[.Right] == .Pressed || mouse.state[.Right] == .Down {
+        free_cam.yaw   -= mouse.delta.x * free_cam.look_speed
+        free_cam.pitch  = clamp(
+            free_cam.pitch - mouse.delta.y * free_cam.look_speed,
+            math.to_radians_f32(-89.9),
+            math.to_radians_f32( 89.9),
+        )
     }
 
     // math stuff I copied from llms (again)

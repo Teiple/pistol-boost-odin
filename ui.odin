@@ -1,17 +1,21 @@
 package main
 
+import "core:fmt"
+import "base:intrinsics"
+import "core:math"
+import "core:time"
+import "core:strings"
 import "base:runtime"
 import "core:image/png"
-// A very mininal anchor based ui system
-// It must do everything in one pass
-// Mouse input only accounts for explicit ids
-// There will be no implicit ids
-
 import "core:math/linalg"
 import "core:slice"
+import "core:text/edit"
+import "core:unicode/utf8"
+
 import sg "sokol-odin/sokol/gfx"
 import tt "vendor:stb/truetype"
 import shaders "shaders"
+import sapp "sokol-odin/sokol/app"
 
 Anchor :: struct {
     element   : [2]f32,
@@ -19,11 +23,9 @@ Anchor :: struct {
     offset    : [2]f32,
 }
 
-Sizing :: union { Fixed, Grow, Percent, PercentOffset}
+Sizing :: union {Fixed, Grow, Percent, PercentOffset}
 
-Fixed :: struct {
-    value : f32,
-}
+Fixed :: f32
 
 ID_NONE :: ""
 
@@ -72,6 +74,7 @@ Ui_Builder :: struct {
     container_stack : [dynamic][4]f32,
     commands        : [dynamic]Ui_Cmd,
     held_id         : Ui_Id,
+    focused_id      : Ui_Id,
     mouse           : ^Mouse_Input,
     input_captured  : bool,
 }
@@ -110,6 +113,13 @@ Ui :: struct {
     indices  : [dynamic]u16,
 
     builder  : Ui_Builder,
+
+    text_edit    : struct {
+        state     : edit.State,
+        builder   : strings.Builder,
+    },
+
+    get_time : proc() -> f32,
 }
 
 Ui_Cmd :: struct {
@@ -127,7 +137,7 @@ Lang_Font_Config :: struct {
     base_size       : f32,
 }
 
-ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config, allocator := context.allocator) {
+ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config, get_time : proc() -> f32, allocator := context.allocator) {
     ui.shader   = sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
     
     ui.pipeline = sg.make_pipeline({
@@ -231,9 +241,19 @@ ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config, allocator := cont
             }
         }) 
     }
+
+    // Text edit
+    ui_text_edit_init(ui, allocator = allocator)
+    
+    ui.get_time = get_time
 }
 
 ui_destroy :: proc(ui : ^Ui) {
+	strings.builder_destroy(
+        &ui.text_edit.builder
+    )
+	edit.destroy(&ui.text_edit.state)
+
     for &lf in ui.lang_fonts {
         for &f in lf {
             ui_destroy_font(&f)
@@ -261,7 +281,6 @@ ui_destroy :: proc(ui : ^Ui) {
     
     delete(ui.builder.commands)
     delete(ui.builder.container_stack)
-
 }
 
 ui_init_lang_font :: proc(font: ^Font, font_cfg : Lang_Font_Config, allocator := context.allocator) {
@@ -416,21 +435,22 @@ ui_get_quad :: proc(
 
 ui_push_rect :: proc(
     ui    : ^Ui,
-    sizing : [2]Sizing    = {},
-    anchor : Anchor       = {},
+    sizing : [2]Sizing = {},
+    anchor : Anchor = {},
     color : [4]f32 = 0,
     icon  : Maybe(Ui_Icon) = nil,
     interactive : Maybe(struct {
         id            : Ui_Id,
         hovered_color : Maybe([4]f32),
         held_color    : Maybe([4]f32),
+        focus_color   : Maybe([4]f32),
     }) = nil,
 ) -> (ele_rect : [4]f32, mouse_state : Mouse_Button_State, is_clicked : bool) {
     container := ui_top_container(ui)
     
     switch size in sizing.x {
         case Fixed:
-            ele_rect.z = size.value
+            ele_rect.z = size
         case Grow:
             ele_rect.z = container.z
         case Percent:
@@ -441,7 +461,7 @@ ui_push_rect :: proc(
 
     switch size in sizing.y {
         case Fixed:
-            ele_rect.w = size.value
+            ele_rect.w = size
         case Grow:
             ele_rect.w = container.w
         case Percent:
@@ -476,7 +496,7 @@ ui_push_rect :: proc(
 
         if is_inside {
             if mouse.state[.Left] == .Pressed {
-                ui.builder.held_id = i.id
+                ui.builder.held_id    = i.id
             }
             
             if i.hovered_color != nil
@@ -485,19 +505,22 @@ ui_push_rect :: proc(
             }
 
             if ui.builder.held_id == i.id {
-                // fmt.println("is pressing ", mouse.state[.Left])
                 if i.held_color != nil {
                     color = i.held_color.?
                 }
 
                 if mouse.state[.Left] == .Released {
-                    ui.builder.held_id = ID_NONE
-                    is_clicked = true
+                    ui.builder.held_id    = ID_NONE
+                    is_clicked            = true
+                    ui.builder.focused_id = i.id
                 }
             } 
 
             mouse_state = mouse.state[.Left]
         } else {
+            if ui.builder.focused_id == i.id && i.focus_color != nil {
+                color = i.focus_color.?
+            }
             mouse_state = .None
         }
     }
@@ -526,6 +549,7 @@ ui_push_text :: proc(
     anchor         : Anchor = {},
     text_alignment : f32 = .5,
     padding        : [4]f32 = 0,
+    wrap_enabled   : bool = true,
 ) -> (ele_rect : [4]f32) {
     // use address here since font struct is quite big
     font := &ui.lang_fonts[ui.language][font_id]
@@ -545,9 +569,9 @@ ui_push_text :: proc(
     
     base_index  := u16(start_vert)
 
-    wrapped_lines   := ui_wrap_text(
+    wrapped_lines := ui_wrap_text(
         font, text, font_size,
-        max_width = ui_top_container(ui).z
+        max_width = wrap_enabled ? ui_top_container(ui).z : math.INF_F32
     )
 
     widest_line_width := wrapped_lines[0].width
@@ -650,7 +674,7 @@ ui_push_text :: proc(
 }
 
 Wrapped_Line :: struct  {
-    line       : string,
+    line  : string,
     width : f32,
 }
 
@@ -867,4 +891,239 @@ ui_get_local_mouse_position :: proc(ui : ^Ui, rect : [4]f32) -> (local_position 
     }
 
     return
+}
+
+
+WINDOW_WIDTH  :: 800
+WINDOW_HEIGHT :: 200
+
+FONT_SIZE      :: 30
+FONT_SPACING   :: 2
+HINT_FONT_SIZE :: 20
+
+FIELD_PADDING :: 10
+FIELD_X       :: 40
+FIELD_Y       :: 80
+FIELD_W       :: WINDOW_WIDTH - 2 * FIELD_X
+FIELD_H       :: FONT_SIZE + 2 * FIELD_PADDING
+
+TEXT_X :: FIELD_X + FIELD_PADDING
+TEXT_Y :: FIELD_Y + FIELD_PADDING
+HINT_Y :: 40
+
+CARET_WIDTH      :: 2
+CARET_BLINK_RATE :: 0.5
+
+COLOR_BACKGROUND : [4]f32 : { 30 / 255,  30 / 255,  35 / 255, 1}
+COLOR_FIELD      : [4]f32 : { 20 / 255,  20 / 255,  24 / 255, 1}
+COLOR_BORDER     : [4]f32 : { 90 / 255,  90 / 255, 100 / 255, 1}
+COLOR_SELECTION  : [4]f32 : { 60 / 255,  90 / 255, 150 / 255, 1}
+COLOR_HINT       : [4]f32 : {140 / 255, 140 / 255, 150 / 255, 1}
+
+Ui_Text_Edit_Key_Binding :: struct {
+	key:   sapp.Keycode,
+	ctrl:  bool,
+	shift: bool,
+	cmd:   edit.Command,
+}
+
+// `core:text/edit` has no opinion on which key does what, so the example picks
+// the usual bindings. The modifiers have to match exactly, which is what keeps
+// <Ctrl+Left> from also triggering the plain <Left> binding.
+UI_TEXT_EDIT_KEY_BINDINGS :: []Ui_Text_Edit_Key_Binding{
+	{.LEFT,      false, false, .Left},
+	{.LEFT,      false, true,  .Select_Left},
+	{.LEFT,      true,  false, .Word_Left},
+	{.LEFT,      true,  true,  .Select_Word_Left},
+	{.RIGHT,     false, false, .Right},
+	{.RIGHT,     false, true,  .Select_Right},
+	{.RIGHT,     true,  false, .Word_Right},
+	{.RIGHT,     true,  true,  .Select_Word_Right},
+	{.HOME,      false, false, .Start},
+	{.HOME,      false, true,  .Select_Start},
+	{.END,       false, false, .End},
+	{.END,       false, true,  .Select_End},
+	{.BACKSPACE, false, false, .Backspace},
+	{.BACKSPACE, true,  false, .Delete_Word_Left},
+	{.DELETE,    false, false, .Delete},
+	{.DELETE,    true,  false, .Delete_Word_Right},
+	{.A,         true,  false, .Select_All},
+	{.C,         true,  false, .Copy},
+	{.X,         true,  false, .Cut},
+	{.V,         true,  false, .Paste},
+	{.Z,         true,  false, .Undo},
+	{.Y,         true,  false, .Redo},
+}
+
+ui_text_edit_init :: proc(ui : ^Ui, allocator : runtime.Allocator) {
+	edit.init(
+        &ui.text_edit.state,
+        undo_text_allocator  = allocator,
+        undo_state_allocator = allocator
+    )
+	ui.text_edit.builder = strings.builder_make(allocator = allocator)
+
+	strings.write_string(&ui.text_edit.builder, "Edit me!")
+
+    edit.setup_once(&ui.text_edit.state, &ui.text_edit.builder)
+	ui.text_edit.state.translate_by_grapheme = true
+
+	ui.text_edit.state.set_clipboard = proc(_: rawptr, text: string) -> bool {
+		// sokol, like raylib, copies the content of the text, so we only need the temp allocator here
+        sapp.set_clipboard_string(strings.clone_to_cstring(text, allocator = context.temp_allocator))
+        return true
+	}
+
+	ui.text_edit.state.get_clipboard = proc(_: rawptr) -> (text: string, ok: bool) {
+		cstr := sapp.get_clipboard_string()
+		return string(cstr), cstr != nil
+	}
+}
+
+ui_text_edit_input :: proc(
+    ui        : ^Ui,
+    ev        : sapp.Event,
+) {
+	edit.update_time(&ui.text_edit.state)
+
+	ctrl  := ev.modifiers & sapp.MODIFIER_CTRL  != 0
+	shift := ev.modifiers & sapp.MODIFIER_SHIFT != 0
+
+    if ev.type == .KEY_DOWN {
+        fmt.printfln("Keys: %v, Ctrl: %v, Shift: %v", ev.key_code, ctrl, shift)
+        for binding in UI_TEXT_EDIT_KEY_BINDINGS {
+            pressed := ev.key_code == binding.key
+            if pressed && binding.ctrl == ctrl && binding.shift == shift {
+                if binding.cmd == .Select_All {
+                    fmt.println("Selected All")
+                }
+                edit.perform_command(&ui.text_edit.state, binding.cmd)
+            }
+        }
+    }
+    
+    // ignore unprintable ascii and the Enter
+    // to prevent clashing with the commands we ignores the char type
+    // when pressing ctrl
+    if !ctrl && ev.type == .CHAR && ev.char_code >= 32 && ev.char_code != 127 {
+        fmt.println("Chars: ", rune(ev.char_code))
+        edit.input_rune(&ui.text_edit.state, rune(ev.char_code))
+    }
+}
+
+ui_push_text_edit :: proc(
+    ui         : ^Ui,
+    text       : string,
+    id         : Ui_Id,
+    font_id    : Font_Id = .Normal,
+    font_size  : f32 = 32,
+    padding_x  : f32 = 4,
+    sizing     : [2]Sizing = { 200, 42 },
+    anchor     : Anchor    = {},
+) {
+	font  := &ui.lang_fonts[ui.language][font_id]
+
+    rect, mouse_state, is_clicked := ui_push_rect(
+        ui,
+        sizing      = sizing,
+        anchor      = anchor,
+        color       = hsv(220, 0.2, 0.2),
+        interactive = {
+            id          = id,
+            focus_color = hsv(0),
+        }
+    )
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+        // Draw text selection
+        if lo, hi := edit.sorted_selection(&ui.text_edit.state); lo != hi {
+            lo_x := ui_text_width(font, text[:lo], font_size)
+            hi_x := ui_text_width(font, text[:hi], font_size)
+
+            ui_push_rect(
+                ui,
+                sizing = { hi_x - lo_x, font_size },
+                color  = hsv(215),
+                anchor = {
+                    parent = {0, .5},
+                    element= {0, .5},
+                    offset = {padding_x + lo_x, 0} 
+                }
+            )
+        }
+
+        ui_push_text(
+            ui,
+            text           = text,
+            font_id        = font_id,
+            font_size      = font_size,
+            color          = hsv(0, 0, 1),
+            text_alignment = .0,
+            wrap_enabled   = false,
+            anchor         = {
+                parent = {0, .5},
+                element= {0, .5},
+                offset = {padding_x, 0} 
+            }
+        )
+
+        if int(ui.get_time() / CARET_BLINK_RATE) % 2 == 0 {
+            caret_x := padding_x + ui_text_width(font, text[:ui.text_edit.state.selection[0]], font_size)
+            
+            ui_push_rect(
+                ui,
+                sizing = { 2, font_size },
+                anchor = { 
+                    parent  = { 0, .5 },
+                    element = { 0, .5 },
+                    offset  = { caret_x, 0 },
+                },
+                color = hsv(0, 0, 1),
+            )
+        }
+    }
+
+    if is_clicked {
+        local_mouse_pos, _ := ui_get_local_mouse_position(ui, rect)
+        local_mouse_pos.x  -= padding_x
+
+        // if click on the padding we don't want to position the caret 
+        if local_mouse_pos.x >= 0 && local_mouse_pos.x <= rect.z - padding_x {
+            caret   := ui_text_edit_set_caret(
+                font          = &ui.lang_fonts[ui.language][font_id],
+                font_size     = font_size,
+                text          = strings.to_string(ui.text_edit.state.builder^),
+                local_mouse_x = local_mouse_pos.x,
+            )
+            ui.text_edit.state.selection = {caret, caret}
+        }
+    }
+}
+
+ui_text_width :: proc(font: ^Font, text: string, font_size: f32) -> f32 {
+    size  := font_size > 0 ? font_size : font.base_size
+    scale := size / font.base_size
+    width : f32 = 0
+    for r in text {
+        if r >= 32 && r <= 126 {
+            width += font.packed_chars[r - 32].xadvance * scale
+        } else if idx, ok := font.non_ascii_map[r]; ok {
+            width += font.packed_chars[idx].xadvance * scale
+        }
+    }
+    return width
+}
+
+ui_text_edit_set_caret :: proc(font: ^Font, font_size : f32,  text: string, local_mouse_x: f32) -> (caret: int) {
+    best := local_mouse_x
+
+	it := utf8.decode_grapheme_iterator_make(text)
+	for _, grapheme in utf8.decode_grapheme_iterate(&it) {
+		end := grapheme.byte_index + len(grapheme.text)
+		if distance := abs(ui_text_width(font, text[:end], font_size) - local_mouse_x); distance < best {
+			caret, best = end, distance
+		}
+	}
+	return
 }

@@ -173,7 +173,7 @@ menu_helper_item_options :: proc(
 ) -> (new_value : T, changed : bool) where ins.type_is_enum(T) || ins.type_is_integer(T) {
     rect, _, clicked := ui_push_rect(
         ui,
-        sizing      = { Grow{}, Fixed{item_height} },
+        sizing      = { Grow{}, item_height },
         anchor      = anchor,
         interactive = {
             id            = item.item_id,
@@ -240,7 +240,7 @@ menu_helper_item_toggle :: proc(
 ) -> (new_value : bool, changed : bool) {
     rect, _, clicked := ui_push_rect(
         ui,
-        sizing      = { Grow{}, Fixed{item_height} },
+        sizing      = { Grow{}, item_height },
         anchor      = anchor,
         interactive = {
             id            = item_id,
@@ -306,7 +306,7 @@ menu_helper_item_spinner :: proc(
 
     rect, _, clicked := ui_push_rect(
         ui,
-        sizing      = { Grow{}, Fixed{item_height} },
+        sizing      = { Grow{}, item_height },
         anchor      = anchor,
         interactive = {
             id            = item_id,
@@ -387,7 +387,7 @@ menu_helper_item_progress_bar :: proc(
 
     rect, _, _ := ui_push_rect(
         ui,
-        sizing      = { Grow{}, Fixed{item_height} },
+        sizing      = { Grow{}, item_height },
         anchor      = anchor,
         interactive = {
             id            = item_id,
@@ -409,7 +409,7 @@ menu_helper_item_progress_bar :: proc(
 
         bar_rect, _, _ := ui_push_rect(
             ui,
-            sizing = {Fixed{total_bar_width}, Grow{}},
+            sizing = {total_bar_width, Grow{}},
             anchor = {element = {1, .5}, parent = {1, .5}},
         )
 
@@ -419,14 +419,14 @@ menu_helper_item_progress_bar :: proc(
             
             control_width :: 32
 
-            control_sizing : [2]Sizing : {Fixed{control_width}, Fixed{control_width}}
+            control_sizing : [2]Sizing : {control_width, control_width}
 
             // Bar
             full_bar_width := total_bar_width - control_width * 2
             // (Backdrop)
             ui_push_rect(
                 ui,
-                sizing = {Fixed{full_bar_width}, Grow{}},
+                sizing = {full_bar_width, Grow{}},
                 anchor = {element = {0, .5}, parent = {0, .5}, offset = {control_width, 0}},
                 color  = hsv(140, .1, .1),
                 interactive = {id = bar_id}
@@ -434,7 +434,7 @@ menu_helper_item_progress_bar :: proc(
             
             ui_push_rect(
                 ui,
-                sizing = {Fixed{full_bar_width * f32(current_value) / f32(max - min)}, Grow{}},
+                sizing = {full_bar_width * f32(current_value) / f32(max - min), Grow{}},
                 anchor = {element = {0, .5}, parent = {0, .5}, offset = {control_width, 0}},
                 color  = hsv(140, .5, 1),
             )
@@ -519,7 +519,7 @@ menu_helper_calculate_footer_layout :: proc(
     footer_height : f32 = 42,
     mid_btn_witdh : f32 = 200,
 ) -> (sizing : [2]Sizing, anchor : Anchor, text_anchor : Anchor) {
-    sizing.y = Fixed{footer_height}
+    sizing.y = footer_height
     if item_count == 1 {
         sizing.x    = Grow{}
         anchor      = { element = {0, 1}, parent = {0, 1} }
@@ -541,7 +541,7 @@ menu_helper_calculate_footer_layout :: proc(
             // Middle small buttons
             mid_index  := f32(item_index) - 1
 
-            sizing.x = Fixed{mid_btn_witdh}
+            sizing.x = mid_btn_witdh
             anchor = {
                 element = {0, 1},
                 parent = {0.5, 1},
@@ -573,12 +573,8 @@ menu_helper_label_menu :: proc(
     rect, _, _ := ui_push_rect(
         ui, 
         sizing = {
-            Fixed{
-                item_size.x
-            },
-            Fixed{
-                item_size.y * opt_count + (opt_count - 1) * spacing,
-            }
+            item_size.x,
+            item_size.y * opt_count + (opt_count - 1) * spacing,
         },
         anchor = anchor
     )
@@ -593,7 +589,7 @@ menu_helper_label_menu :: proc(
             rect, mouse_state, is_clicked := ui_push_rect(                
                 ui,
                 color       = hsv(0, 0, 0, 0),
-                sizing      = { Fixed{item_size.x}, Fixed{item_size.y} },
+                sizing      = { item_size.x, item_size.y },
                 anchor      = item_anchor,
                 interactive = {
                     id            = item.id,
@@ -685,7 +681,7 @@ menu_helper_back_button :: proc(
     rect, mouse_state, clicked := ui_push_rect(                
         ui,
         color       = hsv(0, 0, 0, 0),
-        sizing      = { Grow{}, Fixed{42}},
+        sizing      = { Grow{}, 42},
         anchor      = { element = {0, 1}, parent = {0, 1}},
         interactive = {
             id            = id,
@@ -717,7 +713,7 @@ menu_helper_back_button :: proc(
             ui_push_rect(
                 ui,
                 icon   = .Left_Arrow,
-                sizing = { Fixed{32}, Fixed{32} },
+                sizing = { 32, 32 },
                 anchor = { element = {1, .5}, parent = {0, .5}, offset = {-8, 0}},
                 color  = hsv(140, 1, 0.8)
             )
@@ -785,7 +781,7 @@ menu_helper_confirmation :: proc(
     rect, _, _ := ui_push_rect(                
         ui,
         color  = hsv(0, 0, 0, .8),
-        sizing = { Fixed{size.x}, Fixed{size.y}},
+        sizing = { size.x, size.y},
         anchor = { element = {.5, .5}, parent = {.5, .5}, offset = {0, -20}},
     )
 
@@ -795,7 +791,7 @@ menu_helper_confirmation :: proc(
         
         inner_rect, _, _ := ui_push_rect(                
             ui,
-            sizing = { Fixed{size.x - 2 * padding}, Fixed{size.y - 2 * padding}},
+            sizing = { size.x - 2 * padding, size.y - 2 * padding},
             anchor = { offset = padding },
         )
 
@@ -806,7 +802,7 @@ menu_helper_confirmation :: proc(
             // Content rect
             content_rect, _, _ := ui_push_rect(                
                 ui,
-                sizing = { Grow{}, Fixed{size.y - 2 * padding - opt_height}},
+                sizing = { Grow{}, size.y - 2 * padding - opt_height},
             )
             
             ui_push_container(ui, content_rect)
@@ -824,7 +820,7 @@ menu_helper_confirmation :: proc(
             // Yes/No rects
             yes_rect, _, yes_clicked := ui_push_rect(                
                 ui,
-                sizing      = { Percent{.5}, Fixed{opt_height}},
+                sizing      = { Percent{.5}, opt_height},
                 anchor      = { element = {0, 1}, parent = {0, 1}},
                 interactive = {
                     id            = yes_id,
@@ -849,7 +845,7 @@ menu_helper_confirmation :: proc(
 
             no_rect, _, no_clicked := ui_push_rect(                
                 ui,
-                sizing      = { Percent{.5}, Fixed{opt_height}},
+                sizing      = { Percent{.5}, opt_height},
                 anchor      = { element = {0, 1}, parent = {.5, 1}},
                 interactive = {
                     id            = no_id,
@@ -1045,7 +1041,7 @@ menu_helper_settings_footer :: proc(
                         ui_push_rect(
                             ui,
                             icon   = .Left_Arrow,
-                            sizing = { Fixed{32}, Fixed{32} },
+                            sizing = { 32, 32 },
                             anchor = { element = {1, .5}, parent = {0, .5}, offset = {-8 + 32, 0}},
                             color  = hsv(140, 1, .8),
                         )
