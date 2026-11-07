@@ -90,7 +90,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             value       = x,
             label_color = hsv(332),
             height      = field_height,
-            width       = { 50, 50 },
+            width       = { 50, 80 },
             anchor      = field_anchor,
         ); changed do x = new
 
@@ -103,7 +103,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             value       = y,
             label_color = hsv(100),
             height      = field_height,
-            width       = { 50, 50 },
+            width       = { 50, 80 },
             anchor      = field_anchor,
         ); changed do y  = new
 
@@ -115,7 +115,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             label       = "Z", 
             value       = z,
             label_color = hsv(200),
-            width       = { 50, 50 },
+            width       = { 50, 80 },
             height      = field_height,
             anchor      = { parent = {.5, .5}, element = {.5, .5}, offset = {0, 100} },
         ); changed do y  = new

@@ -35,6 +35,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         debug_draw_init(&scene.debug_draw)
     },
     destroy = proc(scene : ^Scene_Gameplay) {
+        debug_draw_destroy(&scene.debug_draw)
         arena_destroy(&scene.arena)
         
         player_destroy(&scene.player)

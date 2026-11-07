@@ -5,12 +5,11 @@ import sapp "sokol-odin/sokol/app"
 import sg "sokol-odin/sokol/gfx"
 import sglue "sokol-odin/sokol/glue"
 import slog "sokol-odin/sokol/log"
-import stime "sokol-odin/sokol/time"
 
 VIEWPORT_BASE_WIDTH  :: 960
 VIEWPORT_BASE_HEIGHT :: 540
 GAME_VERSION         :: "0.0.0"
-GAME_STARTUP_SCENE   :: Scene_Editor{}
+GAME_STARTUP_SCENE   :: Scene_Main_Menu{}
 
 Game :: struct {
 	viewport   : Viewport,

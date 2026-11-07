@@ -399,7 +399,8 @@ menu_helper_item_progress_bar :: proc(
     ui_push_container(ui, rect)
     {
         defer ui_pop_container(ui)
-    
+        
+        // Label
         ui_push_text(
             ui,
             text   = tr(item_term),
@@ -407,6 +408,7 @@ menu_helper_item_progress_bar :: proc(
             color  = is_active ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
         )
 
+        // Progress bar
         bar_rect, _, _ := ui_push_rect(
             ui,
             sizing = {total_bar_width, Grow{}},
@@ -431,12 +433,12 @@ menu_helper_item_progress_bar :: proc(
                 color  = hsv(140, .1, .1),
                 interactive = {id = bar_id}
             )
-            
+            // (Progress bar)
             ui_push_rect(
                 ui,
                 sizing = {full_bar_width * f32(current_value) / f32(max - min), Grow{}},
                 anchor = {element = {0, .5}, parent = {0, .5}, offset = {control_width, 0}},
-                color  = hsv(140, .5, 1),
+                color  = hsv(140),
             )
 
             // Left control 
@@ -490,23 +492,20 @@ menu_helper_item_progress_bar :: proc(
                     icon   = .Plus,
                 )
             }
-
-            if is_active {
-                if switch_next || right_control_clicked {
-                    new_value := current_value + step
-                    if new_value > max {
-                        new_value = max
-                    }
-                    return new_value, new_value != current_value
-                } else if switch_prev || left_control_clicked {
-                    new_value := current_value - step
-                    if new_value < min {
-                        new_value = min
-                    }
-                    return new_value, new_value != current_value
+            
+            if (is_active && switch_next) || right_control_clicked {
+                new_value := current_value + step
+                if new_value > max {
+                    new_value = max
                 }
+                return new_value, new_value != current_value
+            } else if (is_active && switch_prev) || left_control_clicked {
+                new_value := current_value - step
+                if new_value < min {
+                    new_value = min
+                }
+                return new_value, new_value != current_value
             }
-
         }
     }
 
