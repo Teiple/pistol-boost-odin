@@ -16,6 +16,8 @@ import tt "vendor:stb/truetype"
 import shaders "shaders"
 import sapp "sokol-odin/sokol/app"
 
+UI_MAX_SCISSOR_STACK :: 4
+
 Anchor :: struct {
     element   : [2]f32,
     parent    : [2]f32,
@@ -81,6 +83,7 @@ Font :: struct {
 // A stateful data container for current frame
 Ui_Builder :: struct {
     container_stack : [dynamic][4]f32,
+    scissor_stack   : [dynamic; UI_MAX_SCISSOR_STACK][4]f32,
     commands        : [dynamic]Ui_Cmd,
     held_id         : Maybe(Ui_Id),
     mouse           : ^Mouse_Input,
@@ -133,16 +136,30 @@ Ui :: struct {
     text_edit    : struct {
         state            : edit.State,
         builder          : strings.Builder,
+        scroll_x         : f32,
         submit_requested : bool,
     },
 
     get_time : proc() -> f32,
 }
 
-Ui_Cmd :: struct {
+Ui_Cmd :: union {
+    Ui_Paint_Cmd,
+    Ui_Scissor_Push_Cmd,
+    Ui_Scissor_Pop_Cmd,    
+}
+
+Ui_Paint_Cmd :: struct {
     start_index : int,
     num_indices : int,
     view        : sg.View,
+}
+
+Ui_Scissor_Push_Cmd :: struct {
+    rect : [4]f32
+}
+
+Ui_Scissor_Pop_Cmd :: struct {
 }
 
 Lang_Font_Config :: struct {
@@ -838,10 +855,25 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     }
     sg.apply_uniforms(0, { ptr = &mvp, size = size_of(mvp) })
 
-    for cmd in ui.builder.commands {
-        ui.bindings.views[0] = cmd.view
-        sg.apply_bindings(ui.bindings)
-        sg.draw(cmd.start_index, cmd.num_indices, 1)
+    clear(&ui.builder.scissor_stack)
+    append(&ui.builder.scissor_stack, {0, 0, viewport.base_size.x, viewport.base_size.y})
+
+    for command in ui.builder.commands {
+        switch cmd in command {
+            case Ui_Paint_Cmd:
+                ui.bindings.views[0] = cmd.view
+                sg.apply_bindings(ui.bindings)
+                sg.draw(cmd.start_index, cmd.num_indices, 1)
+            case Ui_Scissor_Push_Cmd:
+                append(&ui.builder.scissor_stack, cmd.rect)
+                sg.apply_scissor_rectf(expand_values(cmd.rect), origin_top_left = true)
+            case Ui_Scissor_Pop_Cmd:
+                pop(&ui.builder.scissor_stack)
+                sg.apply_scissor_rectf(
+                    expand_values(ui_current_scissor_rect(ui)),
+                    origin_top_left = true,
+                )
+        } 
     }
 
     clear(&ui.indices)
@@ -887,6 +919,7 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
         ui.builder.focus.action = Focus_Action_None{}
     }
     ui.text_edit.submit_requested = false
+    clear(&ui.builder.scissor_stack)
 }
 
 // You should call this inside a input/event callback, not frame callback
@@ -1053,7 +1086,7 @@ ui_push_spinner :: proc(
             )
         }
 
-        text := fmt.tprintf("%.2f", value)
+        text := fmt.tprintf("%.4g", value)
 
         new_text, submitted := ui_push_text_edit(
             ui, 
@@ -1069,7 +1102,6 @@ ui_push_spinner :: proc(
 
         if submitted {
             parsed, is_valid := strconv.parse_f32(new_text)
-            fmt.println("Submitted ", parsed, id)
             if is_valid {
                 new_value = parsed
                 changed   = new_value != value
@@ -1079,6 +1111,19 @@ ui_push_spinner :: proc(
 
     return
 }
+
+ui_get_intersect_rect :: proc(rect_a : [4]f32, rect_b : [4]f32) -> ([4]f32, bool) {
+    left   := max(rect_a.x, rect_b.x)
+	top    := max(rect_a.y, rect_b.y)
+	right  := min(rect_a.x + rect_a.z, rect_b.x + rect_b.z)
+	bottom := min(rect_a.y + rect_a.w, rect_b.y + rect_b.w)
+
+	width  := right - left
+	height := bottom - top
+
+	return {left, top, max(width, 0),  max(height, 0)}, width > 0 && height > 0
+}
+
 
 ui_push_text_edit :: proc(
     ui         : ^Ui,
@@ -1108,27 +1153,36 @@ ui_push_text_edit :: proc(
     
     is_focused  := ui.builder.focus.focused_id == id
 
+    newly_focused := is_focused && ui.builder.focus.is_new
+    
     // When just focused
-    if is_focused && ui.builder.focus.is_new {
+    if newly_focused {
         // Setup text edit
         edit.clear_all(&ui.text_edit.state)
         strings.write_string(&ui.text_edit.builder, text)
         edit.setup_once(&ui.text_edit.state, &ui.text_edit.builder)
 
-        // Caret positioning
-        local_mouse_pos, _ := ui_get_local_mouse_position(ui, rect)
-        local_mouse_pos.x  -= padding_x
+        // Reset scroll
+        ui.text_edit.scroll_x = 0        
+    }
 
-        // if click on the padding we don't want to position the caret 
-        if local_mouse_pos.x >= 0 && local_mouse_pos.x <= rect.z - padding_x {
-            caret   := ui_text_edit_set_caret(
-                font          = &ui.lang_fonts[ui.language][font_id],
-                font_size     = font_size,
-                text          = strings.to_string(ui.text_edit.state.builder^),
-                local_mouse_x = local_mouse_pos.x,
-            )
-            ui.text_edit.state.selection = {caret, caret}
-        }
+    text_x:= padding_x + (is_focused ? ui.text_edit.scroll_x : 0)
+
+    // When just focus on click on the rect when already focused, reposition of caret
+    if newly_focused || (is_focused && is_clicked) {
+        // Caret positioning
+        local_mouse_pos, is_inside := ui_get_local_mouse_position(ui, rect)
+        
+        // Allow clicking onto padding to snap caret to start or end
+        local_text_x := max(local_mouse_pos.x - text_x, 0)
+        caret := ui_text_edit_set_caret(
+            font          = &ui.lang_fonts[ui.language][font_id],
+            font_size     = font_size,
+            text          = strings.to_string(ui.text_edit.state.builder^),
+            local_mouse_x = local_text_x,
+        )
+
+        ui.text_edit.state.selection = {caret, caret}
     }
 
     // On focus loss (clicked outside)
@@ -1145,9 +1199,21 @@ ui_push_text_edit :: proc(
     current_text = is_focused ? strings.to_string(ui.text_edit.builder) : text 
     submitted    ||= is_focused && ui.text_edit.submit_requested
 
-    ui_push_container(ui, rect)
+    CARRET_WIDTH :: 2
+
+    // TODO: this setup will irnogre padd, consider using another nested rect with paddding applied
+    ui_push_container(ui, rect);
     {
-        defer ui_pop_container(ui)
+        defer ui_pop_container(ui);
+        
+        scissor_rect := [4]f32{
+            rect.x + padding_x,
+            rect.y,
+            rect.z - 2 * padding_x,
+            rect.w,
+        }
+        ui_push_scissor(ui, scissor_rect)
+        defer ui_pop_scissor(ui);
         
         if is_focused {
             // Draw text selection
@@ -1162,7 +1228,7 @@ ui_push_text_edit :: proc(
                     anchor = {
                         parent = {0, .5},
                         element= {0, .5},
-                        offset = {padding_x + lo_x, 0} 
+                        offset = {text_x + lo_x, 0} 
                     }
                 )
             }
@@ -1179,30 +1245,39 @@ ui_push_text_edit :: proc(
             anchor         = {
                 parent = {0, .5},
                 element= {0, .5},
-                offset = {padding_x, 0} 
+                offset = {text_x, 0} 
             }
         )
 
-        // !is_just_focused check prevent first frame glitch
-        CARET_BLINK_RATE :: .1
-
-        if is_focused && int(ui.get_time() / CARET_BLINK_RATE) % 2 == 0 {
-            caret_x := padding_x + ui_text_width(
+        // Carret
+        if is_focused {
+            caret_x := text_x + ui_text_width(
                 font      = font,
                 text      = current_text[:ui.text_edit.state.selection[0]],
                 font_size = font_size
             )
+
+            CARET_BLINK_RATE :: .25
+            if int(ui.get_time() / CARET_BLINK_RATE) % 2 == 0 {
+                ui_push_rect(
+                    ui,
+                    sizing = { 2, font_size },
+                    anchor = { 
+                        parent  = { 0, .5 },
+                        element = { 0, .5 },
+                        offset  = { caret_x, 0 },
+                    },
+                    color = hsv(0, 0, 1),
+                )
+            }
             
-            ui_push_rect(
-                ui,
-                sizing = { 2, font_size },
-                anchor = { 
-                    parent  = { 0, .5 },
-                    element = { 0, .5 },
-                    offset  = { caret_x, 0 },
-                },
-                color = hsv(0, 0, 1),
-            )
+            right_edge := rect.z - padding_x
+            
+            if caret_x < padding_x {
+                ui.text_edit.scroll_x += padding_x - caret_x
+            } else if caret_x > right_edge - CARRET_WIDTH {
+                ui.text_edit.scroll_x -= caret_x - (right_edge - CARRET_WIDTH)
+            }
         }
     }
 
@@ -1215,6 +1290,11 @@ ui_push_text_edit :: proc(
 
 ui_focus_set :: proc(ui: ^Ui, id : Ui_Id) {
     // Don't override existing action unless it's a clear action
+    // Also don't set unless it's a different focus id
+    if ui.builder.focus.focused_id == id {
+        return
+    }
+
     if _, set := ui.builder.focus.action.(Focus_Action_Set); !set {
         ui.builder.focus.action = Focus_Action_Set{id}
     }
@@ -1242,7 +1322,7 @@ ui_text_width :: proc(font: ^Font, text: string, font_size: f32) -> f32 {
 }
 
 ui_text_edit_set_caret :: proc(font: ^Font, font_size : f32,  text: string, local_mouse_x: f32) -> (caret: int) {
-    best := local_mouse_x
+    best := abs(local_mouse_x)
 
 	it := utf8.decode_grapheme_iterator_make(text)
 	for _, grapheme in utf8.decode_grapheme_iterate(&it) {
@@ -1252,4 +1332,18 @@ ui_text_edit_set_caret :: proc(font: ^Font, font_size : f32,  text: string, loca
 		}
 	}
 	return
+}
+
+ui_push_scissor :: proc(ui: ^Ui, rect : [4]f32) {
+    append(&ui.builder.commands, Ui_Scissor_Push_Cmd { rect })
+    append(&ui.builder.scissor_stack, rect)
+}
+
+ui_pop_scissor :: proc(ui: ^Ui) {
+    append(&ui.builder.commands, Ui_Scissor_Pop_Cmd{})
+    pop(&ui.builder.scissor_stack)
+}
+
+ui_current_scissor_rect :: #force_inline proc(ui: ^Ui) -> [4]f32 {
+    return ui.builder.scissor_stack[len(ui.builder.scissor_stack) - 1]
 }
