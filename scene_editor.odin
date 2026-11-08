@@ -11,9 +11,10 @@ Platform :: struct{
 }
 
 Scene_Editor :: struct {
-    platforms  : [dynamic]Platform,
-    debug_draw : Debug_Draw, 
-    free_cam   : Free_Camera, 
+    platforms         : [dynamic]Platform,
+    debug_draw        : Debug_Draw, 
+    free_cam          : Free_Camera,
+    selected_platform : int,  
 }
 
 SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -37,6 +38,8 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             {size = {3.0,  0.3, 2.0}, position = {-2.5, 1.5, 0}},
             {size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
         })
+
+        scene.selected_platform = -1
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)
@@ -44,24 +47,35 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
         debug_draw_begin(&scene.debug_draw)
         
-        ray_origin, ray_direction := viewport_get_mouse_world_ray(
-            ctx.viewport,
-            ctx.camera,
-            ctx.mouse.position
-        )
+        clicked := ctx.mouse.state[.Left] == .Pressed
+        
+        ray_origin, ray_direction : [3]f32
+        if clicked {
+            ray_origin, ray_direction = viewport_get_mouse_world_ray(
+                ctx.viewport,
+                ctx.camera,
+                ctx.mouse.position
+            )
+        }
 
-        for p in scene.platforms {
+        for p,i in scene.platforms {
+            if clicked {
+                if _, hit := check_ray_box(ray_origin, ray_direction, p.position, p.size * .5); hit {
+                    scene.selected_platform = i
+                }
+            }
+
             debug_draw_wire_box(
                 &scene.debug_draw,
                 position  = p.position,
                 half_size = p.size * .5,
-                color     = hsv(200, 0.4, 0.4),
+                color     = i == scene.selected_platform ? hsv(54, .4, .4) : hsv(200, .4, .4),
             )
             debug_draw_box(
                 &scene.debug_draw,
                 position  = p.position,
                 half_size = p.size * .5,
-                color     = hsv(200),
+                color     = i == scene.selected_platform ? hsv(54) : hsv(200),
             )
         }
 
@@ -71,6 +85,10 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
+        if scene.selected_platform < 0 {
+            return
+        }
+       
         ui := ctx.ui
         
         inspector_rect, _, _ := ui_push_rect(
@@ -94,7 +112,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 label     = "Position",
                 id        = "position",
                 field_ids = {"position:x", "position:y", "position:z"},
-                vec3      = &scene.platforms[0].position,
+                vec3      = &scene.platforms[scene.selected_platform].position,
                 width     = inspector_rect_width,
                 anchor    = field_anchor,
             )
@@ -106,7 +124,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 label     = "Size",
                 id        = "size",
                 field_ids = {"size:x", "size:y", "size:z"},
-                vec3      = &scene.platforms[0].size,
+                vec3      = &scene.platforms[scene.selected_platform].size,
                 width     = inspector_rect_width,
                 anchor    = field_anchor,
             )
@@ -129,12 +147,12 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
 
 // Checking if the ray will collide with an axis-aligned box
-check_intersection_between_ray_and_box :: proc(
+check_ray_box :: proc(
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
     box_position  : [3]f32,
     box_half_size : [3]f32,
-) -> bool {
+) -> (distance : f32, hit: bool) {
     min_x := box_position.x - box_half_size.x
     max_x := box_position.x + box_half_size.x
 
@@ -157,8 +175,8 @@ check_intersection_between_ray_and_box :: proc(
     t_end   := min(max(tx1, tx2), max(ty1, ty2), max(tz1, tz2))
     
     // Miss if exited one slab before entering any of the others
-    // if t_end < 0 the ray exited from behind the ray_origin, we shouldn't include it as a hit 
-    return t_end > t_start && t_end > 0
+    // if t_start < 0 the ray entered from behind the ray_origin, we shouldn't include it as a hit 
+    return t_start, t_end > t_start && t_start > 0
 }
 
 editor_scene_field_vector3 :: proc(
