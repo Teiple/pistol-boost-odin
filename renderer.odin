@@ -5,7 +5,7 @@ import "core:math/linalg"
 import sg "sokol-odin/sokol/gfx"
 import shaders "shaders"
 
-Pipeline_Type :: enum {
+Pipeline_Type :: enum u8 {
 	Unlit_Triangles,
 	Unlit_Lines,
 	Skinned_Unlit_Triangles,

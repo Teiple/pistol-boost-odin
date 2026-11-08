@@ -1,15 +1,11 @@
 package main
-import sapp "sokol-odin/sokol/app"
-import "core:fmt"
-import ins "base:intrinsics"
+import "base:intrinsics"
 
 Settings_Menu :: struct {
-    show             : bool,
-    current_item     : Settings_Menu_Item_Id,
-    selected_current : bool,
+    current_item : Settings_Menu_Item_Id
 }
 
-Settings_Menu_Item_Id :: enum {
+Settings_Menu_Item_Id :: enum u8 {
     Gameplay,
     Controls,
     Graphics,
@@ -26,17 +22,12 @@ settings_menu_items := [Settings_Menu_Item_Id]Menu_Item{
     .Language = { id = "settings_menu:language", term = .Language},
 }
 
-settings_menu_back_btn_id :: "settings_menu:back"
-
 SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
     update_ui = proc(menu : ^Settings_Menu, ctx : Game_Context) -> (res: Menu_Result) {
-        defer menu.selected_current = false
 
         selected_opt, selected := menu_helper_label_menu(
-            menu             = menu,
             ctx              = ctx,
-            selected_current = menu.selected_current,
-            current_item     = menu.current_item,
+            current_item     = &menu.current_item,
             items            = settings_menu_items,
         )
 
@@ -54,47 +45,30 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
         res.close = menu_helper_back_button(
             ui    = ctx.ui,
             label = .Back,
-            id    = settings_menu_back_btn_id,
-        )
+            id    = "settings_menu:back",
+        ) || ui_is_cancel_pressed(ctx.ui)
 
         return
-    },
-    input_ui = proc(menu : ^Settings_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
-        res.close = menu_helper_label_menu_input(
-            ui               = ctx.ui,
-            ev               = ev,
-            selected_current = &menu.selected_current,
-            current_item     = &menu.current_item,
-        )
-        return
-    },
-    open = proc(menu : ^Settings_Menu, ctx : Game_Context) {
-        menu.show = true
-    },
-    close = proc(menu : ^Settings_Menu, ctx : Game_Context) {
-        menu.show = false
     },
 }
 
-Settings_Footer_Item :: enum {
+Settings_Footer_Item :: enum u8 {
     Back,
     Defaults,
 }
 
-Settings_Menu_Focus_Area :: enum {
+Settings_Menu_Focus_Area :: enum u8 {
     Menu,
     Footer,
 }
 
-Settings_Sub_Menu :: struct($T : typeid) where ins.type_is_enum(T) {
+Settings_Sub_Menu :: struct($T : typeid) where intrinsics.type_is_enum(T) {
     current_menu_item   : T,
     current_footer_item : Settings_Footer_Item,
     focus_area          : Settings_Menu_Focus_Area,
-    switch_next         : bool,
-    switch_prev         : bool,
 }
 
-Graphics_Menu_Item_Id :: enum {
+Graphics_Menu_Item_Id :: enum u8 {
     Resolution,
     Fullscreen,
     Gamma,
@@ -104,11 +78,6 @@ Graphics_Menu :: Settings_Sub_Menu(Graphics_Menu_Item_Id)
 
 GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
     update_ui = proc(menu : ^Graphics_Menu, ctx : Game_Context) -> (res: Menu_Result) {
-        defer {
-            menu.switch_next = false
-            menu.switch_prev = false
-        }
-
         ui       := ctx.ui
         settings := &ctx.settings.graphics
 
@@ -158,8 +127,6 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         current_value = settings.resolution,
                                         is_active     = is_active,
                                         anchor        = item_anchor,
-                                        switch_next   = menu.switch_next,
-                                        switch_prev   = menu.switch_prev,
                                         item_height   = item_height,
                                     )
                                     if changed {
@@ -176,8 +143,6 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         current_value = settings.fullscreen,
                                         is_active     = is_active,
                                         anchor        = item_anchor,
-                                        switch_next   = menu.switch_next,
-                                        switch_prev   = menu.switch_prev,
                                         item_height   = item_height,
                                     )
                                     if changed {
@@ -196,8 +161,6 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         format        = "%.1f",
                                         is_active     = is_active,
                                         anchor        = item_anchor,
-                                        switch_next   = menu.switch_next,
-                                        switch_prev   = menu.switch_prev,
                                         item_height   = item_height,
                                     )
                                     if changed {
@@ -205,6 +168,13 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                                         settings_apply(settings^)
                                     }
                             }
+                        }
+
+                        if ui_is_key_pressed(ui, .Down) {
+                            menu.current_menu_item = enum_next(menu.current_menu_item)
+                        }
+                        if ui_is_key_pressed(ui, .Up) {
+                            menu.current_menu_item = enum_prev(menu.current_menu_item)
                         }
                     }
                 case .Footer:
@@ -219,16 +189,23 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                     )
             }
         }
+
+        if ui_is_cancel_pressed(ctx.ui) {
+            game_save_settings()
+            res.close = true
+        }
+
+        if ui_is_key_pressed(ctx.ui, .Tab) {
+            menu.focus_area = enum_next(menu.focus_area)
+        }
+
         return
-    },
-    input_ui = proc(menu : ^Graphics_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
-        return menu_helper_settings_input(menu, ctx.ui, ev)
     },
 }
 
 Controls_Menu :: Settings_Sub_Menu(Controls_Menu_Item_Id)
 
-Controls_Menu_Item_Id :: enum {
+Controls_Menu_Item_Id :: enum u8 {
     Mouse_Invert_Y,
     Mouse_Horizontal_Sensitivity,
     Mouse_Vertical_Sensitivity,
@@ -237,11 +214,6 @@ Controls_Menu_Item_Id :: enum {
 
 CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
     update_ui = proc(menu : ^Controls_Menu, ctx : Game_Context) -> (res: Menu_Result) {
-        defer {
-            menu.switch_next = false
-            menu.switch_prev = false
-        }
-
         ui       := ctx.ui
         settings := &ctx.settings.controls
 
@@ -286,8 +258,6 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                         current_value = settings.invert_y,
                                         is_active     = is_active,
                                         anchor        = item_anchor,
-                                        switch_next   = menu.switch_next,
-                                        switch_prev   = menu.switch_prev,
                                         item_height   = item_height,
                                     )
                                     if changed {
@@ -306,8 +276,6 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                         format        = "%d",
                                         is_active     = is_active,
                                         anchor        = item_anchor,
-                                        switch_next   = menu.switch_next,
-                                        switch_prev   = menu.switch_prev,
                                         item_height   = item_height,
                                     )
                                     if changed {
@@ -326,8 +294,6 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                         format        = "%d",
                                         is_active     = is_active,
                                         anchor        = item_anchor,
-                                        switch_next   = menu.switch_next,
-                                        switch_prev   = menu.switch_prev,
                                         item_height   = item_height,
                                     )
                                     if changed {
@@ -336,6 +302,13 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                                     }
                             }
                         }
+                    }
+
+                    if ui_is_key_pressed(ui, .Down) {
+                        menu.current_menu_item = enum_next(menu.current_menu_item)
+                    }
+                    if ui_is_key_pressed(ui, .Up) {
+                        menu.current_menu_item = enum_prev(menu.current_menu_item)
                     }
                 case .Footer:
                     res.close = menu_helper_settings_footer(
@@ -349,17 +322,24 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                     )
             }
         }
+
+        if ui_is_cancel_pressed(ctx.ui) {
+            game_save_settings()
+            res.close = true
+        }
+
+        if ui_is_key_pressed(ctx.ui, .Tab) {
+            menu.focus_area = enum_next(menu.focus_area)
+        }
+
         return
-    },
-    input_ui = proc(menu : ^Controls_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
-        return menu_helper_settings_input(menu, ctx.ui, ev)
     },
 }
 
 
 Audio_Menu :: Settings_Sub_Menu(Audio_Menu_Item_Id)
 
-Audio_Menu_Item_Id :: enum {
+Audio_Menu_Item_Id :: enum u8 {
     Master_Volume,
     Sound_Volume,
     Music_Volume,
@@ -367,11 +347,6 @@ Audio_Menu_Item_Id :: enum {
 
 AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
     update_ui = proc(menu : ^Audio_Menu, ctx : Game_Context) -> (res: Menu_Result) {
-        defer {
-            menu.switch_next = false
-            menu.switch_prev = false
-        }
-
         ui       := ctx.ui
         settings := &ctx.settings.audio
 
@@ -422,8 +397,6 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
                                         format           = "%d",
                                         is_active        = is_active,
                                         anchor           = item_anchor,
-                                        switch_next      = menu.switch_next,
-                                        switch_prev      = menu.switch_prev,
                                         item_height      = item_height,
                                     )
                                     if changed {
@@ -446,8 +419,6 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
                                         format           = "%d",
                                         is_active        = is_active,
                                         anchor           = item_anchor,
-                                        switch_next      = menu.switch_next,
-                                        switch_prev      = menu.switch_prev,
                                         item_height      = item_height,
                                     )
                                     if changed {
@@ -470,8 +441,6 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
                                         format           = "%d",
                                         is_active        = is_active,
                                         anchor           = item_anchor,
-                                        switch_next      = menu.switch_next,
-                                        switch_prev      = menu.switch_prev,
                                         item_height      = item_height,
                                     )
                                     if changed {
@@ -479,6 +448,13 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
                                         settings_apply(settings^)
                                     }
                             }
+                        }
+
+                        if ui_is_key_pressed(ui, .Down) {
+                            menu.current_menu_item = enum_next(menu.current_menu_item)
+                        }
+                        if ui_is_key_pressed(ui, .Up) {
+                            menu.current_menu_item = enum_prev(menu.current_menu_item)
                         }
                     }
                 case .Footer:
@@ -493,9 +469,16 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
                     )
             }
         }
+
+        if ui_is_cancel_pressed(ctx.ui) {
+            game_save_settings()
+            res.close = true
+        }
+
+        if ui_is_key_pressed(ctx.ui, .Tab) {
+            menu.focus_area = enum_next(menu.focus_area)
+        }
+        
         return
-    },
-    input_ui = proc(menu : ^Audio_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
-        return menu_helper_settings_input(menu, ctx.ui, ev)
     },
 }

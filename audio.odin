@@ -2,7 +2,7 @@ package main
 
 import ma "vendor:miniaudio"
 
-Sound_Id :: enum {
+Sound_Id :: enum u8 {
 	Fire_Primary,
 	Fire_Secondary,
 	Ui_Mouse_Click,
@@ -16,7 +16,7 @@ sound_files : [Sound_Id][]byte = {
 	.Ui_Click       = #load("assets/sounds/ui_click.ogg"),
 }
 
-Music_Id :: enum {
+Music_Id :: enum u8 {
 	Main_Menu,
 }
 

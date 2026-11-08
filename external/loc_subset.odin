@@ -6,7 +6,7 @@ import main ".."
 import "core:os"
 
 
-Seperated_Lang :: enum {
+Seperated_Lang :: enum u8 {
     Simplified_Chinese = cast(int)main.Language.Simplified_Chinese,
     Japanese          = cast(int)main.Language.Japanese,
 }

@@ -1,6 +1,6 @@
 package main
 
-Time_Scale_Slot_Id :: enum {
+Time_Scale_Slot_Id :: enum u8 {
     Base,
     Pause_Menu,
 }

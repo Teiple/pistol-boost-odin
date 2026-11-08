@@ -2,14 +2,14 @@ package main
 import "core:slice"
 import "base:runtime"
 
-Language :: enum {
+Language :: enum u8 {
     English,
     Vietnamese,
     Simplified_Chinese,
     Japanese,
 }
 
-Loc_Term :: enum {
+Loc_Term :: enum u8 {
     Undefined,
     New_Game,
     Continue,

@@ -159,6 +159,7 @@ game_update :: proc(unscaled_dt : f32) {
 
 game_input :: proc(ev : ^sapp.Event) {
 	mouse_input(&game.mouse_ui, &game.viewport, ev^)
+	ui_input(&game.ui, ev^)
 	
 	ctx_ui := game_context_make(&game, &game.mouse_ui)
 	if game.scene_callbacks.input_ui != nil {

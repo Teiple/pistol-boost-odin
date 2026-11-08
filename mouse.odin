@@ -2,14 +2,14 @@ package main
 
 import sapp "sokol-odin/sokol/app"
 
-Mouse_Button_State :: enum {
+Mouse_Button_State :: enum u8 {
     None,
     Pressed,
     Released,
     Down,
 }
 
-Mouse_Button :: enum {
+Mouse_Button :: enum u8 {
     Left,
     Middle,
     Right,

@@ -44,7 +44,7 @@ PercentOffset :: struct {
     offset : f32,
 }
 
-Font_Id :: enum {
+Font_Id :: enum u8 {
     Normal
 }
 
@@ -60,7 +60,7 @@ Focus_Action_Set   :: struct{
     target_id : Ui_Id
 }
 
-Ui_Icon :: enum {
+Ui_Icon :: enum u8 {
     Cursor,
     Left_Arrow,
     Right_Arrow,
@@ -89,6 +89,7 @@ Ui_Builder :: struct {
     mouse           : ^Mouse_Input,
     input_captured  : bool,
     enter_pressed   : bool,
+    keyboard_input  : bit_set[Ui_Keys],
     // Text edit is complex, in one pass we cannot both change
     // the focus while still operate on the old text edit
     focus           : struct {
@@ -105,6 +106,11 @@ ui_icon_files : [Ui_Icon][]byte = {
     .Right_Arrow = #load("assets/images/right_arrow.png"),
     .Plus        = #load("assets/images/plus.png"),
     .Minus       = #load("assets/images/minus.png"),
+}
+
+Ui_Keys :: enum u8 {
+    Left, Right, Up, Down,
+    Space, Enter, Escape, Tab
 }
 
 Ui :: struct {
@@ -171,7 +177,12 @@ Lang_Font_Config :: struct {
     base_size       : f32,
 }
 
-ui_init :: proc(ui : ^Ui, lang_font_cfgs : []Lang_Font_Config, get_time : proc() -> f32, allocator := context.allocator) {
+ui_init :: proc(
+    ui : ^Ui,
+    lang_font_cfgs : []Lang_Font_Config,
+    get_time : proc() -> f32,
+    allocator := context.allocator
+) {
     ui.shader   = sg.make_shader(shaders.unlit_shader_desc(sg.query_backend()))
     
     ui.pipeline = sg.make_pipeline({
@@ -880,8 +891,6 @@ ui_draw :: proc(ui : ^Ui, viewport : ^Viewport) {
     clear(&ui.vertices)
     clear(&ui.builder.commands)
     clear(&ui.builder.container_stack)
-
-    ui.builder.input_captured = false
 }
 
 ui_begin :: proc(ui : ^Ui, viewport : ^Viewport, mouse : ^Mouse_Input, lang : Language) {
@@ -920,6 +929,32 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     }
     ui.text_edit.submit_requested = false
     clear(&ui.builder.scissor_stack)
+
+    ui.builder.input_captured = false
+    ui.builder.keyboard_input = {}
+}
+
+ui_input :: proc(ui : ^Ui , ev : sapp.Event) {
+    if ev.type == .KEY_DOWN {
+        #partial switch ev.key_code {
+            case .UP:
+                ui.builder.keyboard_input += {.Up}
+            case .DOWN:
+                ui.builder.keyboard_input += {.Down}
+            case .LEFT:
+                ui.builder.keyboard_input += {.Left}
+            case .RIGHT:
+                ui.builder.keyboard_input += {.Right}
+            case .ESCAPE:
+                ui.builder.keyboard_input += {.Escape}
+            case .SPACE:
+                ui.builder.keyboard_input += {.Space}
+            case .ENTER:
+                ui.builder.keyboard_input += {.Enter}
+            case .TAB:
+                ui.builder.keyboard_input += {.Tab}
+        }
+    }
 }
 
 // You should call this inside a input/event callback, not frame callback
@@ -1036,6 +1071,17 @@ ui_text_edit_input :: proc(
     if !ctrl && ev.type == .CHAR {
         edit.input_rune(&ui.text_edit.state, rune(ev.char_code))
     }
+}
+
+ui_is_key_pressed :: proc(ui : ^Ui, key: Ui_Keys) -> bool {
+    return key in ui.builder.keyboard_input
+}
+
+ui_is_accept_pressed :: proc(ui : ^Ui) -> bool {
+    return .Space in ui.builder.keyboard_input || .Enter in ui.builder.keyboard_input 
+}
+ui_is_cancel_pressed :: proc(ui : ^Ui) -> bool {
+    return .Escape in ui.builder.keyboard_input 
 }
 
 ui_push_spinner :: proc(

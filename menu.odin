@@ -25,8 +25,7 @@ Menu_Callbacks :: struct($T : typeid) where
 		ins.type_is_variant_of(Menu, ins.type_elem_type(T))
 	)
 {
-    update_ui : proc(menu: T, ctx: Game_Context)                  -> Menu_Result,
-    input_ui  : proc(menu: T, ctx: Game_Context, ev : sapp.Event) -> Menu_Result,
+    update_ui : proc(menu: T, ctx: Game_Context) -> Menu_Result,
     open      : proc(menu: T, ctx: Game_Context),
     close     : proc(menu: T, ctx: Game_Context),    
 }
@@ -79,13 +78,6 @@ menu_stack_init :: proc(menu_stack : ^Menu_Stack) {
 menu_stack_update_ui :: proc(menu_stack : ^Menu_Stack, ctx : Game_Context) {
     if update_cb := menu_stack.menu_callbacks.update_ui; update_cb != nil {
         res := update_cb(menu_stack_top(menu_stack), ctx)
-        menu_stack_resolve_result(menu_stack, res, ctx)
-    }
-}
-
-menu_stack_input_ui :: proc(menu_stack : ^Menu_Stack, ctx : Game_Context, ev : sapp.Event) {
-    if input_cb := menu_stack.menu_callbacks.input_ui; input_cb != nil {
-        res := input_cb(menu_stack_top(menu_stack), ctx, ev)
         menu_stack_resolve_result(menu_stack, res, ctx)
     }
 }
@@ -168,8 +160,6 @@ menu_helper_item_options :: proc(
     anchor        : Anchor,
     
     item_height   : f32,
-    switch_next   : bool,
-    switch_prev   : bool,
 ) -> (new_value : T, changed : bool) where ins.type_is_enum(T) || ins.type_is_integer(T) {
     rect, _, clicked := ui_push_rect(
         ui,
@@ -210,9 +200,9 @@ menu_helper_item_options :: proc(
         )
 
         if clicked || is_active {
-            if switch_next || clicked {
+            if ui_is_key_pressed(ui, .Right) || ui_is_accept_pressed(ui) || clicked {
                 return enum_next(current_value), true
-            } else if switch_prev {
+            } else if ui_is_key_pressed(ui, .Left) {
                 return enum_prev(current_value), true
             }
         }
@@ -235,8 +225,6 @@ menu_helper_item_toggle :: proc(
     off_term      : Loc_Term,
 
     item_height   : f32,
-    switch_next   : bool,
-    switch_prev   : bool,
 ) -> (new_value : bool, changed : bool) {
     rect, _, clicked := ui_push_rect(
         ui,
@@ -270,9 +258,9 @@ menu_helper_item_toggle :: proc(
         )
 
         if clicked || is_active {
-            if switch_next || clicked {
+            if ui_is_key_pressed(ui, .Right) || ui_is_accept_pressed(ui) || clicked {
                 return !current_value, true
-            } else if switch_prev {
+            } else if ui_is_key_pressed(ui, .Left) {
                 return !current_value, true
             }
         }
@@ -295,8 +283,6 @@ menu_helper_item_spinner :: proc(
     is_active   : bool,
     anchor      : Anchor,
     item_height : f32,
-    switch_next : bool,
-    switch_prev : bool,
 
     format      : string,
 
@@ -336,13 +322,13 @@ menu_helper_item_spinner :: proc(
         )
 
         if clicked || is_active {
-            if switch_next || clicked {
+            if ui_is_key_pressed(ui, .Right) || ui_is_accept_pressed(ui) || clicked {
                 new_value := current_value + step
                 if new_value > max {
                     new_value = min
                 }
                 return new_value, new_value != current_value
-            } else if switch_prev {
+            } else if ui_is_key_pressed(ui, .Left) {
                 new_value := current_value - step
                 if new_value < min {
                     new_value = max
@@ -376,8 +362,8 @@ menu_helper_item_progress_bar :: proc(
     is_active   : bool,
     anchor      : Anchor,
     item_height : f32,
-    switch_next : bool,
-    switch_prev : bool,
+    // switch_next : bool,
+    // switch_prev : bool,
 
     format      : string,
 
@@ -493,13 +479,13 @@ menu_helper_item_progress_bar :: proc(
                 )
             }
             
-            if (is_active && switch_next) || right_control_clicked {
+            if (is_active && (ui_is_key_pressed(ui, .Right) || ui_is_accept_pressed(ui))) || right_control_clicked {
                 new_value := current_value + step
                 if new_value > max {
                     new_value = max
                 }
                 return new_value, new_value != current_value
-            } else if (is_active && switch_prev) || left_control_clicked {
+            } else if (is_active && ui_is_key_pressed(ui, .Left)) || left_control_clicked {
                 new_value := current_value - step
                 if new_value < min {
                     new_value = min
@@ -553,10 +539,8 @@ menu_helper_calculate_footer_layout :: proc(
 }
 
 menu_helper_label_menu :: proc(
-    menu             : ^$M,
     ctx              : Game_Context,
-    selected_current : bool,
-    current_item     : $T,
+    current_item     : ^$T,
     items            : [T]Menu_Item,
     anchor           : Anchor = {
         parent  = {.5, .5},
@@ -598,7 +582,7 @@ menu_helper_label_menu :: proc(
                 }
             )
 
-            is_clicked ||= selected_current && item_enum == current_item
+            is_clicked ||= ui_is_accept_pressed(ui) && item_enum == current_item^
 
             if is_clicked {
                 selected_option = item_enum
@@ -629,7 +613,7 @@ menu_helper_label_menu :: proc(
                         parent    = {.5, .5} 
                     },
                     color       = (
-                        item_enum == current_item ?
+                        item_enum == current_item^ ?
                         hsv(140, 0.5, 1) :
                         hsv(140, 1, 0.8)
                     ),
@@ -642,33 +626,17 @@ menu_helper_label_menu :: proc(
 
             item_anchor.offset.y += rect.w + spacing
         }
-    }   
-    
-    return
-}
-
-menu_helper_label_menu_input :: proc(
-    ui               : ^Ui,
-    ev               : sapp.Event,
-    selected_current : ^bool,
-    current_item     : ^$T,
-) -> (requested_to_close : bool) where ins.type_is_enum(T) && ins.type_enum_is_contiguous(T)
-{
-    ui_capture_input(ui)
-
-    if ev.type == .KEY_DOWN {
-        #partial switch ev.key_code {
-            case .DOWN:
-                current_item^ = enum_next(current_item^)
-            case .UP:
-                current_item^ = enum_prev(current_item^)
-            case .SPACE, .ENTER:
-                selected_current^ = true           
-            case .ESCAPE:
-                requested_to_close = true
-        }
     }
 
+    // Input
+    if ui_is_key_pressed(ui, .Down) {
+        current_item^ = enum_next(current_item^)
+    }
+
+    if ui_is_key_pressed(ui, .Up) {
+        current_item^ = enum_prev(current_item^)
+    }
+    
     return
 }
 
@@ -725,18 +693,14 @@ menu_helper_back_button :: proc(
 
 
 Quit_Confirm_Popup_Menu :: struct{
-    selected_current : bool,
     current_item     : bool,
 }
 
 QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
     update_ui = proc(m : ^Quit_Confirm_Popup_Menu, ctx : Game_Context) -> (res : Menu_Result) {
-        defer m.selected_current = false
-        
         yes, is_clicked := menu_helper_confirmation(
             ctx.ui,
-            current_item   = m.current_item,
-            selected_current = m.selected_current,
+            current_item     = &m.current_item,
             yes_id           = "quit_confirm_popup_menu:yes",
             no_id            = "quit_confirm_popup_menu:no",
             message          = .Exit_Confirmation,
@@ -752,16 +716,13 @@ QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
             }
         }
 
+
+        if ui_is_cancel_pressed(ctx.ui) {
+            res.close = true   
+        }
+
         return
     },
-    input_ui = proc(m : ^Quit_Confirm_Popup_Menu, ctx : Game_Context, ev: sapp.Event) -> (res : Menu_Result) {
-        res.close = menu_helper_confirmation_input(ctx.ui, ev,
-            selected_current = &m.selected_current,
-            current_item   = &m.current_item,
-        )
-        
-        return
-    }
 }
 
 menu_helper_confirmation :: proc(
@@ -771,8 +732,7 @@ menu_helper_confirmation :: proc(
     no_label         : Loc_Term,
     yes_id           : Ui_Id,
     no_id            : Ui_Id,
-    current_item     : bool,
-    selected_current : bool,
+    current_item     : ^bool,
 ) -> (yes : bool, is_clicked : bool) {
     size       : [2]f32= {400, 200}
     padding    :: 16
@@ -829,7 +789,7 @@ menu_helper_confirmation :: proc(
                 }
             )
 
-            yes_clicked ||= selected_current && current_item == true
+            yes_clicked ||= ui_is_accept_pressed(ui) && current_item^ == true
 
             ui_push_container(ui, yes_rect)
             {
@@ -839,7 +799,7 @@ menu_helper_confirmation :: proc(
                     ui,
                     text    = tr(yes_label),
                     anchor  = { element = {.5, .5}, parent = {.5, .5} },
-                    color   = current_item ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
+                    color   = current_item^ ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8),
                 )
             }
 
@@ -854,7 +814,7 @@ menu_helper_confirmation :: proc(
                 }
             )
 
-            no_clicked ||= selected_current && current_item == false
+            no_clicked ||= ui_is_accept_pressed(ui) && current_item^ == false
             
             ui_push_container(ui, no_rect)
             {
@@ -864,7 +824,7 @@ menu_helper_confirmation :: proc(
                     ui,
                     text    = tr(no_label),
                     anchor  = { element = {.5, .5}, parent = {.5, .5} },
-                    color   = !current_item ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8)
+                    color   = !current_item^ ? hsv(140, 0.5, 1) : hsv(140, 1, 0.8)
                 )
             }
 
@@ -873,93 +833,13 @@ menu_helper_confirmation :: proc(
         }
     }
 
-    return
-}
-
-
-menu_helper_confirmation_input :: proc(
-    ui               : ^Ui,
-    ev               : sapp.Event,
-    selected_current : ^bool,
-    current_item     : ^bool,
-) -> (requested_to_close : bool)
-{
-    ui_capture_input(ui)
-
-    cur := current_item^
-
-    if ev.type == .KEY_DOWN {
-        #partial switch ev.key_code {
-            case .LEFT, .RIGHT:
-                current_item^ = !cur
-            case .SPACE, .ENTER:
-                selected_current^ = true           
-            case .ESCAPE:
-                requested_to_close = true
-        }
+    // Input
+    if ui_is_key_pressed(ui, .Left) || ui_is_key_pressed(ui, .Right) {
+        current_item^ = !current_item^
     }
 
     return
 }
-
-
-menu_helper_settings_input :: proc(menu : ^$T/Settings_Sub_Menu($S), ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
-    ui_capture_input(ui)
-
-    requested_to_close := false
-
-    if ev.type == .KEY_DOWN {
-        if ev.key_code == .ESCAPE {
-            requested_to_close = true
-        } else if ev.key_code == .TAB {
-            if (ev.modifiers & sapp.MODIFIER_SHIFT) != 0 {
-                menu.focus_area = enum_prev(menu.focus_area)
-            } else {
-                menu.focus_area = enum_next(menu.focus_area)
-            }
-            
-        } else {
-            switch menu.focus_area {
-                case .Menu:
-                    current_item := &menu.current_menu_item
-
-                    #partial switch ev.key_code {
-                        case .DOWN:
-                            current_item^ = enum_next(current_item^)
-                        case .UP:
-                            current_item^ = enum_prev(current_item^)
-                        case .SPACE, .ENTER, .RIGHT:
-                            menu.switch_next = true
-                        case .LEFT:
-                            menu.switch_prev = true         
-                        case .ESCAPE:
-                            requested_to_close = true
-                    }
-                case .Footer:
-                    current_item := &menu.current_footer_item
-
-                    #partial switch ev.key_code {
-                        case .DOWN, .RIGHT:
-                            current_item^ = enum_next(current_item^)
-                        case .UP, .LEFT:
-                            current_item^ = enum_prev(current_item^)
-                        case .SPACE, .ENTER:
-                            menu.switch_next = true         
-                        case .ESCAPE:
-                            requested_to_close = true
-                    }
-            }
-
-        }
-    }
-
-    if requested_to_close {
-        res.close = true 
-        game_save_settings()
-    }
-    
-    return
-} 
 
 menu_helper_settings_footer :: proc(
     ui               : ^Ui,
@@ -1001,7 +881,7 @@ menu_helper_settings_footer :: proc(
 
     for item, index in items {
         sizing, anchor, text_anchor := menu_helper_calculate_footer_layout(index, len(items))
-        is_selected := menu.switch_next && is_focused && current_item == item
+        is_selected := ui_is_accept_pressed(ui) && is_focused && current_item == item
 
         switch item {
             case .Back:
@@ -1079,6 +959,24 @@ menu_helper_settings_footer :: proc(
                         padding = 32,
                     )
                 }
+        }
+    }
+
+    // Input
+    if is_focused {
+        idx := 0
+        for it, i in items {
+            if it == menu.current_footer_item {
+                idx = i
+                break
+            }
+        }
+
+        if ui_is_key_pressed(ui, .Right) || ui_is_key_pressed(ui, .Down) {
+            menu.current_footer_item = items[(idx + 1) % len(items)]
+        }
+        if ui_is_key_pressed(ui, .Left) || ui_is_key_pressed(ui, .Up) {
+            menu.current_footer_item = items[(idx - 1 + len(items)) % len(items)]
         }
     }
 

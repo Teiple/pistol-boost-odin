@@ -1,18 +1,18 @@
 {
 	"graphics": {
 		"resolution": "Resolution_960x540",
-		"fullscreen": false,
+		"fullscreen": true,
 		"gamma": 1.00000000
 	},
 	"controls": {
-		"horizontal_sensitivity": 2,
+		"horizontal_sensitivity": 1,
 		"vertical_sensitivity": 2,
 		"invert_y": false
 	},
 	"language": "English",
 	"audio": {
 		"master_volume": 1.00000000,
-		"music_volume": 1.00000000,
-		"sound_volume": 1.00000000
+		"music_volume": 0.29999992,
+		"sound_volume": 0.29999992
 	}
 }

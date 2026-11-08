@@ -91,10 +91,10 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ctx : Game_Context, ev : sapp.Event) {
-        if menu_stack_top(&scene.menu_stack) != nil {
-            menu_stack_input_ui(&scene.menu_stack, ctx, ev)
-            return
-        } else if ev.type == .KEY_DOWN && ev.key_code == .ESCAPE {
+        if  ev.type == .KEY_DOWN &&
+            ev.key_code == .ESCAPE &&
+            menu_stack_top(&scene.menu_stack) == nil
+        {
             menu_stack_push_menu(&scene.menu_stack, Pause_Menu{}, ctx)
         }
     }

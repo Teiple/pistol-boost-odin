@@ -47,7 +47,7 @@ Model_Animation :: struct {
 	duration   : f32,
 }
 
-Animation_Loop_Mode :: enum {
+Animation_Loop_Mode :: enum u8 {
 	Once,
 	Loop
 }
@@ -61,7 +61,7 @@ Model :: struct {
 	index_count          : i32,
 }
 
-Model_Attribute :: enum {
+Model_Attribute :: enum u8 {
 	Position,
 	Color,
 	UV,

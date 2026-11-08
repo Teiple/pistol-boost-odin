@@ -2,7 +2,7 @@ package main
 
 import sapp "sokol-odin/sokol/app"
 
-Pause_Menu_Item_Id :: enum {
+Pause_Menu_Item_Id :: enum u8 {
     Continue,
     Settings,
     Main_Menu,
@@ -20,22 +20,17 @@ pause_menu_items := [Pause_Menu_Item_Id]Menu_Item{
 Pause_Menu :: struct {
     show             : bool,
     current_item     : Pause_Menu_Item_Id,
-    selected_current : bool,
 }
 
 PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
     update_ui = proc(menu : ^Pause_Menu, ctx : Game_Context) -> (res : Menu_Result) {
-        defer menu.selected_current = false
-
         if !menu.show {
             return {}
         }
 
         selected_opt, selected := menu_helper_label_menu(
-            menu             = menu,
             ctx              = ctx,
-            selected_current = menu.selected_current,
-            current_item     = menu.current_item,
+            current_item     = &menu.current_item,
             items            = pause_menu_items,
             anchor           = {
                 parent  = {1, .5},
@@ -54,15 +49,10 @@ PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
                 res.next_menu = Quit_Confirm_Popup_Menu{}
         }
 
-        return
-    },
-    input_ui = proc(menu : ^Pause_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
-        res.close = menu_helper_label_menu_input(
-            ui               = ctx.ui,
-            ev               = ev,
-            selected_current = &menu.selected_current,
-            current_item     = &menu.current_item,
-        )
+        if ui_is_cancel_pressed(ctx.ui) {
+            res.close = true
+        }
+
         return
     },
     open = proc(menu : ^Pause_Menu, ctx : Game_Context) {

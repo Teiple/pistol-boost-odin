@@ -96,7 +96,7 @@ GLTF_Param_Error :: struct {
     index: int,
 }
 
-Error_Type :: enum {
+Error_Type :: enum u8 {
     Bad_GLB_Magic,
     Cant_Read_File,
     Data_Too_Short,
@@ -160,7 +160,7 @@ Accessor :: struct {
     extras:         Extras,
 }
 
-Accessor_Type :: enum {
+Accessor_Type :: enum u8 {
     Scalar,
     Vector2,
     Vector3,
@@ -226,13 +226,13 @@ Animation_Sampler :: struct {
     extras:        Extras,
 }
 
-Interpolation_Algorithm :: enum {
+Interpolation_Algorithm :: enum u8 {
     Linear = 0, // Default
     Step,
     Cubic_Spline,
 }
 
-Animation_Channel_Path :: enum {
+Animation_Channel_Path :: enum u8 {
     Translation,
     Rotation,
     Scale,
@@ -305,7 +305,7 @@ Image :: struct {
     extras:      Extras,
 }
 
-Image_Type :: enum {
+Image_Type :: enum u8 {
     JPEG,
     PNG,
 }
@@ -328,7 +328,7 @@ Material :: struct {
     extras:             Extras,
 }
 
-Material_Alpha_Mode :: enum {
+Material_Alpha_Mode :: enum u8 {
     Opaque, // Default
     Mask,
     Alpha_Cutoff,
@@ -378,7 +378,7 @@ Mesh_Primitive :: struct {
     extras:            Extras,
 }
 
-Mesh_Primitive_Mode :: enum {
+Mesh_Primitive_Mode :: enum u8 {
     Points,
     Lines,
     Line_Loop,
@@ -397,7 +397,7 @@ Mesh_Target :: struct {
 }
 
 // TODO: Verify if this is correct
-Mesh_Target_Type :: enum {
+Mesh_Target_Type :: enum u8 {
     Invalid,
     Position,
     Normal,
