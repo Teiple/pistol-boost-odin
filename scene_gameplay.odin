@@ -14,8 +14,7 @@ Scene_Gameplay :: struct {
     menu_stack    : Menu_Stack,
     player        : Player,
     arena         : Arena,
-    debug_draw    : Debug_Draw, 
-    
+    debug_draw    : Debug_Draw,    
 }
 
 SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
@@ -95,7 +94,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
             ev.key_code == .ESCAPE &&
             menu_stack_top(&scene.menu_stack) == nil
         {
-            menu_stack_push_menu(&scene.menu_stack, Pause_Menu{}, ctx)
+            menu_stack_request_push(&scene.menu_stack, Pause_Menu{})
         }
     }
 }

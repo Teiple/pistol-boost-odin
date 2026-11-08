@@ -583,7 +583,7 @@ ui_push_text :: proc(
     text           : string,
     font_id        : Font_Id = .Normal,
     font_size      : f32 = 32,
-    color          : [4]f32 = {0.2, 0.8, 0.2, 1},
+    color          : [4]f32 = 1,
     anchor         : Anchor = {},
     text_alignment : f32 = .5,
     padding        : [4]f32 = 0,
@@ -1187,7 +1187,7 @@ ui_push_text_edit :: proc(
         ui,
         sizing      = sizing,
         anchor      = anchor,
-        color       = hsv(220, 0.2, 0.2),
+        color       = hsv(0, 0, .2),
         interactive = {
             id = id,
         }
@@ -1245,9 +1245,8 @@ ui_push_text_edit :: proc(
     current_text = is_focused ? strings.to_string(ui.text_edit.builder) : text 
     submitted    ||= is_focused && ui.text_edit.submit_requested
 
-    CARRET_WIDTH :: 2
+    caret_width :: 2
 
-    // TODO: this setup will irnogre padd, consider using another nested rect with paddding applied
     ui_push_container(ui, rect);
     {
         defer ui_pop_container(ui);
@@ -1303,8 +1302,8 @@ ui_push_text_edit :: proc(
                 font_size = font_size
             )
 
-            CARET_BLINK_RATE :: .25
-            if int(ui.get_time() / CARET_BLINK_RATE) % 2 == 0 {
+            caret_blink_rate :: .25
+            if int(ui.get_time() / caret_blink_rate) % 2 == 0 {
                 ui_push_rect(
                     ui,
                     sizing = { 2, font_size },
@@ -1321,8 +1320,8 @@ ui_push_text_edit :: proc(
             
             if caret_x < padding_x {
                 ui.text_edit.scroll_x += padding_x - caret_x
-            } else if caret_x > right_edge - CARRET_WIDTH {
-                ui.text_edit.scroll_x -= caret_x - (right_edge - CARRET_WIDTH)
+            } else if caret_x > right_edge - caret_width {
+                ui.text_edit.scroll_x -= caret_x - (right_edge - caret_width)
             }
         }
     }

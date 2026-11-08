@@ -65,69 +65,143 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             )
         }
 
-        if !ui_is_capturing_input(ctx.ui) {
-            free_camera_update_3d(&scene.free_cam, ctx.camera, ctx.mouse, dt)
-        }
+        free_camera_update_3d(&scene.free_cam, ctx.camera, ctx.mouse, dt)
     },
     draw_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, renderer : ^Renderer) {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         ui := ctx.ui
-        field_height :: 42
-        field_gap    :: 8
+        
+        inspector_rect, _, _ := ui_push_rect(
+            ui,
+            sizing = { 300, Grow{}},
+            anchor = { element = {1, 0}, parent = {1, 0} },
+            color  = hsv(0, 0, 0.25),
+        )
 
-        field_anchor : Anchor = {
-            parent  = {.5, .5},
-            element = {.5, .5}
+        inspector_padding    :: 8
+        inspector_rect_width := inspector_rect.z - inspector_padding * 2
+
+        ui_push_container(ui, inspector_rect)
+        {
+            defer ui_pop_container(ui)
+
+            field_height      :: 42
+            field_gap         :: 4
+            field_label_width :: 50
+
+            field_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
+
+            x, y, z := expand_values(scene.platforms[0].position)
+
+            field_width : [2]f32 = { field_label_width, inspector_rect_width - field_label_width}
+
+            header_rect := ui_push_text(
+                ui,
+                text          = "Position",
+                anchor        = field_anchor,
+            )
+
+            field_anchor.offset.y += header_rect.w + field_gap
+
+            if new, changed := ui_push_spinner(
+                ui,
+                id          = "spinner_1",
+                label       = "X", 
+                value       = x,
+                label_color = hsv(332),
+                height      = field_height,
+                width       = field_width,
+                anchor      = field_anchor,
+            ); changed do x = new
+
+            field_anchor.offset.y += field_height + field_gap
+
+            if new, changed := ui_push_spinner(
+                ui,
+                id          = "spinner_2",
+                label       = "Y", 
+                value       = y,
+                label_color = hsv(100),
+                height      = field_height,
+                width       = field_width,
+                anchor      = field_anchor,
+            ); changed do y  = new
+
+            field_anchor.offset.y += field_height + field_gap
+
+            if new, changed := ui_push_spinner(
+                ui,
+                id          = "spinner_3",
+                label       = "Z", 
+                value       = z,
+                label_color = hsv(200),
+                width       = field_width,
+                height      = field_height,
+                anchor      = field_anchor,
+            ); changed do z = new
+
+            field_anchor.offset.y += field_height + 4 * field_gap
+
+            scene.platforms[0].position = {x, y, z}
+
+            x, y, z = expand_values(scene.platforms[0].size)
+
+            field_width = { field_label_width, inspector_rect_width - field_label_width }
+
+            header_rect = ui_push_text(
+                ui,
+                text          = "Size",
+                anchor        = field_anchor,
+            )
+
+            field_anchor.offset.y += header_rect.w + field_gap
+
+            if new, changed := ui_push_spinner(
+                ui,
+                id          = "spinner_4",
+                label       = "X", 
+                value       = x,
+                label_color = hsv(332),
+                height      = field_height,
+                width       = field_width,
+                anchor      = field_anchor,
+            ); changed do x = new
+
+            field_anchor.offset.y += field_height + field_gap
+
+            if new, changed := ui_push_spinner(
+                ui,
+                id          = "spinner_5",
+                label       = "Y", 
+                value       = y,
+                label_color = hsv(100),
+                height      = field_height,
+                width       = field_width,
+                anchor      = field_anchor,
+            ); changed do y  = new
+
+            field_anchor.offset.y += field_height + field_gap
+
+            if new, changed := ui_push_spinner(
+                ui,
+                id          = "spinner_6",
+                label       = "Z", 
+                value       = z,
+                label_color = hsv(200),
+                width       = field_width,
+                height      = field_height,
+                anchor      = field_anchor,
+            ); changed do z = new
+
+            field_anchor.offset.y += field_height + field_gap
+
+            scene.platforms[0].size = {x, y, z}
         }
-
-        x, y, z := expand_values(scene.platforms[0].size)
-
-        if new, changed := ui_push_spinner(
-            ui,
-            id          = "spinner_1",
-            label       = "X", 
-            value       = x,
-            label_color = hsv(332),
-            height      = field_height,
-            width       = { 50, 80 },
-            anchor      = field_anchor,
-        ); changed do x = new
-
-        field_anchor.offset.y += field_height + field_gap
-
-        if new, changed := ui_push_spinner(
-            ui,
-            id          = "spinner_2",
-            label       = "Y", 
-            value       = y,
-            label_color = hsv(100),
-            height      = field_height,
-            width       = { 50, 80 },
-            anchor      = field_anchor,
-        ); changed do y  = new
-
-        field_anchor.offset.y += field_height + field_gap
-
-        if new, changed := ui_push_spinner(
-            ui,
-            id          = "spinner_3",
-            label       = "Z", 
-            value       = z,
-            label_color = hsv(200),
-            width       = { 50, 80 },
-            height      = field_height,
-            anchor      = { parent = {.5, .5}, element = {.5, .5}, offset = {0, 100} },
-        ); changed do y  = new
-
-        field_anchor.offset.y += field_height + field_gap
-
-        scene.platforms[0].size = {x, y, z}
     },
     input_ui =  proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
         ui := ctx.ui
-        ui_capture_input(ui)
         if ev.type == .KEY_DOWN && ev.key_code == .ESCAPE {
             game_request_quit()
             return

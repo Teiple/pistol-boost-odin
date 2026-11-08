@@ -1,7 +1,5 @@
 package main
 
-import sapp "sokol-odin/sokol/app"
-
 Pause_Menu_Item_Id :: enum u8 {
     Continue,
     Settings,

@@ -60,7 +60,7 @@ Scene_Main_Menu :: struct {
 SCENE_MAIN_MENU_CALLBACKS : Scene_Callbacks(^Scene_Main_Menu) : {
     init = proc(scene : ^Scene_Main_Menu, ctx : Game_Context) {
         menu_stack_init(&scene.menu_stack)
-        menu_stack_push_menu(&scene.menu_stack, Main_Menu{}, ctx)
+        menu_stack_request_push(&scene.menu_stack, Main_Menu{})
 
         audio_play_music(ctx.audio, .Main_Menu)
     },

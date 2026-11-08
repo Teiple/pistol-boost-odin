@@ -3,7 +3,6 @@ package main
 import "core:math"
 import "core:fmt"
 import ins "base:intrinsics"
-import sapp "sokol-odin/sokol/app"
 
 Menu :: union {
     Main_Menu,
@@ -60,6 +59,8 @@ menu_get_callbacks :: proc(menu : ^Menu) -> Menu_Callbacks_Any {
 Menu_Stack :: struct {
     menu_callbacks : Menu_Callbacks_Any,  
     stack          : [dynamic]Menu,
+    pending_push   : Menu,
+    pending_pop    : bool,
 }
 
 Menu_Result :: struct {
@@ -78,15 +79,22 @@ menu_stack_init :: proc(menu_stack : ^Menu_Stack) {
 menu_stack_update_ui :: proc(menu_stack : ^Menu_Stack, ctx : Game_Context) {
     if update_cb := menu_stack.menu_callbacks.update_ui; update_cb != nil {
         res := update_cb(menu_stack_top(menu_stack), ctx)
-        menu_stack_resolve_result(menu_stack, res, ctx)
-    }
-}
-
-menu_stack_resolve_result :: proc(menu_stack : ^Menu_Stack, res : Menu_Result, ctx : Game_Context) {
-    if res.close {
-        menu_stack_pop_menu(menu_stack, ctx)
-    } else if res.next_menu != nil {
-        menu_stack_push_menu(menu_stack, res.next_menu, ctx)
+        
+        if res.close {
+            menu_stack_pop_menu(menu_stack, ctx)
+        } else if res.next_menu != nil {
+            menu_stack_push_menu(menu_stack, res.next_menu, ctx)
+        }
+    } else {
+        // Menu transition
+        if menu_stack.pending_pop {
+            menu_stack_pop_menu(menu_stack, ctx)
+            menu_stack.pending_pop = false 
+        }
+        if menu_stack.pending_push != nil {
+            menu_stack_push_menu(menu_stack, menu_stack.pending_push, ctx)
+            menu_stack.pending_push = nil
+        }
     }
 }
 
@@ -94,6 +102,14 @@ menu_stack_destroy :: proc(menu_stack : ^Menu_Stack) {
     delete(menu_stack.stack)
 }
 
+menu_stack_request_push :: proc(menu_stack : ^Menu_Stack, menu : Menu) {
+    menu_stack.pending_push = menu
+}
+menu_stack_request_pop :: proc(menu_stack : ^Menu_Stack) {
+    menu_stack.pending_pop = true
+}
+
+@(private = "file")
 menu_stack_push_menu :: proc(menu_stack : ^Menu_Stack, menu : Menu, ctx : Game_Context) {
     append(&menu_stack.stack, menu)
     
@@ -105,6 +121,7 @@ menu_stack_push_menu :: proc(menu_stack : ^Menu_Stack, menu : Menu, ctx : Game_C
     }
 }
 
+@(private = "file")
 menu_stack_pop_menu :: proc(menu_stack : ^Menu_Stack, ctx : Game_Context) {
     top := menu_stack_top(menu_stack)
 
