@@ -87,117 +87,29 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         {
             defer ui_pop_container(ui)
 
-            field_height      :: 42
-            field_gap         :: 4
-            field_label_width :: 50
-
             field_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
 
-            x, y, z := expand_values(scene.platforms[0].position)
-
-            field_width : [2]f32 = { field_label_width, inspector_rect_width - field_label_width}
-
-            header_rect := ui_push_text(
+            field_anchor.offset.y += editor_scene_field_vector3(
                 ui,
-                text          = "Position",
-                anchor        = field_anchor,
+                label     = "Position",
+                id        = "position",
+                field_ids = {"position:x", "position:y", "position:z"},
+                vec3      = &scene.platforms[0].position,
+                width     = inspector_rect_width,
+                anchor    = field_anchor,
             )
 
-            field_anchor.offset.y += header_rect.w + field_gap
+            field_anchor.offset.y += 16
 
-            if new, changed := ui_push_spinner(
+            field_anchor.offset.y += editor_scene_field_vector3(
                 ui,
-                id          = "spinner_1",
-                label       = "X", 
-                value       = x,
-                label_color = hsv(332),
-                height      = field_height,
-                width       = field_width,
-                anchor      = field_anchor,
-            ); changed do x = new
-
-            field_anchor.offset.y += field_height + field_gap
-
-            if new, changed := ui_push_spinner(
-                ui,
-                id          = "spinner_2",
-                label       = "Y", 
-                value       = y,
-                label_color = hsv(100),
-                height      = field_height,
-                width       = field_width,
-                anchor      = field_anchor,
-            ); changed do y  = new
-
-            field_anchor.offset.y += field_height + field_gap
-
-            if new, changed := ui_push_spinner(
-                ui,
-                id          = "spinner_3",
-                label       = "Z", 
-                value       = z,
-                label_color = hsv(200),
-                width       = field_width,
-                height      = field_height,
-                anchor      = field_anchor,
-            ); changed do z = new
-
-            field_anchor.offset.y += field_height + 4 * field_gap
-
-            scene.platforms[0].position = {x, y, z}
-
-            x, y, z = expand_values(scene.platforms[0].size)
-
-            field_width = { field_label_width, inspector_rect_width - field_label_width }
-
-            header_rect = ui_push_text(
-                ui,
-                text          = "Size",
-                anchor        = field_anchor,
+                label     = "Size",
+                id        = "size",
+                field_ids = {"size:x", "size:y", "size:z"},
+                vec3      = &scene.platforms[0].size,
+                width     = inspector_rect_width,
+                anchor    = field_anchor,
             )
-
-            field_anchor.offset.y += header_rect.w + field_gap
-
-            if new, changed := ui_push_spinner(
-                ui,
-                id          = "spinner_4",
-                label       = "X", 
-                value       = x,
-                label_color = hsv(332),
-                height      = field_height,
-                width       = field_width,
-                anchor      = field_anchor,
-            ); changed do x = new
-
-            field_anchor.offset.y += field_height + field_gap
-
-            if new, changed := ui_push_spinner(
-                ui,
-                id          = "spinner_5",
-                label       = "Y", 
-                value       = y,
-                label_color = hsv(100),
-                height      = field_height,
-                width       = field_width,
-                anchor      = field_anchor,
-            ); changed do y  = new
-
-            field_anchor.offset.y += field_height + field_gap
-
-            if new, changed := ui_push_spinner(
-                ui,
-                id          = "spinner_6",
-                label       = "Z", 
-                value       = z,
-                label_color = hsv(200),
-                width       = field_width,
-                height      = field_height,
-                anchor      = field_anchor,
-            ); changed do z = new
-
-            field_anchor.offset.y += field_height + field_gap
-
-            scene.platforms[0].size = {x, y, z}
         }
     },
     input_ui =  proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
@@ -247,4 +159,67 @@ check_intersection_between_ray_and_box :: proc(
     // Miss if exited one slab before entering any of the others
     // if t_end < 0 the ray exited from behind the ray_origin, we shouldn't include it as a hit 
     return t_end > t_start && t_end > 0
+}
+
+editor_scene_field_vector3 :: proc(
+    ui         : ^Ui,
+    vec3       : ^[3]f32,
+    id         : Ui_Id,
+    field_ids  : [3]Ui_Id,
+    label      : string,
+    width      : f32,
+    anchor     : Anchor,
+) -> (height: f32) {
+    field_width  : [2]f32 = {50, width - 50}
+    field_height :: 42
+    field_gap    :: 8
+
+    anchor := anchor
+
+    header_rect := ui_push_text(
+        ui,
+        text   = label,
+        anchor = anchor,
+    )
+
+    anchor.offset.y += header_rect.w + field_gap
+
+    if new, changed := ui_push_spinner(
+        ui,
+        id          = field_ids.x,
+        label       = "X", 
+        value       = vec3.x,
+        label_color = hsv(332),
+        height      = field_height,
+        width       = field_width,
+        anchor      = anchor,
+    ); changed do vec3.x = new
+
+    anchor.offset.y += field_height + field_gap
+
+    if new, changed := ui_push_spinner(
+        ui,
+        id          = field_ids.y,
+        label       = "Y", 
+        value       = vec3.y,
+        label_color = hsv(100),
+        height      = field_height,
+        width       = field_width,
+        anchor      = anchor,
+    ); changed do vec3.y = new
+
+    anchor.offset.y += field_height + field_gap
+
+    if new, changed := ui_push_spinner(
+        ui,
+        id          = field_ids.z,
+        label       = "Z", 
+        value       = vec3.z,
+        label_color = hsv(200),
+        width       = field_width,
+        height      = field_height,
+        anchor      = anchor,
+    ); changed do vec3.z = new
+
+    return header_rect.w + 3 * field_gap + 3 * field_height
 }

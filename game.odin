@@ -9,7 +9,7 @@ import slog "sokol-odin/sokol/log"
 VIEWPORT_BASE_WIDTH  :: 960
 VIEWPORT_BASE_HEIGHT :: 540
 GAME_VERSION         :: "0.0.0"
-GAME_STARTUP_SCENE   :: Scene_Main_Menu{}
+GAME_STARTUP_SCENE   :: Scene_Editor{}
 
 Game :: struct {
 	viewport   : Viewport,
