@@ -9,7 +9,9 @@ import slog "sokol-odin/sokol/log"
 VIEWPORT_BASE_WIDTH  :: 960
 VIEWPORT_BASE_HEIGHT :: 540
 GAME_VERSION         :: "0.0.0"
-GAME_STARTUP_SCENE   :: Scene_Editor{}
+GAME_STARTUP_SCENE   :: 
+	// Scene_Editor{}
+	Scene_Main_Menu{}
 
 Game :: struct {
 	viewport   : Viewport,
@@ -110,6 +112,7 @@ game_update :: proc(unscaled_dt : f32) {
 		ui_end(&game.ui, &game.viewport)
 	}
 
+	// 3d, 2d mouses are seperated for the pause menu's mouse to work correctly
 	if ui_is_capturing_input(&game.ui) {
 		mouse_interrupt(&game.mouse_3d)
 	}

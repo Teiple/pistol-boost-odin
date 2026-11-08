@@ -66,6 +66,8 @@ Ui_Icon :: enum u8 {
     Right_Arrow,
     Plus,
     Minus,
+    Up_Arrow,
+    Down_Arrow,
 }
 
 Font :: struct {
@@ -104,6 +106,8 @@ ui_icon_files : [Ui_Icon][]byte = {
     .Cursor      = #load("assets/images/cursor.png"),
     .Left_Arrow  = #load("assets/images/left_arrow.png"),
     .Right_Arrow = #load("assets/images/right_arrow.png"),
+    .Up_Arrow    = #load("assets/images/up_arrow.png"),
+    .Down_Arrow  = #load("assets/images/down_arrow.png"),
     .Plus        = #load("assets/images/plus.png"),
     .Minus       = #load("assets/images/minus.png"),
 }
@@ -557,10 +561,12 @@ ui_push_rect :: proc(
                     ui.builder.held_id    = 0
                     is_clicked            = true
                 }
-            } 
-        }
+            }
 
-        mouse_state = mouse.state[.Left]
+            mouse_state = mouse.state[.Left]
+        } else {
+            mouse_state = .None
+        }        
     }
 
     v,i := ui_get_quad(ele_rect.xy, base_index, ele_rect.zw, color = color)
@@ -1087,9 +1093,13 @@ ui_is_cancel_pressed :: proc(ui : ^Ui) -> bool {
 ui_push_spinner :: proc(
     ui          : ^Ui,
     id          : Ui_Id,
+    control_ids : [2]Ui_Id,
     value       : f32,
     label       : string,
-    width       : [2]f32 = { 100, 50 },
+    step        : f32,
+    min_val     : Maybe(f32) = nil,
+    max_val     : Maybe(f32) = nil,
+    width       : [3]f32 = { 100, 50, 20 },
     height      : f32    = 42,
     label_color : [4]f32 = 1, 
     anchor      : Anchor = {},
@@ -1097,7 +1107,7 @@ ui_push_spinner :: proc(
     rect, _, _ := ui_push_rect(
         ui,
         anchor = anchor,
-        sizing = { width.x + width.y, height}, 
+        sizing = { width.x + width.y + width.z, height}, 
         color  = hsv(0, 0, 0, .4),
     )
 
@@ -1140,16 +1150,86 @@ ui_push_spinner :: proc(
             text   = text,
             sizing = { width.y, height },
             anchor = {
-                element = {1, .5},
-                parent  = {1, .5},
+                element = {0, .5},
+                parent  = {0, .5},
+                offset  = {width.x, 0},
             },
             padding_x = 4,
         )
+
+        // 2 controls, up and down, to step through the value when text input is not focused
+        up_control_rect, _, up_clicked := ui_push_rect(
+            ui,
+            sizing      = { width.z, height * .5 },
+            anchor      = {
+                element = {1, 0},
+                parent  = {1, 0},
+            },
+            interactive = {
+                id = control_ids.x,
+            },
+            color  = hsv(0, 0, .55),
+        )
+        ui_push_container(ui, up_control_rect)
+        {
+            defer ui_pop_container(ui)
+            ui_push_rect(
+                ui,
+                sizing = 16,
+                anchor = {
+                    element = {.5, .5},
+                    parent  = {.5, .5},
+                },
+                icon  = .Up_Arrow,
+                color  = 1,
+            )
+        }
+       
+        down_control_rect, _, down_clicked := ui_push_rect(
+            ui,
+            sizing = { width.z, height * .5 },
+            anchor = {
+                element = {1, 1},
+                parent  = {1, 1},
+            },
+            interactive = {
+                id = control_ids.x,
+            },
+            color  = hsv(0, 0, .7),
+        )
+        ui_push_container(ui, down_control_rect)
+        {
+            defer ui_pop_container(ui)
+            ui_push_rect(
+                ui,
+                sizing = 16,
+                anchor = {
+                    element = {.5, .5},
+                    parent  = {.5, .5},
+                },
+                icon   = .Down_Arrow,
+                color  = 1,
+            )
+        }
 
         if submitted {
             parsed, is_valid := strconv.parse_f32(new_text)
             if is_valid {
                 new_value = parsed
+
+                if min_val != nil do new_value = max(new_value, min_val.?)
+                if max_val != nil do new_value = min(new_value, max_val.?)
+                
+                changed   = new_value != value
+            }
+        } else {
+            if up_clicked || down_clicked  {
+                submitted = true
+                new_value = up_clicked ? value + step : value - step;
+
+                if min_val != nil do new_value = max(new_value, min_val.?)
+                if max_val != nil do new_value = min(new_value, max_val.?)
+
                 changed   = new_value != value
             }
         }
@@ -1170,6 +1250,10 @@ ui_get_intersect_rect :: proc(rect_a : [4]f32, rect_b : [4]f32) -> ([4]f32, bool
 	return {left, top, max(width, 0),  max(height, 0)}, width > 0 && height > 0
 }
 
+ui_get_mouse_button_state :: proc(ui: ^Ui) -> Mouse_Button_State {
+    return ui.builder.mouse.state[.Left]
+}
+
 
 ui_push_text_edit :: proc(
     ui         : ^Ui,
@@ -1183,7 +1267,7 @@ ui_push_text_edit :: proc(
 ) -> (current_text: string, submitted : bool) {
 	font        := &ui.lang_fonts[ui.language][font_id]
         
-    rect, mouse_state, is_clicked := ui_push_rect(
+    rect, _, is_clicked := ui_push_rect(
         ui,
         sizing      = sizing,
         anchor      = anchor,
@@ -1233,8 +1317,8 @@ ui_push_text_edit :: proc(
 
     // On focus loss (clicked outside)
     if is_focused &&
-        mouse_state == .Released &&
-        !ui_mouse_is_inside_rect(ui, rect) 
+        ui_get_mouse_button_state(ui) == .Pressed &&
+        !ui_mouse_is_inside_rect(ui, rect)
     {
         ui_focus_clear(ui)
         submitted ||= true
@@ -1294,7 +1378,7 @@ ui_push_text_edit :: proc(
             }
         )
 
-        // Carret
+        // Caret
         if is_focused {
             caret_x := text_x + ui_text_width(
                 font      = font,

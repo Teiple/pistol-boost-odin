@@ -11,10 +11,11 @@ Platform :: struct{
 }
 
 Scene_Editor :: struct {
-    platforms         : [dynamic]Platform,
-    debug_draw        : Debug_Draw, 
-    free_cam          : Free_Camera,
-    selected_platform : int,  
+    platforms              : [dynamic]Platform,
+    debug_draw             : Debug_Draw, 
+    free_cam               : Free_Camera,
+    selected_platform      : int,
+    next_selected_platform : int,
 }
 
 SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -28,7 +29,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             yaw        = math.PI,
         }
 
-        ctx.camera.position = {0, 0, 3}
+        ctx.camera.position = {0, 2, 10}
 
         scene.platforms = slice.clone_to_dynamic([]Platform {
             {size = {12.0, 0.4, 2.0}, position = {0,   -1.0, 0}},
@@ -39,7 +40,8 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             {size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
         })
 
-        scene.selected_platform = -1
+        scene.selected_platform      = -1
+        scene.next_selected_platform = -1
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)
@@ -47,7 +49,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
         debug_draw_begin(&scene.debug_draw)
         
-        clicked := ctx.mouse.state[.Left] == .Pressed
+        clicked := ui_get_mouse_button_state(ctx.ui) == .Pressed
         
         ray_origin, ray_direction : [3]f32
         if clicked {
@@ -58,10 +60,17 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             )
         }
 
+        min_select_dist := math.INF_F32
         for p,i in scene.platforms {
             if clicked {
-                if _, hit := check_ray_box(ray_origin, ray_direction, p.position, p.size * .5); hit {
-                    scene.selected_platform = i
+                if dist, hit := check_ray_box(
+                    ray_origin,
+                    ray_direction,
+                    p.position,
+                    p.size * .5
+                ); hit && dist < min_select_dist {
+                    scene.next_selected_platform = i
+                    min_select_dist              = dist
                 }
             }
 
@@ -85,6 +94,11 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
+        defer if scene.next_selected_platform >= 0 {
+            scene.selected_platform      = scene.next_selected_platform
+            scene.next_selected_platform = -1
+        }
+        
         if scene.selected_platform < 0 {
             return
         }
@@ -111,7 +125,11 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 ui,
                 label     = "Position",
                 id        = "position",
-                field_ids = {"position:x", "position:y", "position:z"},
+                field_ids = {
+                    {"position:x", "position:x:up", "position:x:down"},
+                    {"position:y", "position:y:up", "position:y:down"},
+                    {"position:z", "position:z:up", "position:z:down"},
+                },
                 vec3      = &scene.platforms[scene.selected_platform].position,
                 width     = inspector_rect_width,
                 anchor    = field_anchor,
@@ -123,7 +141,11 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 ui,
                 label     = "Size",
                 id        = "size",
-                field_ids = {"size:x", "size:y", "size:z"},
+                field_ids = {
+                    {"size:x", "size:x:up", "size:x:down"},
+                    {"size:y", "size:y:up", "size:y:down"},
+                    {"size:z", "size:z:up", "size:z:down"},
+                },
                 vec3      = &scene.platforms[scene.selected_platform].size,
                 width     = inspector_rect_width,
                 anchor    = field_anchor,
@@ -142,7 +164,6 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     input_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
         free_camera_input(&scene.free_cam, ctx.camera, ev)
     },
-
 }
 
 
@@ -180,15 +201,15 @@ check_ray_box :: proc(
 }
 
 editor_scene_field_vector3 :: proc(
-    ui         : ^Ui,
-    vec3       : ^[3]f32,
-    id         : Ui_Id,
-    field_ids  : [3]Ui_Id,
-    label      : string,
-    width      : f32,
-    anchor     : Anchor,
+    ui             : ^Ui,
+    vec3           : ^[3]f32,
+    id             : Ui_Id,
+    field_ids      : [3][3]Ui_Id,
+    label          : string,
+    width          : f32,
+    anchor         : Anchor,
 ) -> (height: f32) {
-    field_width  : [2]f32 = {50, width - 50}
+    field_width  : [3]f32 = {32, width - 52, 20}
     field_height :: 42
     field_gap    :: 8
 
@@ -202,11 +223,14 @@ editor_scene_field_vector3 :: proc(
 
     anchor.offset.y += header_rect.w + field_gap
 
+    // These are the wrong usage of swizzling, but it's fun, who cares
     if new, changed := ui_push_spinner(
         ui,
-        id          = field_ids.x,
+        id          = field_ids.x.x,
+        control_ids = field_ids.x.yz,
         label       = "X", 
         value       = vec3.x,
+        step        = .01,
         label_color = hsv(332),
         height      = field_height,
         width       = field_width,
@@ -217,9 +241,11 @@ editor_scene_field_vector3 :: proc(
 
     if new, changed := ui_push_spinner(
         ui,
-        id          = field_ids.y,
+        id          = field_ids.y.x,
+        control_ids = field_ids.y.xy,
         label       = "Y", 
         value       = vec3.y,
+        step        = .01,
         label_color = hsv(100),
         height      = field_height,
         width       = field_width,
@@ -230,8 +256,10 @@ editor_scene_field_vector3 :: proc(
 
     if new, changed := ui_push_spinner(
         ui,
-        id          = field_ids.z,
+        id          = field_ids.z.x,
+        control_ids = field_ids.z.yz,
         label       = "Z", 
+        step        = .01,
         value       = vec3.z,
         label_color = hsv(200),
         width       = field_width,
