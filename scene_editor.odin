@@ -17,7 +17,7 @@ Scene_Editor :: struct {
 }
 
 SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
-    init = proc(scene : ^Scene_Editor) {        
+    init = proc(scene : ^Scene_Editor, ctx : Game_Context) {        
         debug_draw_init(&scene.debug_draw)
         
         scene.free_cam = {
@@ -27,7 +27,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             yaw        = math.PI,
         }
 
-        game_camera().position = {0, 0, 3}
+        ctx.camera.position = {0, 0, 3}
 
         scene.platforms = slice.clone_to_dynamic([]Platform {
             {size = {12.0, 0.4, 2.0}, position = {0,   -1.0, 0}},
@@ -38,16 +38,16 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             {size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
         })
     },
-    destroy = proc(scene : ^Scene_Editor) {
+    destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)
     },
-    update_3d = proc(scene : ^Scene_Editor, dt : f32) {
+    update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
         debug_draw_begin(&scene.debug_draw)
         
         ray_origin, ray_direction := viewport_get_mouse_world_ray(
-            game_viewport(),
-            game_camera(),
-            game_mouse().position
+            ctx.viewport,
+            ctx.camera,
+            ctx.mouse.position
         )
 
         for p in scene.platforms {
@@ -65,14 +65,15 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             )
         }
 
-        if !ui_is_capturing_input(game_ui()) {
-            free_camera_update_3d(&scene.free_cam, game_camera(), game_mouse(), dt)
+        if !ui_is_capturing_input(ctx.ui) {
+            free_camera_update_3d(&scene.free_cam, ctx.camera, ctx.mouse, dt)
         }
     },
-    draw_3d = proc(scene : ^Scene_Editor, renderer : ^Renderer) {
+    draw_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, renderer : ^Renderer) {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
-    update_ui = proc(scene : ^Scene_Editor, ui : ^Ui) {
+    update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
+        ui := ctx.ui
         field_height :: 42
         field_gap    :: 8
 
@@ -124,7 +125,8 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
         scene.platforms[0].size = {x, y, z}
     },
-    input_ui =  proc(scene : ^Scene_Editor, ui : ^Ui, ev : sapp.Event) {
+    input_ui =  proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
+        ui := ctx.ui
         ui_capture_input(ui)
         if ev.type == .KEY_DOWN && ev.key_code == .ESCAPE {
             game_request_quit()
@@ -133,8 +135,8 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         
         ui_text_edit_input(ui, ev)
     }, 
-    input_3d = proc(scene : ^Scene_Editor, ev : sapp.Event) {
-        free_camera_input(&scene.free_cam, game_camera(), ev)
+    input_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
+        free_camera_input(&scene.free_cam, ctx.camera, ev)
     },
 
 }

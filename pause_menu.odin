@@ -24,7 +24,7 @@ Pause_Menu :: struct {
 }
 
 PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
-    update_ui = proc(menu : ^Pause_Menu, ui : ^Ui) -> (res : Menu_Result) {
+    update_ui = proc(menu : ^Pause_Menu, ctx : Game_Context) -> (res : Menu_Result) {
         defer menu.selected_current = false
 
         if !menu.show {
@@ -33,7 +33,7 @@ PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
 
         selected_opt, selected := menu_helper_label_menu(
             menu             = menu,
-            ui               = ui,
+            ctx              = ctx,
             selected_current = menu.selected_current,
             current_item     = menu.current_item,
             items            = pause_menu_items,
@@ -56,21 +56,21 @@ PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
 
         return
     },
-    input_ui = proc(menu : ^Pause_Menu, ui: ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
+    input_ui = proc(menu : ^Pause_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
         res.close = menu_helper_label_menu_input(
-        ui               = ui,
+            ui               = ctx.ui,
             ev               = ev,
             selected_current = &menu.selected_current,
             current_item     = &menu.current_item,
         )
         return
     },
-    open = proc(menu : ^Pause_Menu) {
-        game_time_set_time_scale(game_time(), .Pause_Menu, 0)
+    open = proc(menu : ^Pause_Menu, ctx : Game_Context) {
+        game_time_set_time_scale(ctx.time, .Pause_Menu, 0)
         menu.show = true
     },
-    close = proc(menu : ^Pause_Menu) {
-        game_time_set_time_scale(game_time(), .Pause_Menu, 1)
+    close = proc(menu : ^Pause_Menu, ctx : Game_Context) {
+        game_time_set_time_scale(ctx.time, .Pause_Menu, 1)
         menu.show = false
     },
 }

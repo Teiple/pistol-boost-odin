@@ -29,12 +29,12 @@ settings_menu_items := [Settings_Menu_Item_Id]Menu_Item{
 settings_menu_back_btn_id :: "settings_menu:back"
 
 SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
-    update_ui = proc(menu : ^Settings_Menu, ui : ^Ui) -> (res: Menu_Result) {
+    update_ui = proc(menu : ^Settings_Menu, ctx : Game_Context) -> (res: Menu_Result) {
         defer menu.selected_current = false
 
         selected_opt, selected := menu_helper_label_menu(
             menu             = menu,
-            ui               = ui,
+            ctx              = ctx,
             selected_current = menu.selected_current,
             current_item     = menu.current_item,
             items            = settings_menu_items,
@@ -52,26 +52,26 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
         }
 
         res.close = menu_helper_back_button(
-            ui    = ui,
+            ui    = ctx.ui,
             label = .Back,
             id    = settings_menu_back_btn_id,
         )
 
         return
     },
-    input_ui = proc(menu : ^Settings_Menu, ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
+    input_ui = proc(menu : ^Settings_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
         res.close = menu_helper_label_menu_input(
-            ui               = ui,
+            ui               = ctx.ui,
             ev               = ev,
             selected_current = &menu.selected_current,
             current_item     = &menu.current_item,
         )
         return
     },
-    open = proc(menu : ^Settings_Menu) {
+    open = proc(menu : ^Settings_Menu, ctx : Game_Context) {
         menu.show = true
     },
-    close = proc(menu : ^Settings_Menu) {
+    close = proc(menu : ^Settings_Menu, ctx : Game_Context) {
         menu.show = false
     },
 }
@@ -103,13 +103,14 @@ Graphics_Menu_Item_Id :: enum {
 Graphics_Menu :: Settings_Sub_Menu(Graphics_Menu_Item_Id)
 
 GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
-    update_ui = proc(menu : ^Graphics_Menu, ui : ^Ui) -> (res: Menu_Result) {
+    update_ui = proc(menu : ^Graphics_Menu, ctx : Game_Context) -> (res: Menu_Result) {
         defer {
             menu.switch_next = false
             menu.switch_prev = false
         }
 
-        settings := &game_get_settings().graphics
+        ui       := ctx.ui
+        settings := &ctx.settings.graphics
 
         for focus_area in type_of(menu.focus_area) {
             switch focus_area {
@@ -220,8 +221,8 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
         }
         return
     },
-    input_ui = proc(menu : ^Graphics_Menu, ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
-        return menu_helper_settings_input(menu, ui, ev)
+    input_ui = proc(menu : ^Graphics_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
+        return menu_helper_settings_input(menu, ctx.ui, ev)
     },
 }
 
@@ -235,13 +236,14 @@ Controls_Menu_Item_Id :: enum {
 
 
 CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
-    update_ui = proc(menu : ^Controls_Menu, ui : ^Ui) -> (res: Menu_Result) {
+    update_ui = proc(menu : ^Controls_Menu, ctx : Game_Context) -> (res: Menu_Result) {
         defer {
             menu.switch_next = false
             menu.switch_prev = false
         }
 
-        settings := &game_get_settings().controls
+        ui       := ctx.ui
+        settings := &ctx.settings.controls
 
         for focus_area in type_of(menu.focus_area) {
             switch focus_area {
@@ -349,8 +351,8 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
         }
         return
     },
-    input_ui = proc(menu : ^Controls_Menu, ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
-        return menu_helper_settings_input(menu, ui, ev)
+    input_ui = proc(menu : ^Controls_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
+        return menu_helper_settings_input(menu, ctx.ui, ev)
     },
 }
 
@@ -364,13 +366,14 @@ Audio_Menu_Item_Id :: enum {
 }
 
 AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
-    update_ui = proc(menu : ^Audio_Menu, ui : ^Ui) -> (res: Menu_Result) {
+    update_ui = proc(menu : ^Audio_Menu, ctx : Game_Context) -> (res: Menu_Result) {
         defer {
             menu.switch_next = false
             menu.switch_prev = false
         }
 
-        settings := &game_get_settings().audio
+        ui       := ctx.ui
+        settings := &ctx.settings.audio
 
         for focus_area in type_of(menu.focus_area) {
             switch focus_area {
@@ -492,7 +495,7 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
         }
         return
     },
-    input_ui = proc(menu : ^Audio_Menu, ui : ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
-        return menu_helper_settings_input(menu, ui, ev)
+    input_ui = proc(menu : ^Audio_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
+        return menu_helper_settings_input(menu, ctx.ui, ev)
     },
 }

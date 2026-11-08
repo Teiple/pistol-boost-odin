@@ -76,6 +76,22 @@ mouse_input_frame_end :: proc(mouse : ^Mouse_Input) {
     mouse.delta = 0
 }
 
+mouse_interrupt :: proc(mouse : ^Mouse_Input) {
+    for &state in mouse.state {
+        if state == .Down || state == .Pressed {
+            state = .Released
+        } else if state == .Released {
+            state = .None
+        }
+    }
+    mouse.delta = 0
+}
+
+mouse_sync_position :: proc(dst : ^Mouse_Input, src : ^Mouse_Input) {
+    dst.position = src.position
+    dst.delta = 0
+}
+
 mouse_is_inside_rect :: proc(mouse : ^Mouse_Input, rect : [4]f32) -> bool {
     mouse_pos := mouse.position
 

@@ -20,7 +20,8 @@ Game :: struct {
 	ui         : Ui,
 	audio      : Audio,
 
-	mouse : Mouse_Input,
+	mouse_ui : Mouse_Input,
+	mouse_3d : Mouse_Input,
 	
 	scene           : Scene,
 	scene_callbacks : Scene_Callbacks_Any,
@@ -32,6 +33,19 @@ Game :: struct {
 
 @(private = "file")
 game : Game 
+
+@(private = "file")
+game_context_make :: proc(game : ^Game, mouse : ^Mouse_Input) -> Game_Context {
+	return {
+		camera   = &game.camera,
+		viewport = &game.viewport,
+		mouse    = mouse,
+		audio    = &game.audio,
+		ui       = &game.ui,
+		time     = &game.time,
+		settings = &game.settings,
+	}
+}
 
 game_init :: proc() {
 	sg.setup({
@@ -69,10 +83,12 @@ game_init :: proc() {
 		return game.time.scaled_time
 	})
 
-	mouse_init(&game.mouse)
+	mouse_init(&game.mouse_ui)
+	mouse_init(&game.mouse_3d)
 	
 	game.scene = GAME_STARTUP_SCENE
-	game.scene_callbacks = scene_boot(&game.scene)
+	ctx := game_context_make(&game, &game.mouse_ui)
+	game.scene_callbacks = scene_boot(&game.scene, ctx)
 }
 
 game_update :: proc(unscaled_dt : f32) {
@@ -80,21 +96,27 @@ game_update :: proc(unscaled_dt : f32) {
 	
 	dt : f32 = game_time_raw_update(&game.time, unscaled_dt)
 
-	ui_begin(&game.ui, &game.viewport, &game.mouse, game.settings.language)
+	ctx_ui := game_context_make(&game, &game.mouse_ui)
+	ui_begin(&game.ui, &game.viewport, ctx_ui.mouse, game.settings.language)
 	{
 		if game.scene_callbacks.update_ui != nil {
-			game.scene_callbacks.update_ui(&game.scene, &game.ui)
+			game.scene_callbacks.update_ui(&game.scene, ctx_ui)
 		}
 		// cursor drawed on top
 		ui_push_cursor(&game.ui,
-			position = game.mouse.position,
+			position = game.mouse_ui.position,
 			tint     = hsv(0, 0, 1)
 		)
 		ui_end(&game.ui, &game.viewport)
 	}
 
+	if ui_is_capturing_input(&game.ui) {
+		mouse_interrupt(&game.mouse_3d)
+	}
+
+	ctx_3d := game_context_make(&game, &game.mouse_3d)
 	if game.scene_callbacks.update_3d != nil {
-		game.scene_callbacks.update_3d(&game.scene, dt)
+		game.scene_callbacks.update_3d(&game.scene, ctx_3d, dt)
 	}
 
 	viewport_begin(&game.viewport, {
@@ -109,19 +131,20 @@ game_update :: proc(unscaled_dt : f32) {
 			defer renderer_end(&game.renderer)
 
 			if game.scene_callbacks.draw_3d != nil {
-				game.scene_callbacks.draw_3d(&game.scene, &game.renderer)
+				game.scene_callbacks.draw_3d(&game.scene, ctx_3d, &game.renderer)
 			}
 		}
 		ui_draw(&game.ui, &game.viewport)
 	}
 
-	mouse_input_frame_end(&game.mouse)
+	mouse_input_frame_end(&game.mouse_ui)
+	mouse_input_frame_end(&game.mouse_3d)
 	
 	free_all(context.temp_allocator)
 
 	// Scene switching
 	if game.pending_scene != nil {
-		scene_shutdown(&game.scene)
+		scene_shutdown(&game.scene, ctx_ui)
 
 		game.scene = game.pending_scene.?
 		game.pending_scene = nil
@@ -129,21 +152,29 @@ game_update :: proc(unscaled_dt : f32) {
 		// Reset clear color
 		viewport_set_clear_color(&game.viewport, VIEWPORT_DEFAULT_CLEAR_COLOR)
 
-		game.scene_callbacks = scene_boot(&game.scene)
+		game.scene_callbacks = scene_boot(&game.scene, ctx_ui)
 		game_time_reset_time_scale(&game.time)
 	}
 }
 
 game_input :: proc(ev : ^sapp.Event) {
-	mouse_input(&game.mouse, &game.viewport, ev^)
+	mouse_input(&game.mouse_ui, &game.viewport, ev^)
 	
+	ctx_ui := game_context_make(&game, &game.mouse_ui)
 	if game.scene_callbacks.input_ui != nil {
-		game.scene_callbacks.input_ui(&game.scene, &game.ui, ev^)
+		game.scene_callbacks.input_ui(&game.scene, ctx_ui, ev^)
 	}
 
-	if !ui_is_capturing_input(&game.ui) &&
-		game.scene_callbacks.input_3d != nil {
-		game.scene_callbacks.input_3d(&game.scene, ev^)
+	if !ui_is_capturing_input(&game.ui) {
+		mouse_input(&game.mouse_3d, &game.viewport, ev^)
+		if game.scene_callbacks.input_3d != nil {
+			ctx_3d := game_context_make(&game, &game.mouse_3d)
+			game.scene_callbacks.input_3d(&game.scene, ctx_3d, ev^)
+		}
+	} else {
+		if ev.type == .MOUSE_MOVE {
+			mouse_sync_position(&game.mouse_3d, &game.mouse_ui)
+		}
 	}
 }
 
@@ -154,7 +185,8 @@ game_request_switch_scene :: proc(#by_ptr uninitialized_scene : Scene){
 }
 
 game_destroy :: proc() {
-	scene_shutdown(&game.scene)
+	ctx := game_context_make(&game, &game.mouse_ui)
+	scene_shutdown(&game.scene, ctx)
 
 	ui_destroy(&game.ui)
 	audio_destroy(&game.audio)
@@ -163,6 +195,7 @@ game_destroy :: proc() {
 	viewport_destroy(&game.viewport)
 }
 
+// Localization function, basically doing term translation look up
 tr :: proc(term: Loc_Term, params : ..any, allocator := context.temp_allocator) -> string {
 	if len(params) > 0 {
 		return fmt.aprintf(loc_map[game.settings.language][term], params)
@@ -172,32 +205,8 @@ tr :: proc(term: Loc_Term, params : ..any, allocator := context.temp_allocator) 
 
 // Accessing modules/module data
 
-game_time :: proc() -> ^Game_Time {
-	return &game.time
-}
-
-game_get_settings :: proc() -> ^Game_Settings {
-	return &game.settings
-}
-
-game_lang :: proc() -> Language {
-	return game.settings.language
-}
-
 game_audio :: proc() -> ^Audio {
 	return &game.audio
-}
-
-game_camera :: proc() -> ^Camera {
-	return &game.camera
-}
-
-game_viewport :: proc() -> ^Viewport {
-	return &game.viewport
-}
-
-game_mouse :: proc() -> ^Mouse_Input {
-	return &game.mouse
 }
 
 // Utilities
@@ -239,13 +248,11 @@ game_save_settings :: proc() {
 }
 
 game_set_mouse_sensitivity :: proc(sensitivity: [2]f32) {
-	mouse_set_sensivity(&game.mouse, sensitivity)
+	mouse_set_sensivity(&game.mouse_ui, sensitivity)
+	mouse_set_sensivity(&game.mouse_3d, sensitivity)
 }
 
 game_set_mouse_invert_y :: proc(invert_y : bool) {
-	mouse_set_invert_y(&game.mouse, invert_y)
-}
-
-game_ui :: proc() -> ^Ui {
-	return &game.ui
+	mouse_set_invert_y(&game.mouse_ui, invert_y)
+	mouse_set_invert_y(&game.mouse_3d, invert_y)
 }

@@ -22,12 +22,12 @@ Main_Menu :: struct {
 }
 
 MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
-    update_ui = proc(menu : ^Main_Menu, ui : ^Ui) -> (res : Menu_Result) {
+    update_ui = proc(menu : ^Main_Menu, ctx : Game_Context) -> (res : Menu_Result) {
         defer menu.selected_current = false
 
         selected_opt, selected := menu_helper_label_menu(
             menu             = menu,
-            ui               = ui,
+            ctx              = ctx,
             selected_current = menu.selected_current,
             current_item     = menu.current_item,
             items            = main_menu_items,
@@ -43,7 +43,7 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
         }
         
         if menu_helper_back_button(
-            ui    = ui,
+            ui    = ctx.ui,
             id    = settings_menu_back_btn_id,
             label = .Exit,
         ) {
@@ -52,9 +52,9 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
         
         return
     },
-    input_ui = proc(menu : ^Main_Menu, ui: ^Ui, ev : sapp.Event) -> (res : Menu_Result) {
+    input_ui = proc(menu : ^Main_Menu, ctx : Game_Context, ev : sapp.Event) -> (res : Menu_Result) {
         quit := menu_helper_label_menu_input(
-            ui               = ui,
+            ui               = ctx.ui,
             ev               = ev,
             selected_current = &menu.selected_current,
             current_item     = &menu.current_item,
@@ -72,19 +72,19 @@ Scene_Main_Menu :: struct {
 }
 
 SCENE_MAIN_MENU_CALLBACKS : Scene_Callbacks(^Scene_Main_Menu) : {
-    init = proc(scene : ^Scene_Main_Menu) {
+    init = proc(scene : ^Scene_Main_Menu, ctx : Game_Context) {
         menu_stack_init(&scene.menu_stack)
-        menu_stack_push_menu(&scene.menu_stack, Main_Menu{})
+        menu_stack_push_menu(&scene.menu_stack, Main_Menu{}, ctx)
 
-        audio_play_music(game_audio(), .Main_Menu)
+        audio_play_music(ctx.audio, .Main_Menu)
     },
-    update_ui = proc(scene : ^Scene_Main_Menu, ui : ^Ui) {
-        menu_stack_update_ui(&scene.menu_stack, ui)
+    update_ui = proc(scene : ^Scene_Main_Menu, ctx : Game_Context) {
+        menu_stack_update_ui(&scene.menu_stack, ctx)
     },
-    input_ui = proc(scene : ^Scene_Main_Menu, ui: ^Ui, ev : sapp.Event) {
-        menu_stack_input_ui(&scene.menu_stack, ui, ev)
+    input_ui = proc(scene : ^Scene_Main_Menu, ctx : Game_Context, ev : sapp.Event) {
+        menu_stack_input_ui(&scene.menu_stack, ctx, ev)
     },
-    destroy = proc(scene : ^Scene_Main_Menu) {
+    destroy = proc(scene : ^Scene_Main_Menu, ctx : Game_Context) {
         menu_stack_destroy(&scene.menu_stack)
     }
 }

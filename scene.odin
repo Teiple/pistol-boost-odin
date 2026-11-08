@@ -10,6 +10,16 @@ Scene :: union #no_nil {
 	Scene_Editor,
 }
 
+Game_Context :: struct {
+	camera   : ^Camera,
+	viewport : ^Viewport,
+	mouse    : ^Mouse_Input,
+	audio    : ^Audio,
+	ui       : ^Ui,
+	time     : ^Game_Time,
+	settings : ^Game_Settings,
+}
+
 // actually this could just be Scene_Callbacks(rawptr)
 Scene_Callbacks_Any :: Scene_Callbacks(^Scene)
 
@@ -20,13 +30,13 @@ Scene_Callbacks :: struct($T: typeid) where
 		ins.type_is_variant_of(Scene, ins.type_elem_type(T))
 	)
 {
-	init      : proc(scene : T),
-	update_3d : proc(scene : T, dt : f32),
-	update_ui : proc(scene : T, ui : ^Ui),
-	draw_3d   : proc(scene : T, renderer : ^Renderer),
-	input_3d  : proc(scene : T, ev : sapp.Event),
-	input_ui  : proc(scene : T, ui : ^Ui, ev : sapp.Event),
-	destroy   : proc(scene : T),
+	init      : proc(scene : T, ctx : Game_Context),
+	update_3d : proc(scene : T, ctx : Game_Context, dt : f32),
+	update_ui : proc(scene : T, ctx : Game_Context),
+	draw_3d   : proc(scene : T, ctx : Game_Context, renderer : ^Renderer),
+	input_3d  : proc(scene : T, ctx : Game_Context, ev : sapp.Event),
+	input_ui  : proc(scene : T, ctx : Game_Context, ev : sapp.Event),
+	destroy   : proc(scene : T, ctx : Game_Context),
 }
 
 scene_get_callbacks :: proc(scene : ^Scene) -> Scene_Callbacks_Any {
@@ -51,17 +61,17 @@ scene_get_callbacks :: proc(scene : ^Scene) -> Scene_Callbacks_Any {
 // These two are just for cleaner game shell really
 // you could've just call the callbacks directly
 @require_results
-scene_boot :: proc(scene : ^Scene) -> Scene_Callbacks_Any {
+scene_boot :: proc(scene : ^Scene, ctx : Game_Context) -> Scene_Callbacks_Any {
 	cbs := scene_get_callbacks(scene)
 	if cbs.init != nil {
-		cbs.init(scene)
+		cbs.init(scene, ctx)
 	}
 	return cbs
 }
 
-scene_shutdown :: proc(scene : ^Scene) {
+scene_shutdown :: proc(scene : ^Scene, ctx : Game_Context) {
 	cbs := scene_get_callbacks(scene)
 	if cbs.destroy != nil {
-		cbs.destroy(scene)
+		cbs.destroy(scene, ctx)
 	}
 }

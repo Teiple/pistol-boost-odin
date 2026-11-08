@@ -25,10 +25,10 @@ Menu_Callbacks :: struct($T : typeid) where
 		ins.type_is_variant_of(Menu, ins.type_elem_type(T))
 	)
 {
-    update_ui : proc(menu: T, ui: ^Ui)                  -> Menu_Result,
-    input_ui  : proc(menu: T, ui: ^Ui, ev : sapp.Event) -> Menu_Result,
-    open      : proc(menu: T),
-    close     : proc(menu: T),    
+    update_ui : proc(menu: T, ctx: Game_Context)                  -> Menu_Result,
+    input_ui  : proc(menu: T, ctx: Game_Context, ev : sapp.Event) -> Menu_Result,
+    open      : proc(menu: T, ctx: Game_Context),
+    close     : proc(menu: T, ctx: Game_Context),    
 }
 
 menu_get_callbacks :: proc(menu : ^Menu) -> Menu_Callbacks_Any {
@@ -76,25 +76,25 @@ menu_stack_init :: proc(menu_stack : ^Menu_Stack) {
     menu_stack.stack = make([dynamic]Menu, 0, 8)
 }
 
-menu_stack_update_ui :: proc(menu_stack : ^Menu_Stack, ui : ^Ui) {
+menu_stack_update_ui :: proc(menu_stack : ^Menu_Stack, ctx : Game_Context) {
     if update_cb := menu_stack.menu_callbacks.update_ui; update_cb != nil {
-        res := update_cb(menu_stack_top(menu_stack), ui)
-        menu_stack_resolve_result(menu_stack, res)
+        res := update_cb(menu_stack_top(menu_stack), ctx)
+        menu_stack_resolve_result(menu_stack, res, ctx)
     }
 }
 
-menu_stack_input_ui :: proc(menu_stack : ^Menu_Stack, ui : ^Ui, ev : sapp.Event) {
+menu_stack_input_ui :: proc(menu_stack : ^Menu_Stack, ctx : Game_Context, ev : sapp.Event) {
     if input_cb := menu_stack.menu_callbacks.input_ui; input_cb != nil {
-        res := input_cb(menu_stack_top(menu_stack), ui, ev)
-        menu_stack_resolve_result(menu_stack, res)
+        res := input_cb(menu_stack_top(menu_stack), ctx, ev)
+        menu_stack_resolve_result(menu_stack, res, ctx)
     }
 }
 
-menu_stack_resolve_result :: proc(menu_stack : ^Menu_Stack, res : Menu_Result) {
+menu_stack_resolve_result :: proc(menu_stack : ^Menu_Stack, res : Menu_Result, ctx : Game_Context) {
     if res.close {
-        menu_stack_pop_menu(menu_stack)
+        menu_stack_pop_menu(menu_stack, ctx)
     } else if res.next_menu != nil {
-        menu_stack_push_menu(menu_stack, res.next_menu)
+        menu_stack_push_menu(menu_stack, res.next_menu, ctx)
     }
 }
 
@@ -102,22 +102,22 @@ menu_stack_destroy :: proc(menu_stack : ^Menu_Stack) {
     delete(menu_stack.stack)
 }
 
-menu_stack_push_menu :: proc(menu_stack : ^Menu_Stack, menu : Menu) {
+menu_stack_push_menu :: proc(menu_stack : ^Menu_Stack, menu : Menu, ctx : Game_Context) {
     append(&menu_stack.stack, menu)
     
     top := menu_stack_top(menu_stack)
     menu_stack.menu_callbacks = menu_get_callbacks(top)
     
     if open_cb := menu_stack.menu_callbacks.open; open_cb != nil {
-        open_cb(top)
+        open_cb(top, ctx)
     }
 }
 
-menu_stack_pop_menu :: proc(menu_stack : ^Menu_Stack) {
+menu_stack_pop_menu :: proc(menu_stack : ^Menu_Stack, ctx : Game_Context) {
     top := menu_stack_top(menu_stack)
 
     if close_cb := menu_stack.menu_callbacks.close; close_cb != nil {
-        close_cb(top)
+        close_cb(top, ctx)
     }
     
     pop(&menu_stack.stack)
@@ -554,7 +554,7 @@ menu_helper_calculate_footer_layout :: proc(
 
 menu_helper_label_menu :: proc(
     menu             : ^$M,
-    ui               : ^Ui,
+    ctx              : Game_Context,
     selected_current : bool,
     current_item     : $T,
     items            : [T]Menu_Item,
@@ -565,6 +565,7 @@ menu_helper_label_menu :: proc(
     item_size        : [2]f32 = { 200, 32 },
 ) -> (selected_option : T, selected : bool) where ins.type_is_enum(T)
 {
+    ui        := ctx.ui
     spacing   :: 4
     opt_count := cast(f32)len(T)
 
@@ -603,7 +604,7 @@ menu_helper_label_menu :: proc(
                 selected_option = item_enum
                 selected        = true
                 
-                audio_play_sound(game_audio(), .Ui_Click)
+                audio_play_sound(ctx.audio, .Ui_Click)
             }
 
             ui_push_container(ui, rect)
@@ -729,11 +730,11 @@ Quit_Confirm_Popup_Menu :: struct{
 }
 
 QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
-    update_ui = proc(m : ^Quit_Confirm_Popup_Menu, ui : ^Ui) -> (res : Menu_Result) {
+    update_ui = proc(m : ^Quit_Confirm_Popup_Menu, ctx : Game_Context) -> (res : Menu_Result) {
         defer m.selected_current = false
         
         yes, is_clicked := menu_helper_confirmation(
-            ui,
+            ctx.ui,
             current_item   = m.current_item,
             selected_current = m.selected_current,
             yes_id           = "quit_confirm_popup_menu:yes",
@@ -753,8 +754,8 @@ QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
 
         return
     },
-    input_ui = proc(m : ^Quit_Confirm_Popup_Menu, ui : ^Ui, ev: sapp.Event) -> (res : Menu_Result) {
-        res.close = menu_helper_confirmation_input(ui, ev,
+    input_ui = proc(m : ^Quit_Confirm_Popup_Menu, ctx : Game_Context, ev: sapp.Event) -> (res : Menu_Result) {
+        res.close = menu_helper_confirmation_input(ctx.ui, ev,
             selected_current = &m.selected_current,
             current_item   = &m.current_item,
         )
