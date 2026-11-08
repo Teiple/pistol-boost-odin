@@ -11,11 +11,11 @@ Platform :: struct{
 }
 
 Scene_Editor :: struct {
-    platforms              : [dynamic]Platform,
-    debug_draw             : Debug_Draw, 
-    free_cam               : Free_Camera,
-    selected_platform      : int,
-    next_selected_platform : int,
+    platforms         : [dynamic]Platform,
+    debug_draw        : Debug_Draw, 
+    free_cam          : Free_Camera,
+    selected_platform : int,
+    pending_action    : Pending_Action(int),
 }
 
 SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -40,8 +40,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             {size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
         })
 
-        scene.selected_platform      = -1
-        scene.next_selected_platform = -1
+        scene.selected_platform = -1
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)
@@ -61,6 +60,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         min_select_dist := math.INF_F32
+
         for p,i in scene.platforms {
             if clicked {
                 if dist, hit := check_ray_box(
@@ -69,8 +69,8 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     p.position,
                     p.size * .5
                 ); hit && dist < min_select_dist {
-                    scene.next_selected_platform = i
-                    min_select_dist              = dist
+                    scene.pending_action = {i}
+                    min_select_dist      = dist
                 }
             }
 
@@ -86,6 +86,11 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 half_size = p.size * .5,
                 color     = i == scene.selected_platform ? hsv(54) : hsv(200),
             )
+        }
+
+        // Clear the selection when clicking into the void
+        if clicked && min_select_dist == math.INF_F32 {
+            scene.pending_action = Pending_Action_Clear{}
         }
 
         free_camera_update_3d(&scene.free_cam, ctx.camera, ctx.mouse, dt)

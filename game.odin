@@ -13,6 +13,17 @@ GAME_STARTUP_SCENE   ::
 	// Scene_Editor{}
 	Scene_Main_Menu{}
 
+Pending_Action :: union($T: typeid) #no_nil {
+	Pending_Action_Keep,
+	Pending_Action_Clear,
+	Pending_Action_Set(T),
+} 
+Pending_Action_Clear :: struct{}
+Pending_Action_Keep  :: struct{}
+Pending_Action_Set   :: struct($T: typeid) {
+	value : T
+}
+
 Game :: struct {
 	viewport   : Viewport,
 	frame_time : Frame_Time,

@@ -48,18 +48,6 @@ Font_Id :: enum u8 {
     Normal
 }
 
-Focus_Action :: union #no_nil {
-    Focus_Action_None,
-    Focus_Action_Clear,
-    Focus_Action_Set,
-}
-
-Focus_Action_None  :: struct{}
-Focus_Action_Clear :: struct{}
-Focus_Action_Set   :: struct{
-    target_id : Ui_Id
-}
-
 Ui_Icon :: enum u8 {
     Cursor,
     Left_Arrow,
@@ -95,7 +83,7 @@ Ui_Builder :: struct {
     // Text edit is complex, in one pass we cannot both change
     // the focus while still operate on the old text edit
     focus           : struct {
-        action     : Focus_Action,
+        action     : Pending_Action(Ui_Id),
         focused_id : Maybe(Ui_Id),
         is_new     : bool,
     },
@@ -544,7 +532,7 @@ ui_push_rect :: proc(
 
         if is_inside {
             if mouse.state[.Left] == .Pressed {
-                ui.builder.held_id    = i.id
+                ui.builder.held_id = i.id
             }
             
             if i.hovered_color != nil
@@ -558,8 +546,8 @@ ui_push_rect :: proc(
                 }
 
                 if mouse.state[.Left] == .Released {
-                    ui.builder.held_id    = 0
-                    is_clicked            = true
+                    ui.builder.held_id = 0
+                    is_clicked         = true
                 }
             }
 
@@ -924,14 +912,14 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     }
     // These record focused elements through frames
     ui.builder.focus.is_new = false
-    if _, none := ui.builder.focus.action.(Focus_Action_None); !none {
-        if _, clear := ui.builder.focus.action.(Focus_Action_Clear); clear {
+    if _, none := ui.builder.focus.action.(Pending_Action_Keep); !none {
+        if _, clear := ui.builder.focus.action.(Pending_Action_Clear); clear {
             ui.builder.focus.focused_id = nil
         } else {
-            ui.builder.focus.focused_id  = ui.builder.focus.action.(Focus_Action_Set).target_id
+            ui.builder.focus.focused_id  = ui.builder.focus.action.(Pending_Action_Set(Ui_Id)).value
             ui.builder.focus.is_new      = true
         }
-        ui.builder.focus.action = Focus_Action_None{}
+        ui.builder.focus.action = Pending_Action_Keep{}
     }
     ui.text_edit.submit_requested = false
     clear(&ui.builder.scissor_stack)
@@ -1166,7 +1154,8 @@ ui_push_spinner :: proc(
                 parent  = {1, 0},
             },
             interactive = {
-                id = control_ids.x,
+                id         = control_ids.x,
+                held_color = hsv(0, 0, .4),
             },
             color  = hsv(0, 0, .55),
         )
@@ -1194,6 +1183,7 @@ ui_push_spinner :: proc(
             },
             interactive = {
                 id = control_ids.x,
+                held_color = hsv(0, 0, .6),
             },
             color  = hsv(0, 0, .7),
         )
@@ -1424,15 +1414,15 @@ ui_focus_set :: proc(ui: ^Ui, id : Ui_Id) {
         return
     }
 
-    if _, set := ui.builder.focus.action.(Focus_Action_Set); !set {
-        ui.builder.focus.action = Focus_Action_Set{id}
+    if _, set := ui.builder.focus.action.(Pending_Action_Set(Ui_Id)); !set {
+        ui.builder.focus.action = {id}
     }
 }
 
 ui_focus_clear :: proc(ui: ^Ui) {
     // Don't clear existing set action (e.g. some elements in the same frame may require focuses)
-    if _, none := ui.builder.focus.action.(Focus_Action_None); none {
-        ui.builder.focus.action = Focus_Action_Clear{}
+    if _, none := ui.builder.focus.action.(Pending_Action_Keep); none {
+        ui.builder.focus.action = Pending_Action_Clear{}
     }
 }
 
