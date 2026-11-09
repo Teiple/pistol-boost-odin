@@ -83,9 +83,9 @@ Ui_Builder :: struct {
     // Text edit is complex, in one pass we cannot both change
     // the focus while still operate on the old text edit
     focus           : struct {
-        action     : Pending_Action(Ui_Id),
-        focused_id : Maybe(Ui_Id),
-        is_new     : bool,
+        pending_action : Pending_Action(Ui_Id),
+        focused_id     : Maybe(Ui_Id),
+        is_new         : bool,
     },
 }
 
@@ -912,15 +912,20 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     }
     // These record focused elements through frames
     ui.builder.focus.is_new = false
-    if _, none := ui.builder.focus.action.(Pending_Action_Keep); !none {
-        if _, clear := ui.builder.focus.action.(Pending_Action_Clear); clear {
+    if _, none := ui.builder.focus.pending_action.(Pending_Action_Keep); !none {
+        if _, clear := ui.builder.focus.pending_action.(Pending_Action_Clear); clear {
             ui.builder.focus.focused_id = nil
         } else {
-            ui.builder.focus.focused_id  = ui.builder.focus.action.(Pending_Action_Set(Ui_Id)).value
+            ui.builder.focus.focused_id  = ui.builder.focus.pending_action.(Pending_Action_Set(Ui_Id)).value
             ui.builder.focus.is_new      = true
         }
-        ui.builder.focus.action = Pending_Action_Keep{}
+        ui.builder.focus.pending_action = Pending_Action_Keep{}
     }
+    ui.builder.focus.is_new = pending_resolve(
+        &ui.builder.focus.pending_action,
+        &ui.builder.focus.focused_id,
+    ) && ui.builder.focus.focused_id != nil
+
     ui.text_edit.submit_requested = false
     clear(&ui.builder.scissor_stack)
 
@@ -1414,15 +1419,15 @@ ui_focus_set :: proc(ui: ^Ui, id : Ui_Id) {
         return
     }
 
-    if _, set := ui.builder.focus.action.(Pending_Action_Set(Ui_Id)); !set {
-        ui.builder.focus.action = {id}
+    if _, set := ui.builder.focus.pending_action.(Pending_Action_Set(Ui_Id)); !set {
+        ui.builder.focus.pending_action = {id}
     }
 }
 
 ui_focus_clear :: proc(ui: ^Ui) {
     // Don't clear existing set action (e.g. some elements in the same frame may require focuses)
-    if _, none := ui.builder.focus.action.(Pending_Action_Keep); none {
-        ui.builder.focus.action = Pending_Action_Clear{}
+    if _, none := ui.builder.focus.pending_action.(Pending_Action_Keep); none {
+        ui.builder.focus.pending_action = Pending_Action_Clear{}
     }
 }
 

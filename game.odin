@@ -13,17 +13,6 @@ GAME_STARTUP_SCENE   ::
 	// Scene_Editor{}
 	Scene_Main_Menu{}
 
-Pending_Action :: union($T: typeid) #no_nil {
-	Pending_Action_Keep,
-	Pending_Action_Clear,
-	Pending_Action_Set(T),
-} 
-Pending_Action_Clear :: struct{}
-Pending_Action_Keep  :: struct{}
-Pending_Action_Set   :: struct($T: typeid) {
-	value : T
-}
-
 Game :: struct {
 	viewport   : Viewport,
 	frame_time : Frame_Time,
@@ -270,4 +259,47 @@ game_set_mouse_sensitivity :: proc(sensitivity: [2]f32) {
 game_set_mouse_invert_y :: proc(invert_y : bool) {
 	mouse_set_invert_y(&game.mouse_ui, invert_y)
 	mouse_set_invert_y(&game.mouse_3d, invert_y)
+}
+
+Pending_Action :: union($T: typeid) #no_nil {
+	Pending_Action_Keep,
+	Pending_Action_Clear,
+	Pending_Action_Set(T),
+} 
+Pending_Action_Clear :: struct{}
+Pending_Action_Keep  :: struct{}
+Pending_Action_Set   :: struct($T: typeid) {
+	value : T
+}
+
+pending_action_set :: proc(pending_action : ^Pending_Action($T), current_value: ^Maybe(T), target_value : T) {
+    // Don't override existing action unless it's a clear action
+    // Also don't set unless it's a different value
+    if current_value^ == target_value {
+        return
+    }
+
+    if _, set := pending_action.(Pending_Action_Set(T)); !set {
+        pending_action^ = {target_value}
+    }
+}
+
+pending_action_clear :: proc(pending_action: ^Pending_Action($T)) {
+    // Don't clear existing set action (e.g. some elements in the same frame may require pending)
+    if _, keep := pending_action.(Pending_Action_Keep); keep {
+        pending_action^ = Pending_Action_Clear{}
+    }
+}
+
+pending_resolve :: proc(pending_action: ^Pending_Action($T), current_value: ^Maybe(T)) -> bool {
+    switch action in pending_action^ {
+    case Pending_Action_Keep:
+        return false // No change requested this frame
+    case Pending_Action_Clear:
+        current_value^ = nil
+    case Pending_Action_Set(T):
+        current_value^ = action.value
+    }
+    pending_action^ = Pending_Action_Keep{} // Reset for next frame
+    return true
 }

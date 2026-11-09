@@ -14,8 +14,8 @@ Scene_Editor :: struct {
     platforms         : [dynamic]Platform,
     debug_draw        : Debug_Draw, 
     free_cam          : Free_Camera,
-    selected_platform : int,
-    pending_action    : Pending_Action(int),
+    selected_platform : Maybe(int),
+    pending_selected  : Pending_Action(int),
 }
 
 SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -39,8 +39,6 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             {size = {3.0,  0.3, 2.0}, position = {-2.5, 1.5, 0}},
             {size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
         })
-
-        scene.selected_platform = -1
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)
@@ -69,8 +67,12 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     p.position,
                     p.size * .5
                 ); hit && dist < min_select_dist {
-                    scene.pending_action = {i}
-                    min_select_dist      = dist
+                    pending_action_set(
+                        &scene.pending_selected,
+                        &scene.selected_platform,
+                        i
+                    )
+                    min_select_dist = dist
                 }
             }
 
@@ -90,7 +92,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
         // Clear the selection when clicking into the void
         if clicked && min_select_dist == math.INF_F32 {
-            scene.pending_action = Pending_Action_Clear{}
+            pending_action_clear(&scene.pending_selected)
         }
 
         free_camera_update_3d(&scene.free_cam, ctx.camera, ctx.mouse, dt)
@@ -99,12 +101,11 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
-        defer if scene.next_selected_platform >= 0 {
-            scene.selected_platform      = scene.next_selected_platform
-            scene.next_selected_platform = -1
+        defer {
+            pending_resolve(&scene.pending_selected, &scene.selected_platform)
         }
         
-        if scene.selected_platform < 0 {
+        if scene.selected_platform == nil {
             return
         }
        
@@ -126,6 +127,10 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
             field_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
 
+            position, size :=
+                &scene.platforms[scene.selected_platform.?].position,
+                &scene.platforms[scene.selected_platform.?].size 
+
             field_anchor.offset.y += editor_scene_field_vector3(
                 ui,
                 label     = "Position",
@@ -135,7 +140,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     {"position:y", "position:y:up", "position:y:down"},
                     {"position:z", "position:z:up", "position:z:down"},
                 },
-                vec3      = &scene.platforms[scene.selected_platform].position,
+                vec3      = position,
                 width     = inspector_rect_width,
                 anchor    = field_anchor,
             )
@@ -151,7 +156,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     {"size:y", "size:y:up", "size:y:down"},
                     {"size:z", "size:z:up", "size:z:down"},
                 },
-                vec3      = &scene.platforms[scene.selected_platform].size,
+                vec3      = size,
                 width     = inspector_rect_width,
                 anchor    = field_anchor,
             )
