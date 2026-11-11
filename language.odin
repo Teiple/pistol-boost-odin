@@ -198,10 +198,15 @@ DEFAULT_FONT_BASE_SIZE :: 32
 // TODO: Multiple font id style for each lang font
 @(rodata)
 lang_font_declares : [Language]Lang_Font_Declare = {
-    .English..=.Vietnamese = {
+    .English = {
         ttf_data     = #load("assets/fonts/NotoSansMono_SemiCondensed-Regular.ttf"),
         atlas_width  = 256,
         atlas_height = 128,
+    },
+    .Vietnamese = {
+        ttf_data     = #load("assets/fonts/NotoSansMono_SemiCondensed-Regular.ttf"),
+        atlas_width  = 256,
+        atlas_height = 256, // 95 ASCII + ~32 accented glyphs at 32px need ~192px of height
     },
     .Simplified_Chinese = {
         ttf_data     = #load("assets/fonts/NotoSansMonoCJKsc-Subset.ttf"),
