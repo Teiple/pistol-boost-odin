@@ -81,49 +81,49 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         )
             inspector_active = true
 
-        inspector_padding    :: 8
-        inspector_rect_width := inspector_rect.z - inspector_padding * 2
+            inspector_padding    :: 8
+            inspector_rect_width := inspector_rect.z - inspector_padding * 2
 
-        ui_push_container(ui, inspector_rect)
-        {
-            defer ui_pop_container(ui)
+            ui_push_container(ui, inspector_rect)
+            {
+                defer ui_pop_container(ui)
 
-            field_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
+                field_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
 
-            position, size :=
-                &scene.platforms[scene.selected_platform.?].position,
-                &scene.platforms[scene.selected_platform.?].size 
+                position, size :=
+                    &scene.platforms[scene.selected_platform.?].position,
+                    &scene.platforms[scene.selected_platform.?].size 
 
-            field_anchor.offset.y += editor_scene_field_vector3(
-                ui,
-                label     = "Position",
-                id        = "position",
-                field_ids = {
-                    {"position:x", "position:x:up", "position:x:down"},
-                    {"position:y", "position:y:up", "position:y:down"},
-                    {"position:z", "position:z:up", "position:z:down"},
-                },
-                vec3      = position,
-                width     = inspector_rect_width,
-                anchor    = field_anchor,
-            )
+                field_anchor.offset.y += editor_scene_field_vector3(
+                    ui,
+                    label     = "Position",
+                    id        = "position",
+                    field_ids = {
+                        {"position:x", "position:x:up", "position:x:down"},
+                        {"position:y", "position:y:up", "position:y:down"},
+                        {"position:z", "position:z:up", "position:z:down"},
+                    },
+                    vec3      = position,
+                    width     = inspector_rect_width,
+                    anchor    = field_anchor,
+                )
 
-            field_anchor.offset.y += 16
+                field_anchor.offset.y += 16
 
-            field_anchor.offset.y += editor_scene_field_vector3(
-                ui,
-                label     = "Size",
-                id        = "size",
-                field_ids = {
-                    {"size:x", "size:x:up", "size:x:down"},
-                    {"size:y", "size:y:up", "size:y:down"},
-                    {"size:z", "size:z:up", "size:z:down"},
-                },
-                vec3      = size,
-                width     = inspector_rect_width,
-                anchor    = field_anchor,
-            )
-        }
+                field_anchor.offset.y += editor_scene_field_vector3(
+                    ui,
+                    label     = "Size",
+                    id        = "size",
+                    field_ids = {
+                        {"size:x", "size:x:up", "size:x:down"},
+                        {"size:y", "size:y:up", "size:y:down"},
+                        {"size:z", "size:z:up", "size:z:down"},
+                    },
+                    vec3      = size,
+                    width     = inspector_rect_width,
+                    anchor    = field_anchor,
+                )
+            }
         }
 
         // Platform selection

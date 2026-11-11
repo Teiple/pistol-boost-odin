@@ -921,16 +921,6 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
         ui_clear_held_id(ui)
     }
     // These record focused elements through frames
-    ui.builder.focus.is_new = false
-    if _, none := ui.builder.focus.pending_action.(Pending_Action_Keep); !none {
-        if _, clear := ui.builder.focus.pending_action.(Pending_Action_Clear); clear {
-            ui.builder.focus.focused_id = nil
-        } else {
-            ui.builder.focus.focused_id  = ui.builder.focus.pending_action.(Pending_Action_Set(Ui_Id)).value
-            ui.builder.focus.is_new      = true
-        }
-        ui.builder.focus.pending_action = Pending_Action_Keep{}
-    }
     ui.builder.focus.is_new = pending_resolve(
         &ui.builder.focus.pending_action,
         &ui.builder.focus.focused_id,
@@ -1303,7 +1293,7 @@ ui_push_text_edit :: proc(
 
     text_x:= padding_x + (is_focused ? ui.text_edit.scroll_x : 0)
 
-    // When just focus on click on the rect when already focused, reposition of caret
+    // When just focus or click on the rect when already focused, reposition of caret
     if newly_focused || (is_focused && is_clicked) {
         // Caret positioning
         local_mouse_pos, is_inside := ui_get_local_mouse_position(ui, rect)
@@ -1459,8 +1449,8 @@ ui_text_edit_set_caret :: proc(font: ^Font, font_size : f32,  text: string, loca
     best := abs(local_mouse_x)
 
 	it := utf8.decode_grapheme_iterator_make(text)
-	for grapheme_text, grapheme in utf8.decode_grapheme_iterate(&it) {
-		end := grapheme.byte_index + len(grapheme_text)
+	for _, grapheme in utf8.decode_grapheme_iterate(&it) {
+		end := grapheme.byte_index + len(grapheme.text)
 		if distance := abs(ui_text_width(font, text[:end], font_size) - local_mouse_x); distance < best {
 			caret, best = end, distance
 		}
