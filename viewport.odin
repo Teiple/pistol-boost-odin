@@ -118,9 +118,10 @@ viewport_init :: proc(viewport : ^Viewport, base_size : [2]f32, window_size : [2
 			color    : [4]f32,
 			uv 	     : [2]f32,
 		} = {
-			0 = { {-1, -1, 0}, 1, {0, origin_top_left ?  2 : 0} },
-			1 = { {-1,  3, 0}, 1, {0, origin_top_left ?  0 : 2} },
-			2 = { { 3, -1, 0}, 1, {2, origin_top_left ?  2 : 0} },
+			// top-left origin: v = 1 - v_gl, so screen bottom (y=-1) samples v=1 and top (y=1) samples v=0
+			0 = { {-1, -1, 0}, 1, {0, origin_top_left ?  1 : 0} },
+			1 = { {-1,  3, 0}, 1, {0, origin_top_left ? -1 : 2} },
+			2 = { { 3, -1, 0}, 1, {2, origin_top_left ?  1 : 0} },
 		}
 
 		// sg.query_features().origin_top_left
