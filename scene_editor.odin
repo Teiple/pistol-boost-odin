@@ -46,36 +46,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
         debug_draw_begin(&scene.debug_draw)
         
-        clicked := ui_get_mouse_button_state(ctx.ui) == .Pressed
-        
-        ray_origin, ray_direction : [3]f32
-        if clicked {
-            ray_origin, ray_direction = viewport_get_mouse_world_ray(
-                ctx.viewport,
-                ctx.camera,
-                ctx.mouse.position
-            )
-        }
-
-        min_select_dist := math.INF_F32
-
         for p,i in scene.platforms {
-            if clicked {
-                if dist, hit := check_ray_box(
-                    ray_origin,
-                    ray_direction,
-                    p.position,
-                    p.size * .5
-                ); hit && dist < min_select_dist {
-                    pending_action_set(
-                        &scene.pending_selected,
-                        &scene.selected_platform,
-                        i
-                    )
-                    min_select_dist = dist
-                }
-            }
-
             debug_draw_wire_box(
                 &scene.debug_draw,
                 position  = p.position,
@@ -90,33 +61,25 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             )
         }
 
-        // Clear the selection when clicking into the void
-        if clicked && min_select_dist == math.INF_F32 {
-            pending_action_clear(&scene.pending_selected)
-        }
-
         free_camera_update_3d(&scene.free_cam, ctx.camera, ctx.mouse, dt)
     },
     draw_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, renderer : ^Renderer) {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
-        defer {
-            pending_resolve(&scene.pending_selected, &scene.selected_platform)
-        }
-        
-        if scene.selected_platform == nil {
-            return
-        }
-       
         ui := ctx.ui
         
-        inspector_rect, _, _ := ui_push_rect(
+        // Inspector
+        inspector_rect   : [4]f32
+        inspector_active : bool
+        if scene.selected_platform != nil {
+            inspector_rect, _, _ = ui_push_rect(
             ui,
             sizing = { 300, Grow{}},
             anchor = { element = {1, 0}, parent = {1, 0} },
             color  = hsv(0, 0, 0.25),
         )
+            inspector_active = true
 
         inspector_padding    :: 8
         inspector_rect_width := inspector_rect.z - inspector_padding * 2
@@ -160,6 +123,42 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 width     = inspector_rect_width,
                 anchor    = field_anchor,
             )
+        }
+        }
+
+        // Platform selection
+        if  ui_get_mouse_button_state(ctx.ui) == .Pressed &&
+            // If inspector is shown, don't check clicks on the inspector rect
+            (!inspector_active || !ui_mouse_is_inside_rect(ui, inspector_rect))
+        {
+            ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                ctx.viewport,
+                ctx.camera,
+                ctx.mouse.position
+            )
+            min_select_dist := math.INF_F32
+            defer if min_select_dist == math.INF_F32 {
+                pending_action_clear(&scene.pending_selected)
+            }
+
+            for p,i in scene.platforms {
+                if dist, hit := check_ray_box(
+                    ray_origin,
+                    ray_direction,
+                    p.position,
+                    p.size * .5
+                ); hit && dist < min_select_dist {
+                    pending_action_set(
+                        &scene.pending_selected,
+                        &scene.selected_platform,
+                        i
+                    )
+                    min_select_dist = dist
+                }
+            }
+
+            // Handle new selection at end of frame
+            pending_resolve(&scene.pending_selected, &scene.selected_platform)        
         }
     },
     input_ui =  proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
