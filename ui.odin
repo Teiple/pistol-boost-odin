@@ -76,6 +76,7 @@ Ui_Builder :: struct {
     scissor_stack   : [dynamic; UI_MAX_SCISSOR_STACK][4]f32,
     commands        : [dynamic]Ui_Cmd,
     held_id         : Maybe(Ui_Id),
+    held_start_time : f32,
     mouse           : ^Mouse_Input,
     input_captured  : bool,
     enter_pressed   : bool,
@@ -532,7 +533,7 @@ ui_push_rect :: proc(
 
         if is_inside {
             if mouse.state[.Left] == .Pressed {
-                ui.builder.held_id = i.id
+                ui_set_held_id(ui, i.id)
             }
             
             if i.hovered_color != nil
@@ -546,7 +547,7 @@ ui_push_rect :: proc(
                 }
 
                 if mouse.state[.Left] == .Released {
-                    ui.builder.held_id = 0
+                    ui_clear_held_id(ui)
                     is_clicked         = true
                 }
             }
@@ -571,6 +572,15 @@ ui_push_rect :: proc(
     return ele_rect, mouse_state, is_clicked
 }
 
+ui_set_held_id :: proc(ui :^Ui, id :Ui_Id) {
+    ui.builder.held_start_time = ui.get_time()
+    ui.builder.held_id         = id
+}
+
+ui_clear_held_id :: proc(ui :^Ui) {
+    ui.builder.held_start_time = 0
+    ui.builder.held_id         = nil
+}
 
 ui_push_text :: proc(
     ui             : ^Ui,
@@ -908,7 +918,7 @@ ui_top_container :: proc(ui : ^Ui) -> [4]f32 {
 
 ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     if ui.builder.mouse.state[.Left] == .Released {
-        ui.builder.held_id = nil
+        ui_clear_held_id(ui)
     }
     // These record focused elements through frames
     ui.builder.focus.is_new = false
@@ -1449,8 +1459,8 @@ ui_text_edit_set_caret :: proc(font: ^Font, font_size : f32,  text: string, loca
     best := abs(local_mouse_x)
 
 	it := utf8.decode_grapheme_iterator_make(text)
-	for _, grapheme in utf8.decode_grapheme_iterate(&it) {
-		end := grapheme.byte_index + len(grapheme.text)
+	for grapheme_text, grapheme in utf8.decode_grapheme_iterate(&it) {
+		end := grapheme.byte_index + len(grapheme_text)
 		if distance := abs(ui_text_width(font, text[:end], font_size) - local_mouse_x); distance < best {
 			caret, best = end, distance
 		}
