@@ -306,7 +306,7 @@ viewport_get_mouse_world_ray :: proc(
 	p_near := near_clip.xyz / near_clip.w
 	p_far  := far_clip.xyz  / far_clip.w
 
-	return p_near, linalg.normalize(p_far - p_near) 	
+	return p_near, linalg.normalize(p_far - p_near)
 }
 
 

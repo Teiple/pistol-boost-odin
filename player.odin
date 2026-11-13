@@ -120,10 +120,14 @@ player_destroy :: proc(player: ^Player) {
 }
 
 Player_Context :: struct {
-	camera   : ^Camera,
-	viewport : ^Viewport,
-	mouse    : ^Mouse_Input,
-	audio    : ^Audio,	
+	camera                : ^Camera,
+	viewport              : ^Viewport,
+	audio                 : ^Audio,
+	mouse                 : struct {
+		position  : [2]f32,
+		primary   : Mouse_Button_State,
+		secondary : Mouse_Button_State,
+	}
 }
 
 player_update_3d :: proc(
@@ -131,29 +135,29 @@ player_update_3d :: proc(
 	ctx      : Player_Context,
 	dt       : f32,
 ) {
-	// Made me remeber the Javascript days
-	camera, viewport, mouse, audio := expand_values(ctx)
-
 	model_update_animation_play(&player.model, &player.animation_play, dt)
 
-	target_pos := viewport_get_mouse_world_position_on_zplane(viewport, camera, mouse.position)
-	debug_draw_box(debug_draw, .2, hsv(200), target_pos)
-
+	target_pos := viewport_get_mouse_world_position_on_zplane(
+		viewport       = ctx.viewport,
+		camera         = ctx.camera,
+		mouse_position = ctx.mouse.position
+	)
+	
 	player_update_aim(player, target_pos)
 
-	if mouse.state[.Left] == .Pressed {
+	if ctx.mouse.primary == .Pressed {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
 		recoil_dir   := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 1.5, recoil_point, true)
 
-		audio_play_sound(audio, .Fire_Primary)
+		audio_play_sound(ctx.audio, .Fire_Primary)
 		model_play_animation(&player.model, &player.animation_play, "fire", .Once) 
-	} else if mouse.state[.Right] == .Pressed {
+	} else if ctx.mouse.secondary == .Pressed {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_pivot)
 		recoil_dir   := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2.3, recoil_point, true)
 
-		audio_play_sound(audio, .Fire_Secondary)
+		audio_play_sound(ctx.audio, .Fire_Secondary)
 		model_play_animation(&player.model, &player.animation_play, "fire", .Once) 
 	}
 }

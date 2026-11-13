@@ -965,12 +965,11 @@ ui_input :: proc(ui : ^Ui , ev : sapp.Event) {
     }
 }
 
-// You should call this inside a input/event callback, not frame callback
 ui_capture_input :: proc(ui: ^Ui) {
     ui.builder.input_captured = true
 }
 
-ui_is_capturing_input :: proc(ui : ^Ui) -> bool {
+ui_input_captured :: proc(ui : ^Ui) -> bool {
     return ui.builder.input_captured
 }
 

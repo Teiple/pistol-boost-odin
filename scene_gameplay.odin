@@ -1,5 +1,7 @@
 package main
 
+import "base:intrinsics"
+import "core:fmt"
 import sapp "sokol-odin/sokol/app"
 
 Scene_Init :: struct {
@@ -47,24 +49,27 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         }
         delete(scene.meshes)
     },
+    update_ui = proc(scene : ^Scene_Gameplay, ctx : Game_Context) {
+        if menu_stack_top(&scene.menu_stack) != nil do ui_capture_input(ctx.ui)
+        menu_stack_update_ui(&scene.menu_stack, ctx)
+    },
     update_3d = proc(scene : ^Scene_Gameplay, ctx : Game_Context, dt : f32) {        
         debug_draw_begin(&scene.debug_draw)
-
-        physics_update_3d(
-            &scene.physics,dt
-        )
-        
+        physics_update_3d(&scene.physics, dt)
         player_update_3d(
             &scene.player,
-            {
+            ctx = {
                 camera   = ctx.camera,
                 viewport = ctx.viewport,
-                mouse    = ctx.mouse,
                 audio    = ctx.audio,
+                mouse    = {
+                    position  = !ui_input_captured(ctx.ui) ? ctx.mouse.position : 0,
+                    primary   = !ui_input_captured(ctx.ui) ? ctx.mouse.state[.Left]  : {},
+                    secondary = !ui_input_captured(ctx.ui) ? ctx.mouse.state[.Right] : {},
+                }
             },
-            dt
+            dt  = dt,
         )
-
         follow_camera_update_3d(
             follow_cam    = &scene.follow_camera,
             camera        = ctx.camera,
@@ -75,24 +80,13 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
             dt = dt,
         )
     },
-    update_ui = proc(scene : ^Scene_Gameplay, ctx : Game_Context) {
-        ui_push_text(
-            ctx.ui,
-            font_id = .Normal, 
-            text    = tr(.Undefined), 
-        )
-
-        menu_stack_update_ui(&scene.menu_stack, ctx)
-    },
     draw_3d = proc(scene : ^Scene_Gameplay, ctx : Game_Context, renderer : ^Renderer) {
         arena_draw_3d(&scene.arena, renderer)
         player_draw_3d(&scene.player, &scene.physics, renderer)
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ctx : Game_Context, ev : sapp.Event) {
-        if  ev.type == .KEY_DOWN &&
-            ev.key_code == .ESCAPE &&
-            menu_stack_top(&scene.menu_stack) == nil
+        if menu_stack_top(&scene.menu_stack) == nil && ev.type == .KEY_DOWN && ev.key_code == .ESCAPE
         {
             menu_stack_request_push(&scene.menu_stack, Pause_Menu{})
         }

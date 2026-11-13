@@ -119,6 +119,11 @@ debug_draw_3d :: proc(draw : ^Debug_Draw, renderer : ^Renderer) {
     defer draw.active = false
     
     for &mode in draw.modes {
+        // Nothing to draw, if draw with buffer size sokol will panic (only in debug build)
+        if len(mode.indices) == 0 || len(mode.vertices) == 0 {
+            continue
+        }
+
         if uint(len(mode.indices)) > mode.current_ibuf_cap {
             panic("Exceed ibuf cap!")
         }
