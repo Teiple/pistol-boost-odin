@@ -189,7 +189,7 @@ model_init_from_glb :: proc(model : ^Model, file_data : []byte, allocator := con
 			
 			#partial switch channel.target.path {
 				case .Translation:
-					append(&model.animations[i].channels, {
+					append(&model.animations[i].channels, Model_Animation_Position_Channel {
 						bone_index = bone_index,
 						timestamps = slice.clone_to_dynamic(raw_timestamps, allocator = allocator),
 						positions  = slice.clone_to_dynamic(gltf.buffer_slice(dat, sampler.output).([][3]f32), allocator = allocator),
@@ -203,7 +203,7 @@ model_init_from_glb :: proc(model : ^Model, file_data : []byte, allocator := con
 						return quats
 					}
 
-					append(&model.animations[i].channels, {
+					append(&model.animations[i].channels, Model_Animation_Rotation_Channel {
 						bone_index = bone_index,
 						timestamps = slice.clone_to_dynamic(raw_timestamps, allocator = allocator),
 						rotations  = clone_to_quaternions(gltf.buffer_slice(dat, sampler.output).([][4]f32), allocator = allocator),
@@ -242,15 +242,14 @@ model_init_from_glb :: proc(model : ^Model, file_data : []byte, allocator := con
 		
 		defer png.destroy(img)
 	
-		img_bytes := img.pixels.buf
 		model.texture_image = sg.make_image({
 			width  = i32(img.width), 
 			height = i32(img.height), 
 			data   = {
 				mip_levels = {
 					0 = {
-						ptr  = raw_data(img_bytes),
-						size = cast(uint)slice.size(img_bytes[:])
+						ptr  = raw_data(img.pixels[:]),
+						size = cast(uint)slice.size(img.pixels[:])
 					}
 				}
 			}

@@ -137,6 +137,8 @@ player_update_3d :: proc(
 	model_update_animation_play(&player.model, &player.animation_play, dt)
 
 	target_pos := viewport_get_mouse_world_position_on_zplane(viewport, camera, mouse.position)
+	debug_draw_box(debug_draw, .2, hsv(200), target_pos)
+
 	player_update_aim(player, target_pos)
 
 	if mouse.state[.Left] == .Pressed {

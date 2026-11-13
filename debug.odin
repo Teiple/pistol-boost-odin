@@ -4,6 +4,7 @@ import "core:math/linalg"
 import "core:slice"
 import sg "sokol-odin/sokol/gfx"
 
+debug_draw : ^Debug_Draw
 
 Debug_Draw_Mode :: enum u8{
     // Must order this way, solid then wire on top
@@ -85,7 +86,8 @@ debug_draw_init :: proc(draw : ^Debug_Draw, allocator := context.allocator) {
                 mode.bindings.views[0]    = draw.shared_view
                 mode.bindings.samplers[0] = draw.shared_sampler
         }
-    }   
+    }
+    debug_draw = draw
 }
 
 debug_draw_destroy :: proc(draw : ^Debug_Draw) {

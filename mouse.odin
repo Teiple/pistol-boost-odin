@@ -65,7 +65,7 @@ mouse_set_invert_y :: proc(mouse : ^Mouse_Input, invert_y : bool) {
     mouse.invert_y = invert_y
 }
 
-mouse_input_frame_end :: proc(mouse : ^Mouse_Input) {
+mouse_input_end :: proc(mouse : ^Mouse_Input) {
     for &mb in mouse.state {
         if mb == .Pressed {
             mb = .Down

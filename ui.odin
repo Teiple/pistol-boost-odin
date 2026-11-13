@@ -75,11 +75,13 @@ Ui_Builder :: struct {
     container_stack : [dynamic][4]f32,
     scissor_stack   : [dynamic; UI_MAX_SCISSOR_STACK][4]f32,
     commands        : [dynamic]Ui_Cmd,
-    held_id         : Maybe(Ui_Id),
-    held_start_time : f32,
+    hold            : struct {
+        held_id         : Maybe(Ui_Id),
+        start_time : f32,
+        mouse_delta     : [2]f32
+    },
     mouse           : ^Mouse_Input,
     input_captured  : bool,
-    enter_pressed   : bool,
     keyboard_input  : bit_set[Ui_Keys],
     // Text edit is complex, in one pass we cannot both change
     // the focus while still operate on the old text edit
@@ -267,8 +269,8 @@ ui_init :: proc(
             data   = {
                 mip_levels = {
                     0 = {
-                        ptr  = raw_data(img.pixels.buf),
-                        size = cast(uint)slice.size(img.pixels.buf[:]),
+                        ptr  = raw_data(img.pixels[:]),
+                        size = cast(uint)slice.size(img.pixels[:]),
                     }
                 }
             }
@@ -478,9 +480,10 @@ ui_push_rect :: proc(
     color : [4]f32 = 0,
     icon  : Maybe(Ui_Icon) = nil,
     interactive : Maybe(struct {
-        id            : Ui_Id,
-        hovered_color : Maybe([4]f32),
-        held_color    : Maybe([4]f32),
+        id              : Ui_Id,
+        hovered_color   : Maybe([4]f32),
+        held_color      : Maybe([4]f32),
+        skip_drag_click : bool, // ignore a click if there was a mouse movement
     }) = nil,
 ) -> (ele_rect : [4]f32, mouse_state : Mouse_Button_State, is_clicked : bool) {
     container := ui_top_container(ui)
@@ -541,14 +544,14 @@ ui_push_rect :: proc(
                 color = i.hovered_color.?
             }
 
-            if ui.builder.held_id == i.id {
+            if ui.builder.hold.held_id == i.id {
                 if i.held_color != nil {
                     color = i.held_color.?
                 }
 
                 if mouse.state[.Left] == .Released {
+                    is_clicked = i.skip_drag_click ? ui.builder.hold.mouse_delta == 0 : true
                     ui_clear_held_id(ui)
-                    is_clicked         = true
                 }
             }
 
@@ -563,7 +566,7 @@ ui_push_rect :: proc(
     append(&ui.vertices, ..v[:])
     append(&ui.indices,  ..i[:])
 
-    append(&ui.builder.commands, {
+    append(&ui.builder.commands, Ui_Paint_Cmd {
         view        = icon == nil ? ui.rect_view : ui.icon_views[icon.?],
         start_index = start_index,
         num_indices = len(ui.indices) - start_index,
@@ -573,13 +576,14 @@ ui_push_rect :: proc(
 }
 
 ui_set_held_id :: proc(ui :^Ui, id :Ui_Id) {
-    ui.builder.held_start_time = ui.get_time()
-    ui.builder.held_id         = id
+    ui.builder.hold.start_time = ui.get_time()
+    ui.builder.hold.held_id    = id
 }
 
 ui_clear_held_id :: proc(ui :^Ui) {
-    ui.builder.held_start_time = 0
-    ui.builder.held_id         = nil
+    ui.builder.hold.start_time  = 0
+    ui.builder.hold.mouse_delta = 0
+    ui.builder.hold.held_id     = nil
 }
 
 ui_push_text :: proc(
@@ -706,7 +710,7 @@ ui_push_text :: proc(
         v.color = color
     }
 
-    append(&ui.builder.commands, {
+    append(&ui.builder.commands, Ui_Paint_Cmd {
         view        = font.font_view,
         start_index = start_index,
         num_indices = len(ui.indices) - start_index,
@@ -827,7 +831,7 @@ ui_push_cursor :: proc(
     append(&ui.vertices, ..v[:])
     append(&ui.indices,  ..i[:])
 
-    append(&ui.builder.commands, {
+    append(&ui.builder.commands, Ui_Paint_Cmd {
         view        = ui.icon_views[.Cursor],
         start_index = start_index,
         num_indices = len(ui.indices) - start_index,
@@ -920,6 +924,11 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     if ui.builder.mouse.state[.Left] == .Released {
         ui_clear_held_id(ui)
     }
+    // Update hold mouse delta
+    if ui.builder.hold.held_id != nil {
+        ui.builder.hold.mouse_delta += ui.builder.mouse.delta
+    }
+
     // These record focused elements through frames
     ui.builder.focus.is_new = pending_resolve(
         &ui.builder.focus.pending_action,
@@ -1096,6 +1105,7 @@ ui_push_spinner :: proc(
     height      : f32    = 42,
     label_color : [4]f32 = 1, 
     anchor      : Anchor = {},
+    mouse_drag_sensitivity : f32 = .1,
 ) -> (new_value : f32, changed: bool) {
     rect, _, _ := ui_push_rect(
         ui,
@@ -1218,9 +1228,19 @@ ui_push_spinner :: proc(
                 changed   = new_value != value
             }
         } else {
-            if up_clicked || down_clicked  {
+            multiplier : f32 =
+                (up_clicked   ? 0 :  1) +
+                (down_clicked ? 0 : -1) +
+                (
+                    ui.builder.focus.focused_id != id &&
+                    ui.builder.hold.held_id     == id &&
+                    abs(ui.builder.mouse.delta.x) > 0 ?
+                    ui.builder.mouse.delta.x * mouse_drag_sensitivity : 0
+                )
+            
+            if multiplier != 0 {
                 submitted = true
-                new_value = up_clicked ? value + step : value - step;
+                new_value = value + multiplier
 
                 if min_val != nil do new_value = max(new_value, min_val.?)
                 if max_val != nil do new_value = min(new_value, max_val.?)
@@ -1268,7 +1288,8 @@ ui_push_text_edit :: proc(
         anchor      = anchor,
         color       = hsv(0, 0, .2),
         interactive = {
-            id = id,
+            id              = id,
+            skip_drag_click = true,
         }
     )
 
@@ -1288,13 +1309,13 @@ ui_push_text_edit :: proc(
         edit.setup_once(&ui.text_edit.state, &ui.text_edit.builder)
 
         // Reset scroll
-        ui.text_edit.scroll_x = 0        
+        ui.text_edit.scroll_x = 0
     }
 
-    text_x:= padding_x + (is_focused ? ui.text_edit.scroll_x : 0)
+    text_x := padding_x + (is_focused ? ui.text_edit.scroll_x : 0)
 
-    // When just focus or click on the rect when already focused, reposition of caret
-    if newly_focused || (is_focused && is_clicked) {
+    // When click on the rect when already focused, reposition of caret
+    if is_focused && is_clicked {
         // Caret positioning
         local_mouse_pos, is_inside := ui_get_local_mouse_position(ui, rect)
         

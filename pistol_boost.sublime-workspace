@@ -392,17 +392,14 @@
 	"buffers":
 	[
 		{
-			"file": "shaders/skinned.glsl",
-			"file_size": 934,
-			"file_write_time": 134373229751307966,
+			"file": "game.odin",
+			"file_size": 7680,
+			"file_write_time": 134387391394422294,
 			"settings":
 			{
-				"buffer_size": 934,
+				"buffer_size": 7680,
 				"line_ending": "Unix"
-			},
-			"undo_stack":
-			[
-			]
+			}
 		}
 	],
 	"build_system": "",
@@ -574,7 +571,6 @@
 	},
 	"expanded_folders":
 	[
-		"/mnt/fedora-extra/Personal/pistol_boost",
 		"/home/hongphuc/odin-lang/odin/core"
 	],
 	"file_history":
@@ -716,31 +712,31 @@
 			[
 				{
 					"buffer": 0,
-					"file": "shaders/skinned.glsl",
+					"file": "game.odin",
 					"selected": true,
 					"semi_transient": true,
 					"settings":
 					{
-						"buffer_size": 934,
+						"buffer_size": 7680,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								652,
-								652
+								415,
+								415
 							]
 						],
 						"settings":
 						{
-							"lsp_uri": "file:///mnt/fedora-extra/Personal/pistol_boost/shaders/skinned.glsl",
-							"syntax": "Packages/OpenGL Shading Language (GLSL)/GLSL.sublime-syntax",
+							"lsp_uri": "file:///mnt/fedora-extra/Personal/pistol_boost/game.odin",
+							"syntax": "Packages/Odin/Odin.sublime-syntax",
 							"tab_size": 4,
-							"translate_tabs_to_spaces": true
+							"translate_tabs_to_spaces": false
 						},
 						"translation.x": 0.0,
-						"translation.y": 208.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,

@@ -42,6 +42,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)
+        delete(scene.platforms)
     },
     update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
         debug_draw_begin(&scene.debug_draw)
@@ -136,27 +137,32 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 ctx.camera,
                 ctx.mouse.position
             )
-            min_select_dist := math.INF_F32
-            defer if min_select_dist == math.INF_F32 {
-                pending_action_clear(&scene.pending_selected)
-            }
 
+            min_select_dist := math.INF_F32
+            closest_index   := -1
+            
             for p,i in scene.platforms {
                 if dist, hit := check_ray_box(
-                    ray_origin,
-                    ray_direction,
-                    p.position,
-                    p.size * .5
+                    ray_origin    = ray_origin,
+                    ray_direction = ray_direction,
+                    box_position  = p.position,
+                    box_half_size = p.size * .5,
                 ); hit && dist < min_select_dist {
-                    pending_action_set(
-                        &scene.pending_selected,
-                        &scene.selected_platform,
-                        i
-                    )
                     min_select_dist = dist
+                    closest_index   = i
                 }
             }
 
+            if closest_index == -1 {
+                pending_action_clear(&scene.pending_selected)
+            } else {            
+                pending_action_set(
+                    &scene.pending_selected,
+                    &scene.selected_platform,
+                    closest_index
+                )
+            }
+            
             // Handle new selection at end of frame
             pending_resolve(&scene.pending_selected, &scene.selected_platform)        
         }

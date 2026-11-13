@@ -101,20 +101,26 @@ game_update :: proc(unscaled_dt : f32) {
 	ctx_ui := game_context_make(&game, &game.mouse_ui)
 	ui_begin(&game.ui, &game.viewport, ctx_ui.mouse, game.settings.language)
 	{
+		defer ui_end(&game.ui, &game.viewport)
+
 		if game.scene_callbacks.update_ui != nil {
 			game.scene_callbacks.update_ui(&game.scene, ctx_ui)
 		}
+
 		// cursor drawed on top
 		ui_push_cursor(&game.ui,
 			position = game.mouse_ui.position,
 			tint     = hsv(0, 0, 1)
 		)
-		ui_end(&game.ui, &game.viewport)
-	}
-
-	// 3d, 2d mouses are seperated for the pause menu's mouse to work correctly
-	if ui_is_capturing_input(&game.ui) {
-		mouse_interrupt(&game.mouse_3d)
+		ui_push_cursor(&game.ui,
+			position = game.mouse_3d.position,
+			tint     = hsv(200, 1, 1)
+		)
+		// fps counter for everyone
+		ui_push_text(&game.ui,
+			text      = fmt.tprintf("FPS: % 4.f", game.frame_time.average_fps),
+			font_size = 24, 
+		)
 	}
 
 	ctx_3d := game_context_make(&game, &game.mouse_3d)
@@ -140,11 +146,9 @@ game_update :: proc(unscaled_dt : f32) {
 		ui_draw(&game.ui, &game.viewport)
 	}
 
-	mouse_input_frame_end(&game.mouse_ui)
-	mouse_input_frame_end(&game.mouse_3d)
+	mouse_input_end(&game.mouse_ui)
+	mouse_input_end(&game.mouse_3d)
 	
-	free_all(context.temp_allocator)
-
 	// Scene switching
 	if game.pending_scene != nil {
 		scene_shutdown(&game.scene, ctx_ui)
@@ -158,6 +162,8 @@ game_update :: proc(unscaled_dt : f32) {
 		game.scene_callbacks = scene_boot(&game.scene, ctx_ui)
 		game_time_reset_time_scale(&game.time)
 	}
+	
+	free_all(context.temp_allocator)
 }
 
 game_input :: proc(ev : ^sapp.Event) {
@@ -170,6 +176,8 @@ game_input :: proc(ev : ^sapp.Event) {
 	}
 
 	if !ui_is_capturing_input(&game.ui) {
+		// 3d, 2d mouses are seperated for the pause menu's mouse to work correctly
+		mouse_interrupt(&game.mouse_3d)
 		mouse_input(&game.mouse_3d, &game.viewport, ev^)
 		if game.scene_callbacks.input_3d != nil {
 			ctx_3d := game_context_make(&game, &game.mouse_3d)
