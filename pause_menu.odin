@@ -47,7 +47,7 @@ PAUSE_MENU_CALLBACKS : Menu_Callbacks(^Pause_Menu) : {
                 res.next_menu = Quit_Confirm_Popup_Menu{}
         }
 
-        if ui_is_cancel_pressed(ctx.ui) {
+        if ui_cancel_pressed(ctx.ui) {
             res.close = true
         }
 

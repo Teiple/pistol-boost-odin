@@ -221,9 +221,9 @@ menu_helper_item_options :: proc(
         )
 
         if clicked || is_active {
-            if ui_is_key_pressed(ui, .Right) || ui_is_accept_pressed(ui) || clicked {
+            if ui_key_pressed(ui, .Right) || ui_accept_pressed(ui) || clicked {
                 return enum_next(current_value), true
-            } else if ui_is_key_pressed(ui, .Left) {
+            } else if ui_key_pressed(ui, .Left) {
                 return enum_prev(current_value), true
             }
         }
@@ -279,9 +279,9 @@ menu_helper_item_toggle :: proc(
         )
 
         if clicked || is_active {
-            if ui_is_key_pressed(ui, .Right) || ui_is_accept_pressed(ui) || clicked {
+            if ui_key_pressed(ui, .Right) || ui_accept_pressed(ui) || clicked {
                 return !current_value, true
-            } else if ui_is_key_pressed(ui, .Left) {
+            } else if ui_key_pressed(ui, .Left) {
                 return !current_value, true
             }
         }
@@ -343,13 +343,13 @@ menu_helper_item_spinner :: proc(
         )
 
         if clicked || is_active {
-            if ui_is_key_pressed(ui, .Right) || ui_is_accept_pressed(ui) || clicked {
+            if ui_key_pressed(ui, .Right) || ui_accept_pressed(ui) || clicked {
                 new_value := current_value + step
                 if new_value > max {
                     new_value = min
                 }
                 return new_value, new_value != current_value
-            } else if ui_is_key_pressed(ui, .Left) {
+            } else if ui_key_pressed(ui, .Left) {
                 new_value := current_value - step
                 if new_value < min {
                     new_value = max
@@ -500,13 +500,13 @@ menu_helper_item_progress_bar :: proc(
                 )
             }
             
-            if (is_active && (ui_is_key_pressed(ui, .Right) || ui_is_accept_pressed(ui))) || right_control_clicked {
+            if (is_active && (ui_key_pressed(ui, .Right) || ui_accept_pressed(ui))) || right_control_clicked {
                 new_value := current_value + step
                 if new_value > max {
                     new_value = max
                 }
                 return new_value, new_value != current_value
-            } else if (is_active && ui_is_key_pressed(ui, .Left)) || left_control_clicked {
+            } else if (is_active && ui_key_pressed(ui, .Left)) || left_control_clicked {
                 new_value := current_value - step
                 if new_value < min {
                     new_value = min
@@ -603,7 +603,7 @@ menu_helper_label_menu :: proc(
                 }
             )
 
-            is_clicked ||= ui_is_accept_pressed(ui) && item_enum == current_item^
+            is_clicked ||= ui_accept_pressed(ui) && item_enum == current_item^
 
             if is_clicked {
                 selected_option = item_enum
@@ -650,11 +650,11 @@ menu_helper_label_menu :: proc(
     }
 
     // Input
-    if ui_is_key_pressed(ui, .Down) {
+    if ui_key_pressed(ui, .Down) {
         current_item^ = enum_next(current_item^)
     }
 
-    if ui_is_key_pressed(ui, .Up) {
+    if ui_key_pressed(ui, .Up) {
         current_item^ = enum_prev(current_item^)
     }
     
@@ -738,7 +738,7 @@ QUIT_CONFIRM_POPUP_MENU_CALLBACKS : Menu_Callbacks(^Quit_Confirm_Popup_Menu) : {
         }
 
 
-        if ui_is_cancel_pressed(ctx.ui) {
+        if ui_cancel_pressed(ctx.ui) {
             res.close = true   
         }
 
@@ -810,7 +810,7 @@ menu_helper_confirmation :: proc(
                 }
             )
 
-            yes_clicked ||= ui_is_accept_pressed(ui) && current_item^ == true
+            yes_clicked ||= ui_accept_pressed(ui) && current_item^ == true
 
             ui_push_container(ui, yes_rect)
             {
@@ -835,7 +835,7 @@ menu_helper_confirmation :: proc(
                 }
             )
 
-            no_clicked ||= ui_is_accept_pressed(ui) && current_item^ == false
+            no_clicked ||= ui_accept_pressed(ui) && current_item^ == false
             
             ui_push_container(ui, no_rect)
             {
@@ -855,7 +855,7 @@ menu_helper_confirmation :: proc(
     }
 
     // Input
-    if ui_is_key_pressed(ui, .Left) || ui_is_key_pressed(ui, .Right) {
+    if ui_key_pressed(ui, .Left) || ui_key_pressed(ui, .Right) {
         current_item^ = !current_item^
     }
 
@@ -902,7 +902,7 @@ menu_helper_settings_footer :: proc(
 
     for item, index in items {
         sizing, anchor, text_anchor := menu_helper_calculate_footer_layout(index, len(items))
-        is_selected := ui_is_accept_pressed(ui) && is_focused && current_item == item
+        is_selected := ui_accept_pressed(ui) && is_focused && current_item == item
 
         switch item {
             case .Back:
@@ -993,10 +993,10 @@ menu_helper_settings_footer :: proc(
             }
         }
 
-        if ui_is_key_pressed(ui, .Right) || ui_is_key_pressed(ui, .Down) {
+        if ui_key_pressed(ui, .Right) || ui_key_pressed(ui, .Down) {
             menu.current_footer_item = items[(idx + 1) % len(items)]
         }
-        if ui_is_key_pressed(ui, .Left) || ui_is_key_pressed(ui, .Up) {
+        if ui_key_pressed(ui, .Left) || ui_key_pressed(ui, .Up) {
             menu.current_footer_item = items[(idx - 1 + len(items)) % len(items)]
         }
     }

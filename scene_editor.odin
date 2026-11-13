@@ -110,7 +110,15 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     hovered_color = hsv(0, 0, (!ortho ? .25 : .8) + .1),
                 } 
             )
-            ui_push_text(ui, text = "Orthogonal" , anchor = { element = {.5, .5}, parent = {.75, .5}}, color = hsv(0, 0, !ortho ? .8 :  0))
+            ui_push_text(
+                ui = ui,
+                text = "Orthogonal",
+                anchor = {
+                    element = {.5, .5},
+                    parent = {.75, .5}
+                },
+                color = hsv(0, 0, !ortho ? .8 :  0)
+            )
         
             if persp_clicked do scene.free_cam.mode_orthorgonal = false
             if ortho_clicked do scene.free_cam.mode_orthorgonal = true
@@ -133,12 +141,12 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             {
                 defer ui_pop_container(ui)
 
+                field_gap    :: 16
                 field_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
 
-
                 origin, size : ^[3]f32
-
-                switch &p in scene.runtime.platforms[scene.selected_platform.?] {
+                platform := scene.runtime.platforms[scene.selected_platform.?]
+                switch &p in platform {
                     case Platform_Box: {
                         origin = &p.origin; size = &p.size
                     }
@@ -160,8 +168,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     width     = inspector_rect_width,
                     anchor    = field_anchor,
                 )
-
-                field_anchor.offset.y += 16
+                field_anchor.offset.y += field_gap
 
                 field_anchor.offset.y += editor_field_vector3(
                     ui,
@@ -176,6 +183,16 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     width     = inspector_rect_width,
                     anchor    = field_anchor,
                 )
+                field_anchor.offset.y += field_gap
+
+                if p, ok := platform.(Platform_Slope); ok {
+                    editor_field_slope_corner(
+                        ui     = ui,
+                        id     = "slope_corner",
+                        label  = "Slope Corner",
+                        anchor = field_anchor,
+                    )
+                }
             }
         }
 
@@ -384,10 +401,31 @@ check_ray_slope :: proc(
     return t_start, t_end > t_start && t_start > 0
 }
 
+editor_field_slope_corner :: proc(
+    ui     : ^Ui,
+    id     : Ui_Id,
+    label  : string,
+    anchor : Anchor,
+) -> (height: f32) {
+    field_height :: 42
+    field_gap    :: 8
+
+    anchor := anchor
+
+    header_rect := ui_push_text(
+        ui,
+        text   = label,
+        anchor = anchor,
+    )
+    anchor.offset.y += header_rect.w + field_gap
+
+    return header_rect.w + field_gap
+}
+
 editor_field_vector3 :: proc(
     ui             : ^Ui,
-    field          : ^[3]f32,
     id             : Ui_Id,
+    field          : ^[3]f32,
     field_ids      : [3]struct {
         text_edit    : Ui_Id,
         up_control   : Ui_Id,

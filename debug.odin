@@ -2,6 +2,7 @@ package main
 
 import "core:math/linalg"
 import "core:slice"
+import "core:math"
 import sg "sokol-odin/sokol/gfx"
 
 debug_draw : ^Debug_Draw
@@ -290,16 +291,117 @@ debug_push_wire_box :: proc(
     append(&draw.modes[.Line].indices,  ..indices[:])
 }
 
-debug_push_platform_box :: proc(
-    draw  : ^Debug_Draw,
-    box   : Platform_Box,
-    color : [4]f32,
+debug_push_sphere :: proc(
+    draw     : ^Debug_Draw,
+    radius   : f32,
+    position : [3]f32,
+    color    : [4]f32,
+    stacks   : int = 4,
+    sectors  : int = 8,
 ) {
+    assert(draw.active)
+
+    start_v := u16(len(draw.modes[.Triangle].vertices))
+
+    for i in 0..=stacks {
+        phi := math.PI * f32(i) / f32(stacks) - (math.PI * 0.5)
+        cos_phi := math.cos(phi)
+        sin_phi := math.sin(phi)
+
+        for j in 0..=sectors {
+            theta := math.TAU * f32(j) / f32(sectors)
+            cos_theta := math.cos(theta)
+            sin_theta := math.sin(theta)
+
+            p := [3]f32{
+                position.x + radius * cos_phi * cos_theta,
+                position.y + radius * sin_phi,
+                position.z + radius * cos_phi * sin_theta,
+            }
+
+            append(&draw.modes[.Triangle].vertices, Vertex{position = p, color = color})
+        }
+    }
+
+    stride := u16(sectors + 1)
+    for i in 0..<stacks {
+        k1 := u16(i) * stride
+        k2 := k1 + stride
+
+        for j in 0..<sectors {
+            s := u16(j)
+            if i != 0 {
+                append(&draw.modes[.Triangle].indices, start_v + k1 + s, start_v + k2 + s, start_v + k1 + s + 1)
+            }
+            if i != (stacks - 1) {
+                append(&draw.modes[.Triangle].indices, start_v + k1 + s + 1, start_v + k2 + s, start_v + k2 + s + 1)
+            }
+        }
+    }
+}
+
+debug_push_wire_sphere :: proc(
+    draw      : ^Debug_Draw,
+    radius    : f32,
+    position  : [3]f32,
+    color     : [4]f32 = {1, 0, 0, 1},
+    segments  : int = 6,
+) {
+    assert(draw.active)
+
+    start_v := u16(len(draw.modes[.Line].vertices))
+
+    step := math.TAU / f32(segments)
+
+    for i in 0..<segments {
+        theta := f32(i) * step
+        c := math.cos(theta) * radius
+        s := math.sin(theta) * radius
+
+        append(&draw.modes[.Line].vertices, Vertex{position = {position.x + c, position.y + s, position.z}, color = color})
+        append(&draw.modes[.Line].vertices, Vertex{position = {position.x + c, position.y, position.z + s}, color = color})
+        append(&draw.modes[.Line].vertices, Vertex{position = {position.x, position.y + c, position.z + s}, color = color})
+
+        next := u16((i + 1) % segments)
+        cur  := u16(i)
+
+        append(&draw.modes[.Line].indices, start_v + cur * 3 + 0, start_v + next * 3 + 0)
+        append(&draw.modes[.Line].indices, start_v + cur * 3 + 1, start_v + next * 3 + 1)
+        append(&draw.modes[.Line].indices, start_v + cur * 3 + 2, start_v + next * 3 + 2)
+    }
+}
+
+debug_push_platform_box :: proc(
+    draw         : ^Debug_Draw,
+    box          : Platform_Box,
+    color        : [4]f32,
+) {
+    // draw origin
+    debug_draw_platform_origin(draw, box.origin)
+
     debug_push_box(
         draw      = draw,
         half_size = box.size * 0.5,
         color     = color,
         position  = box.origin + box.size * 0.5,
+    )
+}
+
+debug_draw_platform_origin :: proc(
+    draw     : ^Debug_Draw,
+    position : [3]f32, 
+) {
+    debug_push_sphere(
+        draw     = draw,
+        radius   = .05,
+        color    = hsv(30),
+        position = position,
+    )
+    debug_push_wire_sphere(
+        draw     = draw,
+        radius   = .08,
+        color    = hsv(30, .4, .4),
+        position = position,
     )
 }
 
@@ -309,6 +411,9 @@ debug_push_platform_slope :: proc(
     color : [4]f32,
 ) {
     assert(draw.active)
+
+    // draw origin
+    debug_draw_platform_origin(draw, slope.origin)
 
     bl := [2]f32{slope.origin.x,                slope.origin.y}
     br := [2]f32{slope.origin.x + slope.size.x, slope.origin.y}
@@ -425,3 +530,4 @@ debug_push_wire_platform_slope :: proc(
     append(&draw.modes[.Line].vertices, ..vertices[:])
     append(&draw.modes[.Line].indices,  ..indices[:])
 }
+

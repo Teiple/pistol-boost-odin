@@ -46,7 +46,7 @@ SETTINGS_MENU_CALLBACKS : Menu_Callbacks(^Settings_Menu) : {
             ui    = ctx.ui,
             label = .Back,
             id    = "settings_menu:back",
-        ) || ui_is_cancel_pressed(ctx.ui)
+        ) || ui_cancel_pressed(ctx.ui)
 
         return
     },
@@ -170,10 +170,10 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                             }
                         }
 
-                        if ui_is_key_pressed(ui, .Down) {
+                        if ui_key_pressed(ui, .Down) {
                             menu.current_menu_item = enum_next(menu.current_menu_item)
                         }
-                        if ui_is_key_pressed(ui, .Up) {
+                        if ui_key_pressed(ui, .Up) {
                             menu.current_menu_item = enum_prev(menu.current_menu_item)
                         }
                     }
@@ -190,12 +190,12 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
             }
         }
 
-        if ui_is_cancel_pressed(ctx.ui) {
+        if ui_cancel_pressed(ctx.ui) {
             game_save_settings()
             res.close = true
         }
 
-        if ui_is_key_pressed(ctx.ui, .Tab) {
+        if ui_key_pressed(ctx.ui, .Tab) {
             menu.focus_area = enum_next(menu.focus_area)
         }
 
@@ -304,10 +304,10 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                         }
                     }
 
-                    if ui_is_key_pressed(ui, .Down) {
+                    if ui_key_pressed(ui, .Down) {
                         menu.current_menu_item = enum_next(menu.current_menu_item)
                     }
-                    if ui_is_key_pressed(ui, .Up) {
+                    if ui_key_pressed(ui, .Up) {
                         menu.current_menu_item = enum_prev(menu.current_menu_item)
                     }
                 case .Footer:
@@ -323,12 +323,12 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
             }
         }
 
-        if ui_is_cancel_pressed(ctx.ui) {
+        if ui_cancel_pressed(ctx.ui) {
             game_save_settings()
             res.close = true
         }
 
-        if ui_is_key_pressed(ctx.ui, .Tab) {
+        if ui_key_pressed(ctx.ui, .Tab) {
             menu.focus_area = enum_next(menu.focus_area)
         }
 
@@ -450,10 +450,10 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
                             }
                         }
 
-                        if ui_is_key_pressed(ui, .Down) {
+                        if ui_key_pressed(ui, .Down) {
                             menu.current_menu_item = enum_next(menu.current_menu_item)
                         }
-                        if ui_is_key_pressed(ui, .Up) {
+                        if ui_key_pressed(ui, .Up) {
                             menu.current_menu_item = enum_prev(menu.current_menu_item)
                         }
                     }
@@ -470,12 +470,12 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
             }
         }
 
-        if ui_is_cancel_pressed(ctx.ui) {
+        if ui_cancel_pressed(ctx.ui) {
             game_save_settings()
             res.close = true
         }
 
-        if ui_is_key_pressed(ctx.ui, .Tab) {
+        if ui_key_pressed(ctx.ui, .Tab) {
             menu.focus_area = enum_next(menu.focus_area)
         }
         

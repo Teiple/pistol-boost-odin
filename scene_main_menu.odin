@@ -45,7 +45,7 @@ MAIN_MENU_CALLBACKS : Menu_Callbacks(^Main_Menu) : {
             ui    = ctx.ui,
             id    = "settings_menu:back",
             label = .Exit,
-        ) || ui_is_cancel_pressed(ctx.ui) {
+        ) || ui_cancel_pressed(ctx.ui) {
             res.next_menu = Quit_Confirm_Popup_Menu{}
         }
         

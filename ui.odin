@@ -1,5 +1,6 @@
 package main
 
+import "base:intrinsics"
 import "core:fmt"
 import "core:math"
 import "core:strings"
@@ -1074,15 +1075,32 @@ ui_text_edit_input :: proc(
     }
 }
 
-ui_is_key_pressed :: proc(ui : ^Ui, key: Ui_Keys) -> bool {
+ui_key_pressed :: proc(ui : ^Ui, key: Ui_Keys) -> bool {
     return key in ui.builder.keyboard_input
 }
 
-ui_is_accept_pressed :: proc(ui : ^Ui) -> bool {
+ui_accept_pressed :: proc(ui : ^Ui) -> bool {
     return .Space in ui.builder.keyboard_input || .Enter in ui.builder.keyboard_input 
 }
-ui_is_cancel_pressed :: proc(ui : ^Ui) -> bool {
+
+ui_cancel_pressed :: proc(ui : ^Ui) -> bool {
     return .Escape in ui.builder.keyboard_input 
+}
+
+ui_push_combo_box :: proc(
+    ui      : ^Ui,
+    id      : Ui_Id,
+    options : [$T]string,
+    width   : [2]f32 = { 100, 50 },
+    height  : f32    = 42,
+    anchor  : Anchor = {},
+) -> (new_value : f32, changed : bool) where intrinsics.type_is_enum(T) {
+    rect, _ := ui_push_rect(
+        ui     = ui,
+        anchor = anchor,
+        sizing = { width.x + width.y}, 
+        color  = hsv(0, 0, 0, .4),
+    )
 }
 
 ui_push_spinner :: proc(

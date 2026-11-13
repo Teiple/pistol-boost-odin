@@ -31,7 +31,7 @@ LANGUAGE_MENU_CALLBACKS : Menu_Callbacks(^Language_Menu) : {
             ui    = ctx.ui,
             label = .Back,
             id    = "lang_menu:back",
-        ) || ui_is_cancel_pressed(ctx.ui)
+        ) || ui_cancel_pressed(ctx.ui)
 
         return
     },
