@@ -1,21 +1,39 @@
 package main
 
-import "core:slice"
 import "core:math"
 import sapp "sokol-odin/sokol/app"
 
+Platform_Box :: struct{
+    origin : [3]f32,
+    size   : [3]f32,
+}
 
-Platform :: struct{
-    size     : [3]f32,
-    position : [3]f32,
+Platform_Slope :: struct {
+    origin       : [3]f32,
+    size         : [3]f32,
+    corner : Slope_Corner,
+}
+
+Platform :: union {
+    Platform_Box,
+    Platform_Slope,
+}
+
+Slope_Corner :: enum u8 {
+    Bottom_Left, Bottom_Right,
+    Top_Left,    Top_Right,
+}
+
+Editor_Runtime :: struct {
+    platforms : [dynamic]Platform,
 }
 
 Scene_Editor :: struct {
-    platforms         : [dynamic]Platform,
     debug_draw        : Debug_Draw, 
     free_cam          : Free_Camera,
     selected_platform : Maybe(int),
     pending_selected  : Pending_Action(int),
+    runtime           : Editor_Runtime,
 }
 
 SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -23,64 +41,90 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         debug_draw_init(&scene.debug_draw)
         
         scene.free_cam = {
-            enabled    = true,
-            move_speed = 3,
+            move_speed = 8,
             look_speed = .01,
             yaw        = math.PI,
         }
-
         ctx.camera.position = {0, 2, 10}
 
-        scene.platforms = slice.clone_to_dynamic([]Platform {
-            {size = {12.0, 0.4, 2.0}, position = {0,   -1.0, 0}},
-            {size = {0.4,  8.0, 2.0}, position = {-6.0, 3.0, 0}},
-            {size = {0.4,  8.0, 2.0}, position = {6.0,  3.0, 0}},
-            {size = {12.0, 0.4, 2.0}, position = {0,    7.0, 0}},
-            {size = {3.0,  0.3, 2.0}, position = {-2.5, 1.5, 0}},
-            {size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
-        })
+        append(&scene.runtime.platforms,
+            Platform_Box{
+                origin = {0,0,0},
+                size   = {2,1,1}    
+            },
+            Platform_Slope{
+                origin = {0,2,0},
+                size   = {2,1,1},
+                corner = .Bottom_Right,
+            },
+
+        )
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
-        debug_draw_destroy(&scene.debug_draw)
-        delete(scene.platforms)
-    },
-    update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
-        debug_draw_begin(&scene.debug_draw)
-        
-        for p,i in scene.platforms {
-            debug_draw_wire_box(
-                &scene.debug_draw,
-                position  = p.position,
-                half_size = p.size * .5,
-                color     = i == scene.selected_platform ? hsv(54, .4, .4) : hsv(200, .4, .4),
-            )
-            debug_draw_box(
-                &scene.debug_draw,
-                position  = p.position,
-                half_size = p.size * .5,
-                color     = i == scene.selected_platform ? hsv(54) : hsv(200),
-            )
-        }
-
-        free_camera_update_3d(&scene.free_cam, ctx.camera, ctx.mouse, dt)
-    },
-    draw_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, renderer : ^Renderer) {
-        debug_draw_3d(&scene.debug_draw, renderer)
+        debug_draw_destroy(&scene.debug_draw)        
+        delete(scene.runtime.platforms)
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         ui := ctx.ui
-        
-        // Inspector
-        inspector_rect   : [4]f32
-        inspector_active : bool
-        if scene.selected_platform != nil {
-            inspector_rect, _, _ = ui_push_rect(
-            ui,
-            sizing = { 300, Grow{}},
-            anchor = { element = {1, 0}, parent = {1, 0} },
-            color  = hsv(0, 0, 0.25),
+
+        ui_rects : [dynamic; 4][4]f32
+
+        // View mode selection
+        view_mode_rect, _ := ui_push_rect(
+            ui     = ui,
+            sizing = {360, 50},
+            anchor = { element = {0, 1}, parent = {0, 1} } 
         )
-            inspector_active = true
+        append(&ui_rects, view_mode_rect)
+        
+        ui_push_container(ui, view_mode_rect)
+        {
+            defer ui_pop_container(ui)
+
+            ortho := scene.free_cam.mode_orthorgonal
+            
+            persp_rect, persp_clicked := ui_push_rect(
+                ui          = ui,
+                sizing      = {Percent{.5}, Percent{1}},
+                anchor      = {parent = {0, 0}},
+                color       = hsv(0, 0, ortho ? .25 : .8),
+                interactive = {
+                    id            = "editor:persp_view",
+                    hovered_color = hsv(0, 0, (ortho ? .25 : .8) + .1),
+                } 
+            )
+            ui_push_text(
+                ui     = ui,
+                text   = "Perspective",
+                anchor = { element = {.5, .5}, parent = {.25, .5}},
+                color  = hsv(0, 0, ortho ? .8 :  0)
+            )
+
+            ortho_rect, ortho_clicked := ui_push_rect(
+                ui     = ui,
+                sizing = {Percent{.5}, Percent{1}},
+                anchor = {parent = {.5, 0}},
+                color  = hsv(0, 0, !ortho ? .25 : .8),
+                interactive = {
+                    id            = "editor:ortho_view",
+                    hovered_color = hsv(0, 0, (!ortho ? .25 : .8) + .1),
+                } 
+            )
+            ui_push_text(ui, text = "Orthogonal" , anchor = { element = {.5, .5}, parent = {.75, .5}}, color = hsv(0, 0, !ortho ? .8 :  0))
+        
+            if persp_clicked do scene.free_cam.mode_orthorgonal = false
+            if ortho_clicked do scene.free_cam.mode_orthorgonal = true
+        }
+
+        // Inspector
+        if scene.selected_platform != nil {
+            inspector_rect, _ := ui_push_rect(
+                ui     = ui,
+                sizing = { 300, Percent{1}},
+                anchor = { element = {1, 0}, parent = {1, 0} },
+                color  = hsv(0, 0, .25),
+            )
+            append(&ui_rects, inspector_rect)
 
             inspector_padding    :: 8
             inspector_rect_width := inspector_rect.z - inspector_padding * 2
@@ -91,36 +135,44 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
                 field_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
 
-                position, size :=
-                    &scene.platforms[scene.selected_platform.?].position,
-                    &scene.platforms[scene.selected_platform.?].size 
 
-                field_anchor.offset.y += editor_scene_field_vector3(
+                origin, size : ^[3]f32
+
+                switch &p in scene.runtime.platforms[scene.selected_platform.?] {
+                    case Platform_Box: {
+                        origin = &p.origin; size = &p.size
+                    }
+                    case Platform_Slope: {
+                        origin = &p.origin; size = &p.size
+                    }
+                }
+
+                field_anchor.offset.y += editor_field_vector3(
                     ui,
-                    label     = "Position",
-                    id        = "position",
+                    label     = "Origin",
+                    id        = "origin",
                     field_ids = {
-                        {"position:x", "position:x:up", "position:x:down"},
-                        {"position:y", "position:y:up", "position:y:down"},
-                        {"position:z", "position:z:up", "position:z:down"},
+                        { text_edit = "origin:x", up_control = "origin:x:up", down_control = "origin:x:down"},
+                        { text_edit = "origin:y", up_control = "origin:y:up", down_control = "origin:y:down"},
+                        { text_edit = "origin:z", up_control = "origin:z:up", down_control = "origin:z:down"},
                     },
-                    vec3      = position,
+                    field     = origin,
                     width     = inspector_rect_width,
                     anchor    = field_anchor,
                 )
 
                 field_anchor.offset.y += 16
 
-                field_anchor.offset.y += editor_scene_field_vector3(
+                field_anchor.offset.y += editor_field_vector3(
                     ui,
                     label     = "Size",
                     id        = "size",
                     field_ids = {
-                        {"size:x", "size:x:up", "size:x:down"},
-                        {"size:y", "size:y:up", "size:y:down"},
-                        {"size:z", "size:z:up", "size:z:down"},
+                        { text_edit = "size:x", up_control = "size:x:up", down_control = "size:x:down"},
+                        { text_edit = "size:y", up_control = "size:y:up", down_control = "size:y:down"},
+                        { text_edit = "size:z", up_control = "size:z:up", down_control = "size:z:down"},
                     },
-                    vec3      = size,
+                    field     = size,
                     width     = inspector_rect_width,
                     anchor    = field_anchor,
                 )
@@ -128,44 +180,93 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         // Platform selection
-        if  ui_get_mouse_button_state(ctx.ui) == .Pressed &&
-            // If inspector is shown, don't check clicks on the inspector rect
-            (!inspector_active || !ui_mouse_is_inside_rect(ui, inspector_rect))
-        {
-            ray_origin, ray_direction := viewport_get_mouse_world_ray(
-                ctx.viewport,
-                ctx.camera,
-                ctx.mouse.position
-            )
+        if  ui_get_mouse_button_state(ctx.ui) == .Pressed {
+            mouse_on_ui := false 
+            for &rect in ui_rects do if ui_mouse_is_inside_rect(ui, rect) {
+                mouse_on_ui = true; break;
+            }
+            if !mouse_on_ui {
+                ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                    ctx.viewport,
+                    ctx.camera,
+                    ctx.mouse.position
+                )
 
-            min_select_dist := math.INF_F32
-            closest_index   := -1
-            
-            for p,i in scene.platforms {
-                if dist, hit := check_ray_box(
-                    ray_origin    = ray_origin,
-                    ray_direction = ray_direction,
-                    box_position  = p.position,
-                    box_half_size = p.size * .5,
-                ); hit && dist < min_select_dist {
-                    min_select_dist = dist
-                    closest_index   = i
+                min_select_dist := math.INF_F32
+                closest_index   := -1
+                
+                for platform, i in scene.runtime.platforms {
+                    switch p in platform {
+                        case Platform_Box:
+                            if dist, hit := check_ray_box(
+                                ray_origin    = ray_origin,
+                                ray_direction = ray_direction,
+                                box           = p,
+                            ); hit && dist < min_select_dist {
+                                min_select_dist = dist
+                                closest_index   = i
+                            }
+                        case Platform_Slope:
+                            if dist, hit := check_ray_slope(
+                                ray_origin    = ray_origin,
+                                ray_direction = ray_direction,
+                                slope         = p,
+                            ); hit && dist < min_select_dist {
+                                min_select_dist = dist
+                                closest_index   = i
+                            }
+                    }
+                }
+
+                if closest_index == -1 {
+                    pending_action_clear(&scene.pending_selected)
+                } else {            
+                    pending_action_set(
+                        &scene.pending_selected,
+                        &scene.selected_platform,
+                        closest_index
+                    )
                 }
             }
 
-            if closest_index == -1 {
-                pending_action_clear(&scene.pending_selected)
-            } else {            
-                pending_action_set(
-                    &scene.pending_selected,
-                    &scene.selected_platform,
-                    closest_index
-                )
-            }
-            
             // Handle new selection at end of frame
-            pending_resolve(&scene.pending_selected, &scene.selected_platform)        
+            pending_resolve(&scene.pending_selected, &scene.selected_platform)
         }
+    },
+    update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
+        debug_draw_begin(&scene.debug_draw)
+        for platform, i in scene.runtime.platforms {
+            switch p in platform {
+                case Platform_Box:
+                    debug_push_platform_box(
+                        draw  = &scene.debug_draw,
+                        box   = p,
+                        color = i == scene.selected_platform ? hsv(54, 1, 1) : hsv(200, 1, 1),
+                    )
+                    debug_push_wire_platform_box(
+                        draw  = &scene.debug_draw,
+                        box   = p,
+                        color = i == scene.selected_platform ? hsv(54, .4, .4) : hsv(200, .4, .4),
+                    )
+                case Platform_Slope:
+                    debug_push_platform_slope(
+                        draw  = &scene.debug_draw,
+                        slope = p,
+                        color = i == scene.selected_platform ? hsv(54, 1, 1) : hsv(200, 1, 1),
+                    )
+                    debug_push_wire_platform_slope(
+                        draw  = &scene.debug_draw,
+                        slope = p,
+                        color = i == scene.selected_platform ? hsv(54, .4, .4) : hsv(200, .4, .4),
+                    )
+            }
+
+        }
+
+        free_camera_update_3d(&scene.free_cam, ctx, dt)
+    },
+    draw_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, renderer : ^Renderer) {
+        debug_draw_3d(&scene.debug_draw, renderer)
     },
     input_ui =  proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
         ui := ctx.ui
@@ -186,9 +287,11 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 check_ray_box :: proc(
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
-    box_position  : [3]f32,
-    box_half_size : [3]f32,
+    box           : Platform_Box,
 ) -> (distance : f32, hit: bool) {
+    box_position  := box.origin + box.size * .5
+    box_half_size := box.size * .5
+
     min_x := box_position.x - box_half_size.x
     max_x := box_position.x + box_half_size.x
 
@@ -215,11 +318,81 @@ check_ray_box :: proc(
     return t_start, t_end > t_start && t_start > 0
 }
 
-editor_scene_field_vector3 :: proc(
+// don't ask me, ask antigravity
+check_ray_slope :: proc(
+    ray_origin    : [3]f32,
+    ray_direction : [3]f32,
+    slope         : Platform_Slope,
+) -> (distance : f32, hit: bool) {
+    min_x := slope.origin.x
+    max_x := slope.origin.x + slope.size.x
+
+    min_y := slope.origin.y
+    max_y := slope.origin.y + slope.size.y
+
+    min_z := slope.origin.z
+    max_z := slope.origin.z + slope.size.z
+
+    tx1 := (min_x - ray_origin.x) / ray_direction.x
+    tx2 := (max_x - ray_origin.x) / ray_direction.x
+
+    ty1 := (min_y - ray_origin.y) / ray_direction.y
+    ty2 := (max_y - ray_origin.y) / ray_direction.y
+
+    tz1 := (min_z - ray_origin.z) / ray_direction.z
+    tz2 := (max_z - ray_origin.z) / ray_direction.z
+
+    t_start := max(min(tx1, tx2), min(ty1, ty2), min(tz1, tz2))
+    t_end   := min(max(tx1, tx2), max(ty1, ty2), max(tz1, tz2))
+
+    nx, ny, plane_val : f32
+    sx := slope.size.x
+    sy := slope.size.y
+    ox := slope.origin.x
+    oy := slope.origin.y
+
+    switch slope.corner {
+    case .Bottom_Left:
+        nx = sy
+        ny = sx
+        plane_val = sy * ox + sx * oy + sx * sy
+    case .Bottom_Right:
+        nx = -sy
+        ny = sx
+        plane_val = -sy * ox + sx * oy
+    case .Top_Left:
+        nx = sy
+        ny = -sx
+        plane_val = sy * ox - sx * oy
+    case .Top_Right:
+        nx = -sy
+        ny = -sx
+        plane_val = -sy * ox - sx * oy - sx * sy
+    }
+
+    denom := nx * ray_direction.x + ny * ray_direction.y
+    numer := plane_val - (nx * ray_origin.x + ny * ray_origin.y)
+
+    if denom < 0 {
+        t_start = max(t_start, numer / denom)
+    } else if denom > 0 {
+        t_end = min(t_end, numer / denom)
+    } else if numer < 0 {
+        return 0, false
+    }
+
+    return t_start, t_end > t_start && t_start > 0
+}
+
+editor_field_vector3 :: proc(
     ui             : ^Ui,
-    vec3           : ^[3]f32,
+    field          : ^[3]f32,
     id             : Ui_Id,
-    field_ids      : [3][3]Ui_Id,
+    field_ids      : [3]struct {
+        text_edit    : Ui_Id,
+        up_control   : Ui_Id,
+        down_control : Ui_Id,
+    },
     label          : string,
     width          : f32,
     anchor         : Anchor,
@@ -237,50 +410,25 @@ editor_scene_field_vector3 :: proc(
     )
 
     anchor.offset.y += header_rect.w + field_gap
-
-    // These are the wrong usage of swizzling, but it's fun, who cares
-    if new, changed := ui_push_spinner(
-        ui,
-        id          = field_ids.x.x,
-        control_ids = field_ids.x.yz,
-        label       = "X", 
-        value       = vec3.x,
-        step        = .01,
-        label_color = hsv(332),
-        height      = field_height,
-        width       = field_width,
-        anchor      = anchor,
-    ); changed do vec3.x = new
-
-    anchor.offset.y += field_height + field_gap
-
-    if new, changed := ui_push_spinner(
-        ui,
-        id          = field_ids.y.x,
-        control_ids = field_ids.y.xy,
-        label       = "Y", 
-        value       = vec3.y,
-        step        = .01,
-        label_color = hsv(100),
-        height      = field_height,
-        width       = field_width,
-        anchor      = anchor,
-    ); changed do vec3.y = new
-
-    anchor.offset.y += field_height + field_gap
-
-    if new, changed := ui_push_spinner(
-        ui,
-        id          = field_ids.z.x,
-        control_ids = field_ids.z.yz,
-        label       = "Z", 
-        step        = .01,
-        value       = vec3.z,
-        label_color = hsv(200),
-        width       = field_width,
-        height      = field_height,
-        anchor      = anchor,
-    ); changed do vec3.z = new
+    axis_labels : [3]string = {"X", "Y", "Z"}
+    axis_colors : [3]f32    = {332, 100, 200}
+    
+    for i in 0..<3 {
+        if new_value, changed := ui_push_spinner(
+            ui,
+            id              = field_ids[i].text_edit,
+            up_control_id   = field_ids[i].up_control,
+            down_control_id = field_ids[i].down_control,
+            label           = axis_labels[i], 
+            value           = field[i],
+            step            = .01,
+            label_color     = hsv(axis_colors[i]),
+            height          = field_height,
+            width           = field_width,
+            anchor          = anchor,
+        ); changed do field[i] = new_value
+        anchor.offset.y += field_height + field_gap
+    }
 
     return header_rect.w + 3 * field_gap + 3 * field_height
 }

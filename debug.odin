@@ -152,7 +152,7 @@ debug_draw_3d :: proc(draw : ^Debug_Draw, renderer : ^Renderer) {
     }
 }
 
-debug_draw_box :: proc(
+debug_push_box :: proc(
     draw      : ^Debug_Draw,
     half_size : [3]f32,
     color     : [4]f32,
@@ -235,7 +235,7 @@ debug_draw_box :: proc(
 }
 
 
-debug_draw_wire_box :: proc(
+debug_push_wire_box :: proc(
     draw      : ^Debug_Draw,
     half_size : [3]f32,
     position  : [3]f32 = 0,
@@ -285,6 +285,142 @@ debug_draw_wire_box :: proc(
         uint(cur_ibuf_len + index_count) <= draw.modes[.Line].current_ibuf_cap,
         "Exceed ibuf cap!",
     )
+
+    append(&draw.modes[.Line].vertices, ..vertices[:])
+    append(&draw.modes[.Line].indices,  ..indices[:])
+}
+
+debug_push_platform_box :: proc(
+    draw  : ^Debug_Draw,
+    box   : Platform_Box,
+    color : [4]f32,
+) {
+    debug_push_box(
+        draw      = draw,
+        half_size = box.size * 0.5,
+        color     = color,
+        position  = box.origin + box.size * 0.5,
+    )
+}
+
+debug_push_platform_slope :: proc(
+    draw  : ^Debug_Draw,
+    slope : Platform_Slope,
+    color : [4]f32,
+) {
+    assert(draw.active)
+
+    bl := [2]f32{slope.origin.x,                slope.origin.y}
+    br := [2]f32{slope.origin.x + slope.size.x, slope.origin.y}
+    tl := [2]f32{slope.origin.x,                slope.origin.y + slope.size.y}
+    tr := [2]f32{slope.origin.x + slope.size.x, slope.origin.y + slope.size.y}
+
+    p0, p1, p2 : [2]f32
+    switch slope.corner {
+    case .Bottom_Left:
+        p0, p1, p2 = bl, br, tl
+    case .Bottom_Right:
+        p0, p1, p2 = br, tr, bl
+    case .Top_Left:
+        p0, p1, p2 = tl, bl, tr
+    case .Top_Right:
+        p0, p1, p2 = tr, tl, br
+    }
+
+    z_min := slope.origin.z
+    z_max := slope.origin.z + slope.size.z
+
+    vertices := [6]Vertex {
+        {{p0.x, p0.y, z_min}, color, {0, 0}},
+        {{p1.x, p1.y, z_min}, color, {1, 0}},
+        {{p2.x, p2.y, z_min}, color, {0, 1}},
+        {{p0.x, p0.y, z_max}, color, {0, 0}},
+        {{p1.x, p1.y, z_max}, color, {1, 0}},
+        {{p2.x, p2.y, z_max}, color, {0, 1}},
+    }
+
+    indices := [24]u16 {
+        0, 2, 1,
+        3, 4, 5,
+        0, 1, 4,  0, 4, 3,
+        1, 2, 5,  1, 5, 4,
+        2, 0, 3,  2, 3, 5,
+    }
+
+    cur_vbuf_len := len(draw.modes[.Triangle].vertices)
+    cur_ibuf_len := len(draw.modes[.Triangle].indices)
+
+    indices += u16(cur_vbuf_len)
+
+    assert(uint(cur_vbuf_len + len(vertices)) <= draw.modes[.Triangle].current_vbuf_cap, "Exceed vbuf cap!")
+    assert(uint(cur_ibuf_len + len(indices))  <= draw.modes[.Triangle].current_ibuf_cap, "Exceed ibuf cap!")
+
+    append(&draw.modes[.Triangle].vertices, ..vertices[:])
+    append(&draw.modes[.Triangle].indices,  ..indices[:])
+}
+
+debug_push_wire_platform_box :: proc(
+    draw  : ^Debug_Draw,
+    box   : Platform_Box,
+    color : [4]f32 = {1, 0, 0, 1},
+) {
+    debug_push_wire_box(
+        draw      = draw,
+        half_size = box.size * 0.5,
+        position  = box.origin + box.size * 0.5,
+        color     = color,
+    )
+}
+
+debug_push_wire_platform_slope :: proc(
+    draw  : ^Debug_Draw,
+    slope : Platform_Slope,
+    color : [4]f32 = {1, 0, 0, 1},
+) {
+    assert(draw.active)
+
+    bl := [2]f32{slope.origin.x,                slope.origin.y}
+    br := [2]f32{slope.origin.x + slope.size.x, slope.origin.y}
+    tl := [2]f32{slope.origin.x,                slope.origin.y + slope.size.y}
+    tr := [2]f32{slope.origin.x + slope.size.x, slope.origin.y + slope.size.y}
+
+    p0, p1, p2 : [2]f32
+    switch slope.corner {
+    case .Bottom_Left:
+        p0, p1, p2 = bl, br, tl
+    case .Bottom_Right:
+        p0, p1, p2 = br, tr, bl
+    case .Top_Left:
+        p0, p1, p2 = tl, bl, tr
+    case .Top_Right:
+        p0, p1, p2 = tr, tl, br
+    }
+
+    z_min := slope.origin.z
+    z_max := slope.origin.z + slope.size.z
+
+    vertices := [6]Vertex {
+        {{p0.x, p0.y, z_min}, color, 0},
+        {{p1.x, p1.y, z_min}, color, 0},
+        {{p2.x, p2.y, z_min}, color, 0},
+        {{p0.x, p0.y, z_max}, color, 0},
+        {{p1.x, p1.y, z_max}, color, 0},
+        {{p2.x, p2.y, z_max}, color, 0},
+    }
+
+    indices := [18]u16 {
+        0, 1,  1, 2,  2, 0,
+        3, 4,  4, 5,  5, 3,
+        0, 3,  1, 4,  2, 5,
+    }
+
+    cur_vbuf_len := len(draw.modes[.Line].vertices)
+    cur_ibuf_len := len(draw.modes[.Line].indices)
+
+    indices += u16(cur_vbuf_len)
+
+    assert(uint(cur_vbuf_len + len(vertices)) <= draw.modes[.Line].current_vbuf_cap, "Exceed vbuf cap!")
+    assert(uint(cur_ibuf_len + len(indices))  <= draw.modes[.Line].current_ibuf_cap, "Exceed ibuf cap!")
 
     append(&draw.modes[.Line].vertices, ..vertices[:])
     append(&draw.modes[.Line].indices,  ..indices[:])

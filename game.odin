@@ -10,8 +10,8 @@ VIEWPORT_BASE_WIDTH  :: 960
 VIEWPORT_BASE_HEIGHT :: 540
 GAME_VERSION         :: "0.0.0"
 GAME_STARTUP_SCENE   :: 
-	// Scene_Editor{}
-	Scene_Main_Menu{}
+	Scene_Editor{}
+	// Scene_Main_Menu{}
 
 Game :: struct {
 	viewport   : Viewport,
@@ -100,7 +100,6 @@ game_update :: proc(unscaled_dt : f32) {
 	
 	// Logic update
 	ui_begin(&game.ui, &game.viewport, ctx.mouse, game.settings.language)
-	defer ui_end(&game.ui, &game.viewport)
 	
 	if cbs.update_ui != nil do cbs.update_ui(&game.scene, ctx)
 	ui_push_cursor(&game.ui, position = game.mouse.position)
@@ -110,21 +109,22 @@ game_update :: proc(unscaled_dt : f32) {
 	
 	// Drawing
 	viewport_begin(&game.viewport, { sapp.widthf(), sapp.heightf() })
-	defer viewport_end(&game.viewport)
 
 	renderer_begin(&game.renderer, &game.camera, &game.viewport)
-	defer renderer_end(&game.renderer)
-
 	if cbs.draw_3d != nil do cbs.draw_3d(&game.scene, ctx, &game.renderer)
 	ui_draw(&game.ui, &game.viewport)
 	
-	defer mouse_input_end(&game.mouse)
+	renderer_end(&game.renderer)
+	viewport_end(&game.viewport)
+	ui_end(&game.ui, &game.viewport)
+	
+	mouse_input_end(&game.mouse)
 	
 	// Scene switching
-	defer if game.pending_scene != nil do game_switch_to_pending_scene(ctx)
+	if game.pending_scene != nil do game_switch_to_pending_scene(ctx)
 
 	// Free temp allocator 
-	defer free_all(context.temp_allocator)
+	free_all(context.temp_allocator)
 }
 
 @(private)

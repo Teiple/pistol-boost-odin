@@ -24,7 +24,7 @@ Anchor :: struct {
     offset    : [2]f32,
 }
 
-Sizing :: union {Fixed, Grow, Percent, PercentOffset}
+Sizing :: union {Fixed, Percent, PercentOffset}
 
 Fixed :: f32
 
@@ -32,8 +32,6 @@ Ui_Id :: union #no_nil {
     int,
     string,
 }
-
-Grow :: struct {}
 
 Percent :: struct {
     value : f32,
@@ -70,26 +68,30 @@ Font :: struct {
     non_ascii_map : map[rune]i32, 
 }
 
-// A stateful data container for current frame
+// A stateful data container for current frame (mostly)
 Ui_Builder :: struct {
     container_stack : [dynamic][4]f32,
     scissor_stack   : [dynamic; UI_MAX_SCISSOR_STACK][4]f32,
     commands        : [dynamic]Ui_Cmd,
     hold            : struct {
-        held_id         : Maybe(Ui_Id),
-        start_time : f32,
-        mouse_delta     : [2]f32
+        held_id     : Maybe(Ui_Id),
+        start_time  : f32,
+        mouse_delta : [2]f32
+    },
+    text_edit    : struct {
+        state            : edit.State,
+        focus            : struct {
+            pending_action : Pending_Action(Ui_Id),
+            focused_id     : Maybe(Ui_Id),
+            is_new         : bool,
+        },
+        builder          : strings.Builder,
+        scroll_x         : f32,
+        submit_requested : bool,
     },
     mouse           : ^Mouse_Input,
-    input_captured  : bool,
     keyboard_input  : bit_set[Ui_Keys],
-    // Text edit is complex, in one pass we cannot both change
-    // the focus while still operate on the old text edit
-    focus           : struct {
-        pending_action : Pending_Action(Ui_Id),
-        focused_id     : Maybe(Ui_Id),
-        is_new         : bool,
-    },
+    input_captured  : bool,
 }
 
 @(rodata)
@@ -132,14 +134,8 @@ Ui :: struct {
     vertices : [dynamic]Vertex,
     indices  : [dynamic]u16,
 
+    // Per-frame data struct
     builder  : Ui_Builder,
-
-    text_edit    : struct {
-        state            : edit.State,
-        builder          : strings.Builder,
-        scroll_x         : f32,
-        submit_requested : bool,
-    },
 
     get_time : proc() -> f32,
 }
@@ -290,9 +286,9 @@ ui_init :: proc(
 
 ui_destroy :: proc(ui : ^Ui) {
 	strings.builder_destroy(
-        &ui.text_edit.builder
+        &ui.builder.text_edit.builder
     )
-	edit.destroy(&ui.text_edit.state)
+	edit.destroy(&ui.builder.text_edit.state)
 
     for &lf in ui.lang_fonts {
         for &f in lf {
@@ -474,25 +470,23 @@ ui_get_quad :: proc(
 }
 
 ui_push_rect :: proc(
-    ui    : ^Ui,
-    sizing : [2]Sizing = {},
-    anchor : Anchor = {},
-    color : [4]f32 = 0,
-    icon  : Maybe(Ui_Icon) = nil,
+    ui          : ^Ui,
+    sizing      : [2]Sizing      = {},
+    anchor      : Anchor         = {},
+    color       : [4]f32         = 0,
+    icon        : Maybe(Ui_Icon) = nil,
     interactive : Maybe(struct {
         id              : Ui_Id,
         hovered_color   : Maybe([4]f32),
         held_color      : Maybe([4]f32),
         skip_drag_click : bool, // ignore a click if there was a mouse movement
     }) = nil,
-) -> (ele_rect : [4]f32, mouse_state : Mouse_Button_State, is_clicked : bool) {
+) -> (ele_rect : [4]f32, is_clicked : bool) {
     container := ui_top_container(ui)
     
     switch size in sizing.x {
         case Fixed:
             ele_rect.z = size
-        case Grow:
-            ele_rect.z = container.z
         case Percent:
             ele_rect.z = container.z * size.value
         case PercentOffset:
@@ -502,8 +496,6 @@ ui_push_rect :: proc(
     switch size in sizing.y {
         case Fixed:
             ele_rect.w = size
-        case Grow:
-            ele_rect.w = container.w
         case Percent:
             ele_rect.w = container.w * size.value
         case PercentOffset:
@@ -554,10 +546,6 @@ ui_push_rect :: proc(
                     ui_clear_held_id(ui)
                 }
             }
-
-            mouse_state = mouse.state[.Left]
-        } else {
-            mouse_state = .None
         }        
     }
 
@@ -572,7 +560,7 @@ ui_push_rect :: proc(
         num_indices = len(ui.indices) - start_index,
     })
 
-    return ele_rect, mouse_state, is_clicked
+    return ele_rect, is_clicked
 }
 
 ui_set_held_id :: proc(ui :^Ui, id :Ui_Id) {
@@ -590,12 +578,12 @@ ui_push_text :: proc(
     ui             : ^Ui,
     text           : string,
     font_id        : Font_Id = .Normal,
-    font_size      : f32 = 32,
-    color          : [4]f32 = 1,
-    anchor         : Anchor = {},
-    text_alignment : f32 = .5,
-    padding        : [4]f32 = 0,
-    wrap_enabled   : bool = true,
+    font_size      : f32     = 32,
+    color          : [4]f32  = 1,
+    anchor         : Anchor  = {},
+    text_alignment : f32     = .5,
+    padding        : [4]f32  = 0,
+    wrap_enabled   : bool    = true,
 ) -> (ele_rect : [4]f32) {
     // use address here since font struct is quite big
     font := &ui.lang_fonts[ui.language][font_id]
@@ -930,12 +918,12 @@ ui_end :: proc(ui : ^Ui, viewport : ^Viewport) {
     }
 
     // These record focused elements through frames
-    ui.builder.focus.is_new = pending_resolve(
-        &ui.builder.focus.pending_action,
-        &ui.builder.focus.focused_id,
-    ) && ui.builder.focus.focused_id != nil
+    ui.builder.text_edit.focus.is_new = pending_resolve(
+        &ui.builder.text_edit.focus.pending_action,
+        &ui.builder.text_edit.focus.focused_id,
+    ) && ui.builder.text_edit.focus.focused_id != nil
 
-    ui.text_edit.submit_requested = false
+    ui.builder.text_edit.submit_requested = false
     clear(&ui.builder.scissor_stack)
 
     ui.builder.input_captured = false
@@ -1031,21 +1019,21 @@ UI_TEXT_EDIT_KEY_BINDINGS :: []Ui_Text_Edit_Key_Binding{
 
 ui_text_edit_init :: proc(ui : ^Ui, allocator : runtime.Allocator) {
 	edit.init(
-        &ui.text_edit.state,
+        &ui.builder.text_edit.state,
         undo_text_allocator  = allocator,
         undo_state_allocator = allocator
     )
-	ui.text_edit.builder = strings.builder_make(allocator = allocator)
+	ui.builder.text_edit.builder = strings.builder_make(allocator = allocator)
 
-	ui.text_edit.state.translate_by_grapheme = true
+	ui.builder.text_edit.state.translate_by_grapheme = true
 
-	ui.text_edit.state.set_clipboard = proc(_: rawptr, text: string) -> bool {
+	ui.builder.text_edit.state.set_clipboard = proc(_: rawptr, text: string) -> bool {
 		// sokol, like raylib, copies the content of the text, so we only need the temp allocator here
         sapp.set_clipboard_string(strings.clone_to_cstring(text, allocator = context.temp_allocator))
         return true
 	}
 
-	ui.text_edit.state.get_clipboard = proc(_: rawptr) -> (text: string, ok: bool) {
+	ui.builder.text_edit.state.get_clipboard = proc(_: rawptr) -> (text: string, ok: bool) {
 		cstr := sapp.get_clipboard_string()
 		return string(cstr), cstr != nil
 	}
@@ -1055,7 +1043,13 @@ ui_text_edit_input :: proc(
     ui : ^Ui,
     ev : sapp.Event,
 ) {
-	edit.update_time(&ui.text_edit.state)
+    if ui.builder.text_edit.focus.focused_id == nil {
+        return
+    }
+    // Text edit always capture input
+    ui_capture_input(ui)
+
+	edit.update_time(&ui.builder.text_edit.state)
 
 	ctrl  := ev.modifiers & sapp.MODIFIER_CTRL  != 0
 	shift := ev.modifiers & sapp.MODIFIER_SHIFT != 0
@@ -1064,11 +1058,11 @@ ui_text_edit_input :: proc(
         for binding in UI_TEXT_EDIT_KEY_BINDINGS {
             pressed := ev.key_code == binding.key
             if pressed && binding.ctrl == ctrl && binding.shift == shift {
-                edit.perform_command(&ui.text_edit.state, binding.cmd)
+                edit.perform_command(&ui.builder.text_edit.state, binding.cmd)
             }
         }
         if ev.key_code == .ENTER {
-            ui.text_edit.submit_requested = true
+            ui.builder.text_edit.submit_requested = true
         }
     }
     
@@ -1076,7 +1070,7 @@ ui_text_edit_input :: proc(
     // to prevent clashing with the commands
     // we need to ignore the char type when pressing ctrl
     if !ctrl && ev.type == .CHAR {
-        edit.input_rune(&ui.text_edit.state, rune(ev.char_code))
+        edit.input_rune(&ui.builder.text_edit.state, rune(ev.char_code))
     }
 }
 
@@ -1092,21 +1086,22 @@ ui_is_cancel_pressed :: proc(ui : ^Ui) -> bool {
 }
 
 ui_push_spinner :: proc(
-    ui          : ^Ui,
-    id          : Ui_Id,
-    control_ids : [2]Ui_Id,
-    value       : f32,
-    label       : string,
-    step        : f32,
-    min_val     : Maybe(f32) = nil,
-    max_val     : Maybe(f32) = nil,
-    width       : [3]f32 = { 100, 50, 20 },
-    height      : f32    = 42,
-    label_color : [4]f32 = 1, 
-    anchor      : Anchor = {},
+    ui              : ^Ui,
+    id              : Ui_Id,
+    up_control_id   : Ui_Id,
+    down_control_id : Ui_Id,
+    value           : f32,
+    label           : string,
+    step            : f32,
+    min_val         : Maybe(f32) = nil,
+    max_val         : Maybe(f32) = nil,
+    width           : [3]f32     = { 100, 50, 20 },
+    height          : f32        = 42,
+    label_color     : [4]f32     = 1, 
+    anchor          : Anchor     = {},
     mouse_drag_sensitivity : f32 = .1,
 ) -> (new_value : f32, changed: bool) {
-    rect, _, _ := ui_push_rect(
+    rect, _ := ui_push_rect(
         ui,
         anchor = anchor,
         sizing = { width.x + width.y + width.z, height}, 
@@ -1118,7 +1113,7 @@ ui_push_spinner :: proc(
         defer ui_pop_container(ui)
 
         // Content rect
-        label_rect, _, _ := ui_push_rect(                
+        label_rect, _ := ui_push_rect(                
             ui,
             sizing = { width.x, height},
             anchor = {
@@ -1160,7 +1155,7 @@ ui_push_spinner :: proc(
         )
 
         // 2 controls, up and down, to step through the value when text input is not focused
-        up_control_rect, _, up_clicked := ui_push_rect(
+        up_control_rect, up_clicked := ui_push_rect(
             ui,
             sizing      = { width.z, height * .5 },
             anchor      = {
@@ -1168,7 +1163,7 @@ ui_push_spinner :: proc(
                 parent  = {1, 0},
             },
             interactive = {
-                id         = control_ids.x,
+                id         = up_control_id,
                 held_color = hsv(0, 0, .4),
             },
             color  = hsv(0, 0, .55),
@@ -1188,7 +1183,7 @@ ui_push_spinner :: proc(
             )
         }
        
-        down_control_rect, _, down_clicked := ui_push_rect(
+        down_control_rect, down_clicked := ui_push_rect(
             ui,
             sizing = { width.z, height * .5 },
             anchor = {
@@ -1196,7 +1191,7 @@ ui_push_spinner :: proc(
                 parent  = {1, 1},
             },
             interactive = {
-                id = control_ids.x,
+                id = down_control_id,
                 held_color = hsv(0, 0, .6),
             },
             color  = hsv(0, 0, .7),
@@ -1231,7 +1226,7 @@ ui_push_spinner :: proc(
                 (up_clicked   ? 0 :  1) +
                 (down_clicked ? 0 : -1) +
                 (
-                    ui.builder.focus.focused_id != id &&
+                    ui.builder.text_edit.focus.focused_id != id &&
                     ui.builder.hold.held_id     == id &&
                     abs(ui.builder.mouse.delta.x) > 0 ?
                     ui.builder.mouse.delta.x * mouse_drag_sensitivity : 0
@@ -1281,7 +1276,7 @@ ui_push_text_edit :: proc(
 ) -> (current_text: string, submitted : bool) {
 	font        := &ui.lang_fonts[ui.language][font_id]
         
-    rect, _, is_clicked := ui_push_rect(
+    rect, is_clicked := ui_push_rect(
         ui,
         sizing      = sizing,
         anchor      = anchor,
@@ -1293,25 +1288,25 @@ ui_push_text_edit :: proc(
     )
 
     if is_clicked {
+        fmt.println("clicked", id)
         ui_focus_set(ui, id)
     }
     
-    is_focused  := ui.builder.focus.focused_id == id
+    is_focused    := ui.builder.text_edit.focus.focused_id == id
+    newly_focused := is_focused && ui.builder.text_edit.focus.is_new
 
-    newly_focused := is_focused && ui.builder.focus.is_new
-    
     // When just focused
     if newly_focused {
         // Setup text edit
-        edit.clear_all(&ui.text_edit.state)
-        strings.write_string(&ui.text_edit.builder, text)
-        edit.setup_once(&ui.text_edit.state, &ui.text_edit.builder)
+        edit.clear_all(&ui.builder.text_edit.state)
+        strings.write_string(&ui.builder.text_edit.builder, text)
+        edit.setup_once(&ui.builder.text_edit.state, &ui.builder.text_edit.builder)
 
         // Reset scroll
-        ui.text_edit.scroll_x = 0
+        ui.builder.text_edit.scroll_x = 0
     }
 
-    text_x := padding_x + (is_focused ? ui.text_edit.scroll_x : 0)
+    text_x := padding_x + (is_focused ? ui.builder.text_edit.scroll_x : 0)
 
     // When click on the rect when already focused, reposition of caret
     if is_focused && is_clicked {
@@ -1323,11 +1318,11 @@ ui_push_text_edit :: proc(
         caret := ui_text_edit_set_caret(
             font          = &ui.lang_fonts[ui.language][font_id],
             font_size     = font_size,
-            text          = strings.to_string(ui.text_edit.state.builder^),
+            text          = strings.to_string(ui.builder.text_edit.state.builder^),
             local_mouse_x = local_text_x,
         )
 
-        ui.text_edit.state.selection = {caret, caret}
+        ui.builder.text_edit.state.selection = {caret, caret}
     }
 
     // On focus loss (clicked outside)
@@ -1341,8 +1336,8 @@ ui_push_text_edit :: proc(
     
     // text edit sb shouldn't be altered from this point anyway,
     // we can just return this text as current text
-    current_text = is_focused ? strings.to_string(ui.text_edit.builder) : text 
-    submitted    ||= is_focused && ui.text_edit.submit_requested
+    current_text = is_focused ? strings.to_string(ui.builder.text_edit.builder) : text 
+    submitted    ||= is_focused && ui.builder.text_edit.submit_requested
 
     caret_width :: 2
 
@@ -1361,7 +1356,7 @@ ui_push_text_edit :: proc(
         
         if is_focused {
             // Draw text selection
-            if lo, hi := edit.sorted_selection(&ui.text_edit.state); lo != hi {
+            if lo, hi := edit.sorted_selection(&ui.builder.text_edit.state); lo != hi {
                 lo_x := ui_text_width(font, current_text[:lo], font_size)
                 hi_x := ui_text_width(font, current_text[:hi], font_size)
 
@@ -1397,7 +1392,7 @@ ui_push_text_edit :: proc(
         if is_focused {
             caret_x := text_x + ui_text_width(
                 font      = font,
-                text      = current_text[:ui.text_edit.state.selection[0]],
+                text      = current_text[:ui.builder.text_edit.state.selection[0]],
                 font_size = font_size
             )
 
@@ -1418,9 +1413,9 @@ ui_push_text_edit :: proc(
             right_edge := rect.z - padding_x
             
             if caret_x < padding_x {
-                ui.text_edit.scroll_x += padding_x - caret_x
+                ui.builder.text_edit.scroll_x += padding_x - caret_x
             } else if caret_x > right_edge - caret_width {
-                ui.text_edit.scroll_x -= caret_x - (right_edge - caret_width)
+                ui.builder.text_edit.scroll_x -= caret_x - (right_edge - caret_width)
             }
         }
     }
@@ -1435,19 +1430,19 @@ ui_push_text_edit :: proc(
 ui_focus_set :: proc(ui: ^Ui, id : Ui_Id) {
     // Don't override existing action unless it's a clear action
     // Also don't set unless it's a different focus id
-    if ui.builder.focus.focused_id == id {
+    if ui.builder.text_edit.focus.focused_id == id {
         return
     }
 
-    if _, set := ui.builder.focus.pending_action.(Pending_Action_Set(Ui_Id)); !set {
-        ui.builder.focus.pending_action = {id}
+    if _, set := ui.builder.text_edit.focus.pending_action.(Pending_Action_Set(Ui_Id)); !set {
+        ui.builder.text_edit.focus.pending_action = {id}
     }
 }
 
 ui_focus_clear :: proc(ui: ^Ui) {
     // Don't clear existing set action (e.g. some elements in the same frame may require focuses)
-    if _, none := ui.builder.focus.pending_action.(Pending_Action_Keep); none {
-        ui.builder.focus.pending_action = Pending_Action_Clear{}
+    if _, none := ui.builder.text_edit.focus.pending_action.(Pending_Action_Keep); none {
+        ui.builder.text_edit.focus.pending_action = Pending_Action_Clear{}
     }
 }
 

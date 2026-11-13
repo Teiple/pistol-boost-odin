@@ -72,6 +72,10 @@ menu_stack_top :: proc(menu_stack : ^Menu_Stack) -> ^Menu {
     return len(menu_stack.stack) > 0 ? &menu_stack.stack[len(menu_stack.stack) - 1] : nil
 }
 
+menu_stack_active :: proc(menu_stack : ^Menu_Stack) -> bool {
+    return len(menu_stack.stack) > 0
+}
+
 menu_stack_init :: proc(menu_stack : ^Menu_Stack) {
     menu_stack.stack = make([dynamic]Menu, 0, 8)
 }
@@ -178,9 +182,9 @@ menu_helper_item_options :: proc(
     
     item_height   : f32,
 ) -> (new_value : T, changed : bool) where ins.type_is_enum(T) || ins.type_is_integer(T) {
-    rect, _, clicked := ui_push_rect(
+    rect, clicked := ui_push_rect(
         ui,
-        sizing      = { Grow{}, item_height },
+        sizing      = { Percent{1}, item_height },
         anchor      = anchor,
         interactive = {
             id            = item.item_id,
@@ -243,9 +247,9 @@ menu_helper_item_toggle :: proc(
 
     item_height   : f32,
 ) -> (new_value : bool, changed : bool) {
-    rect, _, clicked := ui_push_rect(
+    rect, clicked := ui_push_rect(
         ui,
-        sizing      = { Grow{}, item_height },
+        sizing      = { Percent{1}, item_height },
         anchor      = anchor,
         interactive = {
             id            = item_id,
@@ -307,9 +311,9 @@ menu_helper_item_spinner :: proc(
 ) -> (new_value : T, changed : bool) where ins.type_is_numeric(T) {
     current_value := math.clamp(current_value, min, max) 
 
-    rect, _, clicked := ui_push_rect(
+    rect, clicked := ui_push_rect(
         ui,
-        sizing      = { Grow{}, item_height },
+        sizing      = { Percent{1}, item_height },
         anchor      = anchor,
         interactive = {
             id            = item_id,
@@ -388,9 +392,9 @@ menu_helper_item_progress_bar :: proc(
 ) -> (new_value : T, changed : bool) where ins.type_is_numeric(T) {
     current_value := math.clamp(current_value, min, max) 
 
-    rect, _, _ := ui_push_rect(
+    rect, _ := ui_push_rect(
         ui,
-        sizing      = { Grow{}, item_height },
+        sizing      = { Percent{1}, item_height },
         anchor      = anchor,
         interactive = {
             id            = item_id,
@@ -412,9 +416,9 @@ menu_helper_item_progress_bar :: proc(
         )
 
         // Progress bar
-        bar_rect, _, _ := ui_push_rect(
+        bar_rect, _ := ui_push_rect(
             ui,
-            sizing = {total_bar_width, Grow{}},
+            sizing = {total_bar_width, Percent{1}},
             anchor = {element = {1, .5}, parent = {1, .5}},
         )
 
@@ -431,7 +435,7 @@ menu_helper_item_progress_bar :: proc(
             // (Backdrop)
             ui_push_rect(
                 ui,
-                sizing = {full_bar_width, Grow{}},
+                sizing = {full_bar_width, Percent{1}},
                 anchor = {element = {0, .5}, parent = {0, .5}, offset = {control_width, 0}},
                 color  = hsv(140, .1, .1),
                 interactive = {id = bar_id}
@@ -439,13 +443,13 @@ menu_helper_item_progress_bar :: proc(
             // (Progress bar)
             ui_push_rect(
                 ui,
-                sizing = {full_bar_width * f32(current_value) / f32(max - min), Grow{}},
+                sizing = {full_bar_width * f32(current_value) / f32(max - min), Percent{1}},
                 anchor = {element = {0, .5}, parent = {0, .5}, offset = {control_width, 0}},
                 color  = hsv(140),
             )
 
             // Left control 
-            left_control_rect, _, left_control_clicked := ui_push_rect(
+            left_control_rect, left_control_clicked := ui_push_rect(
                 ui,
                 sizing = control_sizing,
                 anchor = {element = {0, .5}, parent = {0, .5}},
@@ -461,9 +465,9 @@ menu_helper_item_progress_bar :: proc(
             {
                 defer ui_pop_container(ui)
 
-                left_control_rect, _, _ := ui_push_rect(
+                left_control_rect, _ := ui_push_rect(
                     ui,
-                    sizing = {Grow{}, Grow{}},
+                    sizing = {Percent{1}, Percent{1}},
                     anchor = {element = {.5, .5}, parent = {.5, .5}},
                     color  = hsv(140, .5, 1),
                     icon   = .Minus,
@@ -471,7 +475,7 @@ menu_helper_item_progress_bar :: proc(
             }
 
             // Right control 
-            right_control_rect, _, right_control_clicked := ui_push_rect(
+            right_control_rect, right_control_clicked := ui_push_rect(
                 ui,
                 sizing = control_sizing,
                 anchor = {element = {1, .5}, parent = {1, .5}},
@@ -523,7 +527,7 @@ menu_helper_calculate_footer_layout :: proc(
 ) -> (sizing : [2]Sizing, anchor : Anchor, text_anchor : Anchor) {
     sizing.y = footer_height
     if item_count == 1 {
-        sizing.x    = Grow{}
+        sizing.x    = Percent{1}
         anchor      = { element = {0, 1}, parent = {0, 1} }
         text_anchor = { element = {.5, .5}, parent = {.5, .5} }
     } else if item_count >= 2 {
@@ -571,7 +575,7 @@ menu_helper_label_menu :: proc(
     opt_count := cast(f32)len(T)
 
     // option container
-    rect, _, _ := ui_push_rect(
+    rect, _ := ui_push_rect(
         ui, 
         sizing = {
             item_size.x,
@@ -587,7 +591,7 @@ menu_helper_label_menu :: proc(
         item_anchor : Anchor
 
         for item, item_enum in items {
-            rect, mouse_state, is_clicked := ui_push_rect(                
+            rect, is_clicked := ui_push_rect(                
                 ui,
                 color       = hsv(0, 0, 0, 0),
                 sizing      = { item_size.x, item_size.y },
@@ -663,10 +667,10 @@ menu_helper_back_button :: proc(
     label          : Loc_Term,
     text_alignment : f32 = 0.5,
 ) -> (is_clicked : bool) {
-    rect, mouse_state, clicked := ui_push_rect(                
+    rect, clicked := ui_push_rect(                
         ui,
         color       = hsv(0, 0, 0, 0),
-        sizing      = { Grow{}, 42},
+        sizing      = { Percent{1}, 42},
         anchor      = { element = {0, 1}, parent = {0, 1}},
         interactive = {
             id            = id,
@@ -755,7 +759,7 @@ menu_helper_confirmation :: proc(
     padding    :: 16
     opt_height :: 32
 
-    rect, _, _ := ui_push_rect(                
+    rect, _ := ui_push_rect(                
         ui,
         color  = hsv(0, 0, 0, .8),
         sizing = { size.x, size.y},
@@ -766,7 +770,7 @@ menu_helper_confirmation :: proc(
     {
         defer ui_pop_container(ui)
         
-        inner_rect, _, _ := ui_push_rect(                
+        inner_rect, _ := ui_push_rect(                
             ui,
             sizing = { size.x - 2 * padding, size.y - 2 * padding},
             anchor = { offset = padding },
@@ -777,9 +781,9 @@ menu_helper_confirmation :: proc(
             defer ui_pop_container(ui)
             
             // Content rect
-            content_rect, _, _ := ui_push_rect(                
+            content_rect, _ := ui_push_rect(                
                 ui,
-                sizing = { Grow{}, size.y - 2 * padding - opt_height},
+                sizing = { Percent{1}, size.y - 2 * padding - opt_height},
             )
             
             ui_push_container(ui, content_rect)
@@ -795,7 +799,7 @@ menu_helper_confirmation :: proc(
             }
 
             // Yes/No rects
-            yes_rect, _, yes_clicked := ui_push_rect(                
+            yes_rect, yes_clicked := ui_push_rect(                
                 ui,
                 sizing      = { Percent{.5}, opt_height},
                 anchor      = { element = {0, 1}, parent = {0, 1}},
@@ -820,7 +824,7 @@ menu_helper_confirmation :: proc(
                 )
             }
 
-            no_rect, _, no_clicked := ui_push_rect(                
+            no_rect, no_clicked := ui_push_rect(                
                 ui,
                 sizing      = { Percent{.5}, opt_height},
                 anchor      = { element = {0, 1}, parent = {.5, 1}},
@@ -902,7 +906,7 @@ menu_helper_settings_footer :: proc(
 
         switch item {
             case .Back:
-                rect, _, is_clicked := ui_push_rect(
+                rect, is_clicked := ui_push_rect(
                     ui, sizing, anchor,
                     interactive = {
                         id            = back_id,
@@ -945,7 +949,7 @@ menu_helper_settings_footer :: proc(
                     }
                 }
             case .Defaults:
-                rect, _, is_clicked := ui_push_rect(
+                rect, is_clicked := ui_push_rect(
                     ui,
                     sizing = sizing,
                     anchor = anchor,

@@ -89,7 +89,7 @@ GRAPHICS_MENU_CALLBACKS : Menu_Callbacks(^Graphics_Menu) : {
                     item_count  := cast(f32)len(Graphics_Menu_Item_Id)
                     
                     // option container
-                    rect, _, _ := ui_push_rect(
+                    rect, _ := ui_push_rect(
                         ui, 
                         sizing = {
                             300,
@@ -226,7 +226,7 @@ CONTROLS_MENU_CALLBACKS : Menu_Callbacks(^Controls_Menu) : {
                     item_count  := cast(f32)len(Controls_Menu_Item_Id)
                     
                     // option container
-                    rect, _, _ := ui_push_rect(
+                    rect, _ := ui_push_rect(
                         ui, 
                         sizing = {
                             400,
@@ -359,7 +359,7 @@ AUDIO_MENU_CALLBACKS : Menu_Callbacks(^Audio_Menu) : {
                     item_count  := cast(f32)len(Audio_Menu_Item_Id)
                     
                     // option container
-                    rect, _, _ := ui_push_rect(
+                    rect, _ := ui_push_rect(
                         ui, 
                         sizing = {
                             450,

@@ -1,7 +1,5 @@
 package main
 
-import "base:intrinsics"
-import "core:fmt"
 import sapp "sokol-odin/sokol/app"
 
 Scene_Init :: struct {
@@ -50,7 +48,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         delete(scene.meshes)
     },
     update_ui = proc(scene : ^Scene_Gameplay, ctx : Game_Context) {
-        if menu_stack_top(&scene.menu_stack) != nil do ui_capture_input(ctx.ui)
+        if menu_stack_active(&scene.menu_stack) do ui_capture_input(ctx.ui)
         menu_stack_update_ui(&scene.menu_stack, ctx)
     },
     update_3d = proc(scene : ^Scene_Gameplay, ctx : Game_Context, dt : f32) {        
@@ -62,11 +60,11 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
                 camera   = ctx.camera,
                 viewport = ctx.viewport,
                 audio    = ctx.audio,
-                mouse    = {
-                    position  = !ui_input_captured(ctx.ui) ? ctx.mouse.position : 0,
-                    primary   = !ui_input_captured(ctx.ui) ? ctx.mouse.state[.Left]  : {},
-                    secondary = !ui_input_captured(ctx.ui) ? ctx.mouse.state[.Right] : {},
-                }
+                mouse    = !ui_input_captured(ctx.ui) ? {
+                    position  = ctx.mouse.position,
+                    primary   = ctx.mouse.state[.Right],
+                    secondary = ctx.mouse.state[.Left],
+                } : { },
             },
             dt  = dt,
         )
@@ -86,7 +84,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ctx : Game_Context, ev : sapp.Event) {
-        if menu_stack_top(&scene.menu_stack) == nil && ev.type == .KEY_DOWN && ev.key_code == .ESCAPE
+        if menu_stack_active(&scene.menu_stack) && ev.type == .KEY_DOWN && ev.key_code == .ESCAPE
         {
             menu_stack_request_push(&scene.menu_stack, Pause_Menu{})
         }

@@ -9,7 +9,7 @@
 	[
 		{
 			"name": "odin",
-		"cmd": ["odin", "run", "$project_path", "-out:main.bin", "-o:none", "-thread-count:2", "-show-timings"],
+			"cmd": ["odin", "run", "$project_path", "-out:main.bin", "-o:none", "-thread-count:2", "-show-timings"],
 			"file_regex": "^(.*?)\\(([0-9]+):([0-9]+)\\) (.+)$",
 		}
 	],
