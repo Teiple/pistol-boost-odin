@@ -553,12 +553,25 @@ debug_draw_push_grid :: proc(
 ) {
     assert(draw.active)
 
+    vertices := &draw.modes[.Line].vertices
+    indices  := &draw.modes[.Line].indices
+
+    cur_vbuf_len := len(vertices)
+    cur_ibuf_len := len(indices)
+
+    vert_index := u16(cur_vbuf_len)
+
     half_size  := size * .5
 
-    vertices : [dynamic; 100]Vertex
-    indices  : [dynamic; 50]u16
+    count := int(size / unit)
 
-    append(&vertices,
+    vertex_count := 4 + 8 * count/2
+    index_count  := 2 + 4 * count/2
+
+    assert(uint(cur_vbuf_len + vertex_count) <= draw.modes[.Line].current_vbuf_cap, "Exceed vbuf cap!")
+    assert(uint(cur_ibuf_len + index_count)  <= draw.modes[.Line].current_ibuf_cap, "Exceed ibuf cap!")
+
+    append(vertices,
         {
             position = {0, 0, -half_size},
             color    = axis_color,
@@ -576,14 +589,14 @@ debug_draw_push_grid :: proc(
             color    = axis_color,
         }
     )
-    append(&indices, 0, 1, 2, 3)
 
-    vert_index : u16 =  4
-    count      := int(size / unit)
+    append(indices, vert_index, vert_index + 1, vert_index + 2, vert_index + 3)
+    vert_index += 4
+
     for i in 1..=count/2 {
         sides := [2]f32{-1, 1}
         for side in sides {
-            append(&vertices,
+            append(vertices,
                 {
                     position = { side * f32(i) * unit, 0, -half_size},
                     color    = sub_color,
@@ -602,10 +615,7 @@ debug_draw_push_grid :: proc(
                 },
             )
         }
-        for v in 0..<8 do append(&indices, vert_index + u16(v))
+        for v in 0..<8 do append(indices, vert_index + u16(v))
         vert_index += 8
     }
-
-    append(&draw.modes[.Line].vertices, ..vertices[:])
-    append(&draw.modes[.Line].indices,  ..indices[:])   
 }

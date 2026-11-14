@@ -74,7 +74,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         // View mode selection
         view_mode_rect, _ := ui_push_rect(
             ui     = ui,
-            sizing = {250, 50},
+            sizing = {220, 50},
             anchor = { element = {0, 1}, parent = {0, 1} } 
         )
         append(&ui_rects, view_mode_rect)
@@ -86,7 +86,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             if new_value, changed := ui_push_combo_box(
                 ui      = ui,
                 id      = "view_mode",
-                width   = {200, 50},
+                width   = {170, 50},
                 height  = 50,
                 anchor  = { element = {0, 1}, parent = {0, 1} },         
                 options = [enum { Perspective, Orthorgonal }]string {
@@ -230,6 +230,8 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
         debug_draw_push_grid(
             draw       = &scene.debug_draw,
+            unit       = 1,
+            size       = 30,
             axis_color = hsv(0, 0, .6), 
             sub_color  = hsv(0, 0, .3), 
         )
