@@ -1110,7 +1110,7 @@ ui_push_combo_box :: proc(
         option_rect, is_clicked := ui_push_rect(
             ui          = ui,
             sizing      = {width.x , Percent{1}},
-            color       = hsv(0, 0, .4),
+            color       = hsv(0, 0, .3),
             interactive = {
                 id            = id,
                 hovered_color = hsv(0, 0, .35),

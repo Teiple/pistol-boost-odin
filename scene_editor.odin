@@ -74,7 +74,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         // View mode selection
         view_mode_rect, _ := ui_push_rect(
             ui     = ui,
-            sizing = {360, 50},
+            sizing = {250, 50},
             anchor = { element = {0, 1}, parent = {0, 1} } 
         )
         append(&ui_rects, view_mode_rect)
@@ -83,47 +83,18 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         {
             defer ui_pop_container(ui)
 
-            ortho := scene.free_cam.mode_orthorgonal
-            
-            persp_rect, persp_clicked := ui_push_rect(
-                ui          = ui,
-                sizing      = {Percent{.5}, Percent{1}},
-                anchor      = {parent = {0, 0}},
-                color       = hsv(0, 0, ortho ? .25 : .8),
-                interactive = {
-                    id            = "editor:persp_view",
-                    hovered_color = hsv(0, 0, (ortho ? .25 : .8) + .1),
-                } 
-            )
-            ui_push_text(
-                ui     = ui,
-                text   = "Perspective",
-                anchor = { element = {.5, .5}, parent = {.25, .5}},
-                color  = hsv(0, 0, ortho ? .8 :  0)
-            )
-
-            ortho_rect, ortho_clicked := ui_push_rect(
-                ui     = ui,
-                sizing = {Percent{.5}, Percent{1}},
-                anchor = {parent = {.5, 0}},
-                color  = hsv(0, 0, !ortho ? .25 : .8),
-                interactive = {
-                    id            = "editor:ortho_view",
-                    hovered_color = hsv(0, 0, (!ortho ? .25 : .8) + .1),
-                } 
-            )
-            ui_push_text(
-                ui = ui,
-                text = "Orthogonal",
-                anchor = {
-                    element = {.5, .5},
-                    parent = {.75, .5}
+            if new_value, changed := ui_push_combo_box(
+                ui      = ui,
+                id      = "view_mode",
+                width   = {200, 50},
+                height  = 50,
+                anchor  = { element = {0, 1}, parent = {0, 1} },         
+                options = [enum { Perspective, Orthorgonal }]string {
+                    .Perspective = "Perspective",
+                    .Orthorgonal = "Orthorgonal"
                 },
-                color = hsv(0, 0, !ortho ? .8 :  0)
-            )
-        
-            if persp_clicked do scene.free_cam.mode_orthorgonal = false
-            if ortho_clicked do scene.free_cam.mode_orthorgonal = true
+                value   = scene.free_cam.mode_orthorgonal ? .Orthorgonal : .Perspective,
+            ); changed do scene.free_cam.mode_orthorgonal = new_value == .Orthorgonal
         }
 
         // Inspector
@@ -256,13 +227,23 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     },
     update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
         debug_draw_begin(&scene.debug_draw)
+
+        debug_draw_push_grid(
+            draw       = &scene.debug_draw,
+            axis_color = hsv(0, 0, .6), 
+            sub_color  = hsv(0, 0, .3), 
+        )
+
         for platform, i in scene.runtime.platforms {
+            selected := i == scene.selected_platform
             switch p in platform {
                 case Platform_Box:
-                    debug_push_platform_box(
-                        draw  = &scene.debug_draw,
-                        box   = p,
-                        color = i == scene.selected_platform ? hsv(54, 1, 1) : hsv(200, 1, 1),
+                    debug_draw_push_platform_box(
+                        draw         = &scene.debug_draw,
+                        box          = p,
+                        color        = selected ? hsv(54, 1, 1) : hsv(200, 1, 1),
+                        bounding_box = selected,
+                        origin       = selected,
                     )
                     debug_push_wire_platform_box(
                         draw  = &scene.debug_draw,
@@ -270,15 +251,17 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         color = i == scene.selected_platform ? hsv(54, .4, .4) : hsv(200, .4, .4),
                     )
                 case Platform_Slope:
-                    debug_push_platform_slope(
-                        draw  = &scene.debug_draw,
-                        slope = p,
-                        color = i == scene.selected_platform ? hsv(54, 1, 1) : hsv(200, 1, 1),
+                    debug_draw_push_platform_slope(
+                        draw         = &scene.debug_draw,
+                        slope        = p,
+                        color        = selected ? hsv(54, 1, 1) : hsv(200, 1, 1),
+                        bounding_box = selected,
+                        origin       = selected,
                     )
                     debug_push_wire_platform_slope(
                         draw  = &scene.debug_draw,
                         slope = p,
-                        color = i == scene.selected_platform ? hsv(54, .4, .4) : hsv(200, .4, .4),
+                        color = selected ? hsv(54, .4, .4) : hsv(200, .4, .4),
                     )
             }
 
@@ -438,7 +421,7 @@ editor_property_slope_corner :: proc(
         anchor  = anchor,
     ); changed do value^ = new_value
 
-    return header_rect.w + row_gap
+    return header_rect.w + row_gap + 50
 }
 
 editor_property_vector3 :: proc(

@@ -153,7 +153,7 @@ debug_draw_3d :: proc(draw : ^Debug_Draw, renderer : ^Renderer) {
     }
 }
 
-debug_push_box :: proc(
+debug_draw_push_box :: proc(
     draw      : ^Debug_Draw,
     half_size : [3]f32,
     color     : [4]f32,
@@ -236,7 +236,7 @@ debug_push_box :: proc(
 }
 
 
-debug_push_wire_box :: proc(
+debug_draw_push_wire_box :: proc(
     draw      : ^Debug_Draw,
     half_size : [3]f32,
     position  : [3]f32 = 0,
@@ -291,7 +291,7 @@ debug_push_wire_box :: proc(
     append(&draw.modes[.Line].indices,  ..indices[:])
 }
 
-debug_push_sphere :: proc(
+debug_draw_push_sphere :: proc(
     draw     : ^Debug_Draw,
     radius   : f32,
     position : [3]f32,
@@ -340,7 +340,7 @@ debug_push_sphere :: proc(
     }
 }
 
-debug_push_wire_sphere :: proc(
+debug_draw_push_wire_sphere :: proc(
     draw      : ^Debug_Draw,
     radius    : f32,
     position  : [3]f32,
@@ -371,15 +371,19 @@ debug_push_wire_sphere :: proc(
     }
 }
 
-debug_push_platform_box :: proc(
+debug_draw_push_platform_box :: proc(
     draw         : ^Debug_Draw,
     box          : Platform_Box,
     color        : [4]f32,
+    bounding_box : bool = false,
+    origin       : bool = false,
 ) {
-    // draw origin
-    debug_draw_platform_origin(draw, box.origin)
+    assert(draw.active)
 
-    debug_push_box(
+    if origin       do debug_draw_push_platform_origin(draw, box.origin)
+    if bounding_box do debug_draw_push_platform_bounding_box(draw, box.origin, box.size)
+
+    debug_draw_push_box(
         draw      = draw,
         half_size = box.size * 0.5,
         color     = color,
@@ -387,33 +391,42 @@ debug_push_platform_box :: proc(
     )
 }
 
-debug_draw_platform_origin :: proc(
+debug_draw_push_platform_origin :: proc(
     draw     : ^Debug_Draw,
     position : [3]f32, 
 ) {
-    debug_push_sphere(
+    debug_draw_push_sphere(
         draw     = draw,
         radius   = .05,
         color    = hsv(30),
         position = position,
     )
-    debug_push_wire_sphere(
-        draw     = draw,
-        radius   = .08,
-        color    = hsv(30, .4, .4),
-        position = position,
+}
+
+debug_draw_push_platform_bounding_box :: proc(
+    draw   : ^Debug_Draw,
+    origin : [3]f32,
+    size   : [3]f32
+) {
+    debug_draw_push_wire_box(
+        draw      = draw,
+        position  = origin + size * .5,
+        half_size = size * .5 + 0.05,
+        color     = hsv(30, 1, .8),
     )
 }
 
-debug_push_platform_slope :: proc(
-    draw  : ^Debug_Draw,
-    slope : Platform_Slope,
-    color : [4]f32,
+debug_draw_push_platform_slope :: proc(
+    draw         : ^Debug_Draw,
+    slope        : Platform_Slope,
+    color        : [4]f32,
+    bounding_box : bool = false,
+    origin       : bool = false,
 ) {
     assert(draw.active)
 
-    // draw origin
-    debug_draw_platform_origin(draw, slope.origin)
+    if origin       do debug_draw_push_platform_origin(draw, slope.origin)
+    if bounding_box do debug_draw_push_platform_bounding_box(draw, slope.origin, slope.size)
 
     bl := [2]f32{slope.origin.x,                slope.origin.y}
     br := [2]f32{slope.origin.x + slope.size.x, slope.origin.y}
@@ -469,7 +482,7 @@ debug_push_wire_platform_box :: proc(
     box   : Platform_Box,
     color : [4]f32 = {1, 0, 0, 1},
 ) {
-    debug_push_wire_box(
+    debug_draw_push_wire_box(
         draw      = draw,
         half_size = box.size * 0.5,
         position  = box.origin + box.size * 0.5,
@@ -531,3 +544,68 @@ debug_push_wire_platform_slope :: proc(
     append(&draw.modes[.Line].indices,  ..indices[:])
 }
 
+debug_draw_push_grid :: proc(
+    draw       : ^Debug_Draw,
+    unit       : f32    = 1,
+    size       : f32    = 10,
+    axis_color : [4]f32 = {.1, .1, .1 , 1},
+    sub_color  : [4]f32 = {.2, .2, .2, 1},
+) {
+    assert(draw.active)
+
+    half_size  := size * .5
+
+    vertices : [dynamic; 100]Vertex
+    indices  : [dynamic; 50]u16
+
+    append(&vertices,
+        {
+            position = {0, 0, -half_size},
+            color    = axis_color,
+        },
+        {
+            position = {0, 0,  half_size},
+            color    = axis_color,
+        },
+        {
+            position = {-half_size, 0, 0},
+            color    = axis_color,
+        },
+        {
+            position = { half_size, 0, 0},
+            color    = axis_color,
+        }
+    )
+    append(&indices, 0, 1, 2, 3)
+
+    vert_index : u16 =  4
+    count      := int(size / unit)
+    for i in 1..=count/2 {
+        sides := [2]f32{-1, 1}
+        for side in sides {
+            append(&vertices,
+                {
+                    position = { side * f32(i) * unit, 0, -half_size},
+                    color    = sub_color,
+                },
+                {
+                    position = { side * f32(i) * unit, 0,  half_size},
+                    color    = sub_color,
+                },
+                {
+                    position = {-half_size, 0, side * f32(i) * unit},
+                    color    = sub_color,
+                },
+                {
+                    position = { half_size, 0, side * f32(i) * unit},
+                    color    = sub_color,
+                },
+            )
+        }
+        for v in 0..<8 do append(&indices, vert_index + u16(v))
+        vert_index += 8
+    }
+
+    append(&draw.modes[.Line].vertices, ..vertices[:])
+    append(&draw.modes[.Line].indices,  ..indices[:])   
+}
