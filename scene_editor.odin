@@ -20,8 +20,10 @@ Platform :: union {
 }
 
 Slope_Corner :: enum u8 {
-    Bottom_Left, Bottom_Right,
-    Top_Left,    Top_Right,
+    Bottom_Left,
+    Bottom_Right,
+    Top_Left,
+    Top_Right,
 }
 
 Editor_Runtime :: struct {
@@ -55,7 +57,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             Platform_Slope{
                 origin = {0,2,0},
                 size   = {2,1,1},
-                corner = .Bottom_Right,
+                corner = .Bottom_Left,
             },
 
         )
@@ -135,17 +137,17 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             append(&ui_rects, inspector_rect)
 
             inspector_padding    :: 8
-            inspector_rect_width := inspector_rect.z - inspector_padding * 2
+            inspector_width := inspector_rect.z - inspector_padding * 2
 
             ui_push_container(ui, inspector_rect)
             {
                 defer ui_pop_container(ui)
 
-                field_gap    :: 16
-                field_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
+                prop_gap    :: 16
+                prop_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
 
                 origin, size : ^[3]f32
-                platform := scene.runtime.platforms[scene.selected_platform.?]
+                platform := &scene.runtime.platforms[scene.selected_platform.?]
                 switch &p in platform {
                     case Platform_Box: {
                         origin = &p.origin; size = &p.size
@@ -155,42 +157,44 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     }
                 }
 
-                field_anchor.offset.y += editor_field_vector3(
+                prop_anchor.offset.y += editor_property_vector3(
                     ui,
                     label     = "Origin",
                     id        = "origin",
-                    field_ids = {
+                    axis_ids  = {
                         { text_edit = "origin:x", up_control = "origin:x:up", down_control = "origin:x:down"},
                         { text_edit = "origin:y", up_control = "origin:y:up", down_control = "origin:y:down"},
                         { text_edit = "origin:z", up_control = "origin:z:up", down_control = "origin:z:down"},
                     },
-                    field     = origin,
-                    width     = inspector_rect_width,
-                    anchor    = field_anchor,
+                    value     = origin,
+                    width     = inspector_width,
+                    anchor    = prop_anchor,
                 )
-                field_anchor.offset.y += field_gap
+                prop_anchor.offset.y += prop_gap
 
-                field_anchor.offset.y += editor_field_vector3(
+                prop_anchor.offset.y += editor_property_vector3(
                     ui,
                     label     = "Size",
                     id        = "size",
-                    field_ids = {
+                    axis_ids  = {
                         { text_edit = "size:x", up_control = "size:x:up", down_control = "size:x:down"},
                         { text_edit = "size:y", up_control = "size:y:up", down_control = "size:y:down"},
                         { text_edit = "size:z", up_control = "size:z:up", down_control = "size:z:down"},
                     },
-                    field     = size,
-                    width     = inspector_rect_width,
-                    anchor    = field_anchor,
+                    value     = size,
+                    width     = inspector_width,
+                    anchor    = prop_anchor,
                 )
-                field_anchor.offset.y += field_gap
+                prop_anchor.offset.y += prop_gap
 
-                if p, ok := platform.(Platform_Slope); ok {
-                    editor_field_slope_corner(
+                if p, ok := &platform.(Platform_Slope); ok {
+                    editor_property_slope_corner(
                         ui     = ui,
+                        value  = &p.corner,
+                        width  = inspector_width,
                         id     = "slope_corner",
                         label  = "Slope Corner",
-                        anchor = field_anchor,
+                        anchor = prop_anchor,
                     )
                 }
             }
@@ -401,43 +405,58 @@ check_ray_slope :: proc(
     return t_start, t_end > t_start && t_start > 0
 }
 
-editor_field_slope_corner :: proc(
+editor_property_slope_corner :: proc(
     ui     : ^Ui,
     id     : Ui_Id,
+    width  : f32,
     label  : string,
+    value  : ^Slope_Corner,
     anchor : Anchor,
 ) -> (height: f32) {
-    field_height :: 42
-    field_gap    :: 8
+    row_height :: 42
+    row_gap    :: 8
 
     anchor := anchor
-
     header_rect := ui_push_text(
         ui,
         text   = label,
         anchor = anchor,
     )
-    anchor.offset.y += header_rect.w + field_gap
+    anchor.offset.y += header_rect.w + row_gap
 
-    return header_rect.w + field_gap
+    if new_value, changed := ui_push_combo_box(
+        ui      = ui,
+        id      = id,
+        value   = value^,
+        width   = {width - 50, 50},
+        options = [Slope_Corner]string {
+            .Bottom_Left  = "Bottom Left",
+            .Bottom_Right = "Bottom Right",
+            .Top_Left     = "Top Left",
+            .Top_Right    = "Top Right",
+        },
+        anchor  = anchor,
+    ); changed do value^ = new_value
+
+    return header_rect.w + row_gap
 }
 
-editor_field_vector3 :: proc(
-    ui             : ^Ui,
-    id             : Ui_Id,
-    field          : ^[3]f32,
-    field_ids      : [3]struct {
+editor_property_vector3 :: proc(
+    ui       : ^Ui,
+    id       : Ui_Id,
+    value    : ^[3]f32,
+    axis_ids : [3]struct {
         text_edit    : Ui_Id,
         up_control   : Ui_Id,
         down_control : Ui_Id,
     },
-    label          : string,
-    width          : f32,
-    anchor         : Anchor,
+    label    : string,
+    width    : f32,
+    anchor   : Anchor,
 ) -> (height: f32) {
-    field_width  : [3]f32 = {32, width - 52, 20}
-    field_height :: 42
-    field_gap    :: 8
+    axis_width  : [3]f32 = {32, width - 52, 20}
+    axis_height :: 42
+    axis_gap    :: 8
 
     anchor := anchor
 
@@ -447,26 +466,26 @@ editor_field_vector3 :: proc(
         anchor = anchor,
     )
 
-    anchor.offset.y += header_rect.w + field_gap
+    anchor.offset.y += header_rect.w + axis_gap
     axis_labels : [3]string = {"X", "Y", "Z"}
     axis_colors : [3]f32    = {332, 100, 200}
     
     for i in 0..<3 {
         if new_value, changed := ui_push_spinner(
             ui,
-            id              = field_ids[i].text_edit,
-            up_control_id   = field_ids[i].up_control,
-            down_control_id = field_ids[i].down_control,
+            id              = axis_ids[i].text_edit,
+            up_control_id   = axis_ids[i].up_control,
+            down_control_id = axis_ids[i].down_control,
             label           = axis_labels[i], 
-            value           = field[i],
+            value           = value[i],
             step            = .01,
             label_color     = hsv(axis_colors[i]),
-            height          = field_height,
-            width           = field_width,
+            height          = axis_height,
+            width           = axis_width,
             anchor          = anchor,
-        ); changed do field[i] = new_value
-        anchor.offset.y += field_height + field_gap
+        ); changed do value[i] = new_value
+        anchor.offset.y += axis_height + axis_gap
     }
 
-    return header_rect.w + 3 * field_gap + 3 * field_height
+    return header_rect.w + 3 * axis_gap + 3 * axis_height
 }

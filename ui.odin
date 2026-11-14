@@ -1067,7 +1067,7 @@ ui_text_edit_input :: proc(
         }
     }
     
-    // ignore unprintable ascii and the Enter
+    // ignore unprintable ascii,
     // to prevent clashing with the commands
     // we need to ignore the char type when pressing ctrl
     if !ctrl && ev.type == .CHAR {
@@ -1091,16 +1091,69 @@ ui_push_combo_box :: proc(
     ui      : ^Ui,
     id      : Ui_Id,
     options : [$T]string,
+    value   : T,
     width   : [2]f32 = { 100, 50 },
     height  : f32    = 42,
     anchor  : Anchor = {},
-) -> (new_value : f32, changed : bool) where intrinsics.type_is_enum(T) {
+) -> (new_value : T, changed : bool) where
+    intrinsics.type_is_enum(T), intrinsics.type_enum_is_contiguous(T)
+{
     rect, _ := ui_push_rect(
         ui     = ui,
         anchor = anchor,
-        sizing = { width.x + width.y}, 
-        color  = hsv(0, 0, 0, .4),
+        sizing = { width.x + width.y, height }, 
     )
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+
+        option_rect, is_clicked := ui_push_rect(
+            ui          = ui,
+            sizing      = {width.x , Percent{1}},
+            color       = hsv(0, 0, .4),
+            interactive = {
+                id            = id,
+                hovered_color = hsv(0, 0, .35),
+            }
+        )
+
+        ui_push_container(ui, option_rect)
+        {
+            defer ui_pop_container(ui)
+
+            ui_push_text(
+                ui      = ui,
+                text    = options[value],
+                anchor  = {element = {0, .5}, parent = {0, .5}},
+                padding = {8, 0, 0, 0}  
+            )
+        }
+
+        count_rect, _ := ui_push_rect(
+            ui     = ui,
+            sizing = {width.y , Percent{1}},
+            anchor = {element = {1, 0}, parent = {1, 0}},
+            color  = hsv(0, 0, .15),
+        )
+
+        ui_push_container(ui, count_rect)
+        {
+            defer ui_pop_container(ui)
+
+            ui_push_text(
+                ui     = ui,
+                text   = fmt.tprintf("%v/%v", int(value) + 1, len(T)),
+                anchor = {element = {.5, .5}, parent = {.5, .5}}, 
+            )
+        }
+
+        if is_clicked {
+            new_value = enum_next(value)
+            changed   = new_value != value
+        }
+    }
+
+    return
 }
 
 ui_push_spinner :: proc(
@@ -1123,7 +1176,7 @@ ui_push_spinner :: proc(
         ui,
         anchor = anchor,
         sizing = { width.x + width.y + width.z, height}, 
-        color  = hsv(0, 0, 0, .4),
+        color  = hsv(0, 0, .15),
     )
 
     ui_push_container(ui, rect)
