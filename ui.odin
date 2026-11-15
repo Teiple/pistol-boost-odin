@@ -1294,18 +1294,18 @@ ui_push_spinner :: proc(
             }
         } else {
             multiplier : f32 =
-                (up_clicked   ? 0 :  1) +
-                (down_clicked ? 0 : -1) +
+                (up_clicked   ?  1 : 0) +
+                (down_clicked ? -1 : 0) +
                 (
                     ui.builder.text_edit.focus.focused_id != id &&
-                    ui.builder.hold.held_id     == id &&
+                    ui.builder.hold.held_id == id &&
                     abs(ui.builder.mouse.delta.x) > 0 ?
                     ui.builder.mouse.delta.x * mouse_drag_sensitivity : 0
                 )
             
             if multiplier != 0 {
                 submitted = true
-                new_value = value + multiplier
+                new_value = value + multiplier * step
 
                 if min_val != nil do new_value = max(new_value, min_val.?)
                 if max_val != nil do new_value = min(new_value, max_val.?)

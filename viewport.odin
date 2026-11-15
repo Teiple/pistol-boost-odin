@@ -277,7 +277,7 @@ viewport_get_mouse_world_position_on_zplane :: proc(viewport: ^Viewport, camera:
 	p_far  := far_clip.xyz  / far_clip.w
 
 	ray_dir := linalg.normalize(p_far - p_near)
-	if abs(ray_dir.z) < 0.0001 {
+	if abs(ray_dir.z) < 1e-4 {
 		return p_near
 	}
 

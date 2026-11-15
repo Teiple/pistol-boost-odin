@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:math/linalg"
 import "core:slice"
 import "core:math"
@@ -235,7 +236,6 @@ debug_draw_push_box :: proc(
     append(&draw.modes[.Triangle].indices,  ..indices[:])
 }
 
-
 debug_draw_push_wire_box :: proc(
     draw      : ^Debug_Draw,
     half_size : [3]f32,
@@ -375,13 +375,9 @@ debug_draw_push_platform_box :: proc(
     draw         : ^Debug_Draw,
     box          : Platform_Box,
     color        : [4]f32,
-    bounding_box : bool = false,
-    origin       : bool = false,
+    wire_color   : [4]f32,
 ) {
     assert(draw.active)
-
-    if origin       do debug_draw_push_platform_origin(draw, box.origin)
-    if bounding_box do debug_draw_push_platform_bounding_box(draw, box.origin, box.size)
 
     debug_draw_push_box(
         draw      = draw,
@@ -389,30 +385,11 @@ debug_draw_push_platform_box :: proc(
         color     = color,
         position  = box.origin + box.size * 0.5,
     )
-}
 
-debug_draw_push_platform_origin :: proc(
-    draw     : ^Debug_Draw,
-    position : [3]f32, 
-) {
-    debug_draw_push_sphere(
-        draw     = draw,
-        radius   = .05,
-        color    = hsv(30),
-        position = position,
-    )
-}
-
-debug_draw_push_platform_bounding_box :: proc(
-    draw   : ^Debug_Draw,
-    origin : [3]f32,
-    size   : [3]f32
-) {
-    debug_draw_push_wire_box(
-        draw      = draw,
-        position  = origin + size * .5,
-        half_size = size * .5 + 0.05,
-        color     = hsv(30, 1, .8),
+    debug_draw_push_wire_platform_box(
+        draw  = draw,
+        box   = box,
+        color = wire_color,
     )
 }
 
@@ -420,13 +397,9 @@ debug_draw_push_platform_slope :: proc(
     draw         : ^Debug_Draw,
     slope        : Platform_Slope,
     color        : [4]f32,
-    bounding_box : bool = false,
-    origin       : bool = false,
+    wire_color   : [4]f32,
 ) {
     assert(draw.active)
-
-    if origin       do debug_draw_push_platform_origin(draw, slope.origin)
-    if bounding_box do debug_draw_push_platform_bounding_box(draw, slope.origin, slope.size)
 
     bl := [2]f32{slope.origin.x,                slope.origin.y}
     br := [2]f32{slope.origin.x + slope.size.x, slope.origin.y}
@@ -475,9 +448,15 @@ debug_draw_push_platform_slope :: proc(
 
     append(&draw.modes[.Triangle].vertices, ..vertices[:])
     append(&draw.modes[.Triangle].indices,  ..indices[:])
+
+    debug_draw_push_wire_platform_slope(
+        draw  = draw,
+        slope = slope,
+        color = wire_color,
+    )
 }
 
-debug_push_wire_platform_box :: proc(
+debug_draw_push_wire_platform_box :: proc(
     draw  : ^Debug_Draw,
     box   : Platform_Box,
     color : [4]f32 = {1, 0, 0, 1},
@@ -490,7 +469,7 @@ debug_push_wire_platform_box :: proc(
     )
 }
 
-debug_push_wire_platform_slope :: proc(
+debug_draw_push_wire_platform_slope :: proc(
     draw  : ^Debug_Draw,
     slope : Platform_Slope,
     color : [4]f32 = {1, 0, 0, 1},
@@ -550,6 +529,7 @@ debug_draw_push_grid :: proc(
     size       : f32    = 10,
     axis_color : [4]f32 = {.1, .1, .1 , 1},
     sub_color  : [4]f32 = {.2, .2, .2, 1},
+    planes     : bit_set[enum {X, Y, Z}] = {.Y},
 ) {
     assert(draw.active)
 
@@ -560,62 +540,94 @@ debug_draw_push_grid :: proc(
     cur_ibuf_len := len(indices)
 
     vert_index := u16(cur_vbuf_len)
-
     half_size  := size * .5
 
     count := int(size / unit)
 
-    vertex_count := 4 + 8 * count/2
-    index_count  := 2 + 4 * count/2
+    vertex_count := 6 + 8 * count/2 * card(planes)
+    index_count  := 3 + 4 * count/2 * card(planes)
 
     assert(uint(cur_vbuf_len + vertex_count) <= draw.modes[.Line].current_vbuf_cap, "Exceed vbuf cap!")
     assert(uint(cur_ibuf_len + index_count)  <= draw.modes[.Line].current_ibuf_cap, "Exceed ibuf cap!")
 
-    append(vertices,
-        {
-            position = {0, 0, -half_size},
-            color    = axis_color,
-        },
-        {
-            position = {0, 0,  half_size},
-            color    = axis_color,
-        },
-        {
-            position = {-half_size, 0, 0},
-            color    = axis_color,
-        },
-        {
-            position = { half_size, 0, 0},
-            color    = axis_color,
-        }
+    append(vertices, 
+        { position = {         0,          0, -half_size}, color = axis_color},
+        { position = {         0,          0,  half_size}, color = axis_color},
+        { position = {-half_size,          0,          0}, color = axis_color},
+        { position = { half_size,          0,          0}, color = axis_color},
+        { position = {         0, -half_size,         0},  color = axis_color },
+        { position = {         0,  half_size,         0},  color = axis_color },
+    )
+    append(indices, vert_index, vert_index + 1, vert_index + 2, vert_index + 3, vert_index + 4, vert_index + 5)
+    
+    // I think I got why metaprogramming is needed
+    if .Y in planes do #unroll for side in ([2]f32{-1, 1}) do for i in 1..=count/2 {
+        grid_v := [2]f32{ unit * side * f32(i), half_size}
+        append(vertices,
+            { position = { grid_v.x, 0, -grid_v.y}, color = sub_color },
+            { position = { grid_v.x, 0,  grid_v.y}, color = sub_color },
+            { position = {-grid_v.y, 0,  grid_v.x}, color = sub_color },
+            { position = { grid_v.y, 0,  grid_v.x}, color = sub_color },
+        )
+        append(indices, vert_index, vert_index + 1, vert_index + 2, vert_index + 3)
+        vert_index += 4
+    }
+    if .Z in planes do #unroll for side in ([2]f32{-1, 1}) do for i in 1..=count/2 {
+        grid_v := [2]f32{ unit * side * f32(i), half_size}
+        append(vertices,
+            { position = { grid_v.x, -grid_v.y, 0}, color = sub_color },
+            { position = { grid_v.x,  grid_v.y, 0}, color = sub_color },
+            { position = {-grid_v.y,  grid_v.x, 0}, color = sub_color },
+            { position = { grid_v.y,  grid_v.x, 0}, color = sub_color },
+        )
+        append(indices, vert_index, vert_index + 1, vert_index + 2, vert_index + 3)
+        vert_index += 4
+    }
+    if .X in planes do #unroll for side in ([2]f32{-1, 1}) do for i in 1..=count/2 {
+        grid_v := [2]f32{ unit * side * f32(i), half_size}
+        append(vertices,
+            { position = {0,  grid_v.x, -grid_v.y}, color = sub_color },
+            { position = {0,  grid_v.x,  grid_v.y}, color = sub_color },
+            { position = {0, -grid_v.y,  grid_v.x}, color = sub_color },
+            { position = {0,  grid_v.y,  grid_v.x}, color = sub_color },
+        )
+        append(indices, vert_index, vert_index + 1, vert_index + 2, vert_index + 3)
+        vert_index += 4
+    }
+}
+
+debug_draw_push_rect :: proc(
+    draw   : ^Debug_Draw,
+    points : [4][3]f32,
+    color  : [4]f32,
+) {
+    assert(draw.active)
+
+    cur_vbuf_len := len(draw.modes[.Line].vertices)
+    cur_ibuf_len := len(draw.modes[.Line].indices)
+
+    vertex_count :: 4
+    index_count  :: 8
+
+    assert(
+        uint(cur_vbuf_len + vertex_count) <= draw.modes[.Line].current_vbuf_cap,
+        "Exceed vbuf cap!",
     )
 
-    append(indices, vert_index, vert_index + 1, vert_index + 2, vert_index + 3)
-    vert_index += 4
+    assert(
+        uint(cur_ibuf_len + index_count) <= draw.modes[.Line].current_ibuf_cap,
+        "Exceed ibuf cap!",
+    )
 
-    for i in 1..=count/2 {
-        sides := [2]f32{-1, 1}
-        for side in sides {
-            append(vertices,
-                {
-                    position = { side * f32(i) * unit, 0, -half_size},
-                    color    = sub_color,
-                },
-                {
-                    position = { side * f32(i) * unit, 0,  half_size},
-                    color    = sub_color,
-                },
-                {
-                    position = {-half_size, 0, side * f32(i) * unit},
-                    color    = sub_color,
-                },
-                {
-                    position = { half_size, 0, side * f32(i) * unit},
-                    color    = sub_color,
-                },
-            )
-        }
-        for v in 0..<8 do append(indices, vert_index + u16(v))
-        vert_index += 8
-    }
+    append(&draw.modes[.Line].vertices,
+        { position = points[0], color = color },
+        { position = points[1], color = color },
+        { position = points[2], color = color },
+        { position = points[3], color = color },
+    )
+
+    indices : [8]u16 = { 0, 1, 1, 2, 2, 3, 3, 0 }
+    indices += u16(cur_vbuf_len)
+
+    append(&draw.modes[.Line].indices, ..indices[:])
 }

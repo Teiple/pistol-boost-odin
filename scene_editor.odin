@@ -1,5 +1,7 @@
 package main
 
+import "core:fmt"
+import "core:math/linalg"
 import "core:math"
 import sapp "sokol-odin/sokol/app"
 
@@ -184,7 +186,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     ctx.mouse.position
                 )
 
-                min_select_dist := math.INF_F32
+                min_select_dist := max(f32)
                 closest_index   := -1
                 
                 for platform, i in scene.runtime.platforms {
@@ -231,43 +233,81 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         debug_draw_push_grid(
             draw       = &scene.debug_draw,
             unit       = 1,
-            size       = 30,
-            axis_color = hsv(0, 0, .6), 
-            sub_color  = hsv(0, 0, .3), 
+            size       = 50,
+            axis_color = hsv(145, .8, .5), 
+            sub_color  = hsv(0, 0, .2), 
+            planes     = {.Y}
         )
 
         for platform, i in scene.runtime.platforms {
-            selected := i == scene.selected_platform
             switch p in platform {
                 case Platform_Box:
+                    if selected_index, ok := scene.selected_platform.?; ok && i == selected_index {
+                        ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                            ctx.viewport,
+                            ctx.camera,
+                            ctx.mouse.position
+                        )
+                        center, rect := check_ray_nearest_box_face(
+                            ray_origin    = ray_origin,
+                            ray_direction = ray_direction,
+                            box_origin    = p.origin,
+                            box_size      = p.size,
+                            normal_offset  = 0.02,
+                        )
+                        debug_draw_push_box(
+                            draw      = &scene.debug_draw,
+                            position  = center,
+                            half_size = .01,
+                            color     = hsv(54),
+                        )
+                        debug_draw_push_rect(
+                            draw   = &scene.debug_draw,
+                            points = rect,
+                            color  = hsv(54),
+                        )
+                    }
                     debug_draw_push_platform_box(
                         draw         = &scene.debug_draw,
                         box          = p,
-                        color        = selected ? hsv(54, 1, 1) : hsv(200, 1, 1),
-                        bounding_box = selected,
-                        origin       = selected,
-                    )
-                    debug_push_wire_platform_box(
-                        draw  = &scene.debug_draw,
-                        box   = p,
-                        color = i == scene.selected_platform ? hsv(54, .4, .4) : hsv(200, .4, .4),
+                        color        = hsv(200, 1, 1),
+                        wire_color   = hsv(200, .4, .4),
                     )
                 case Platform_Slope:
+                    if selected_index, ok := scene.selected_platform.?; ok && i == selected_index {
+                        ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                            ctx.viewport,
+                            ctx.camera,
+                            ctx.mouse.position
+                        )
+                        center, rect := check_ray_nearest_box_face(
+                            ray_origin    = ray_origin,
+                            ray_direction = ray_direction,
+                            box_origin    = p.origin,
+                            box_size      = p.size,
+                            normal_offset  = 0.02,
+                        )
+                        debug_draw_push_box(
+                            draw      = &scene.debug_draw,
+                            position  = center,
+                            half_size = .01,
+                            color     = hsv(54),
+                        )
+                        debug_draw_push_rect(
+                            draw   = &scene.debug_draw,
+                            points = rect,
+                            color  = hsv(54),
+                        )
+                    }
                     debug_draw_push_platform_slope(
                         draw         = &scene.debug_draw,
                         slope        = p,
-                        color        = selected ? hsv(54, 1, 1) : hsv(200, 1, 1),
-                        bounding_box = selected,
-                        origin       = selected,
-                    )
-                    debug_push_wire_platform_slope(
-                        draw  = &scene.debug_draw,
-                        slope = p,
-                        color = selected ? hsv(54, .4, .4) : hsv(200, .4, .4),
+                        color        = hsv(200, 1, 1),
+                        wire_color   = hsv(200, .4, .4),
                     )
             }
-
         }
+
 
         free_camera_update_3d(&scene.free_cam, ctx, dt)
     },
@@ -286,6 +326,99 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     input_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
         free_camera_input(&scene.free_cam, ctx.camera, ev)
     },
+}
+
+check_ray_nearest_box_face :: proc(
+    ray_origin    : [3]f32,
+    ray_direction : [3]f32,
+    box_origin    : [3]f32,
+    box_size      : [3]f32,
+    normal_offset : f32,
+) -> (center: [3]f32, rect : [4][3]f32) {
+    @(static)
+    face_rects   : [6][4][3]f32
+    @(static)
+    face_centers  : [6][3]f32
+    @(static, rodata)
+    face_normals := [6][3]f32{
+        {-1,0,0}, {1,0,0}, {0,-1,0}, {0,1,0}, {0,0,-1}, {0,0,1},
+    }
+
+    box_center := box_origin + box_size * .5
+    min_box    := box_center - box_size * .5
+    max_box    := box_center + box_size * .5
+
+    face_centers = {
+        {min_box.x,    box_center.y, box_center.z},
+        {max_box.x,    box_center.y, box_center.z},
+        {box_center.x, min_box.y,    box_center.z},
+        {box_center.x, max_box.y,    box_center.z},
+        {box_center.x, box_center.y, min_box.z},
+        {box_center.x, box_center.y, max_box.z},
+    }
+    face_rects = {
+        {
+            {min_box.x, min_box.y, min_box.z},
+            {min_box.x, min_box.y, max_box.z},
+            {min_box.x, max_box.y, max_box.z},
+            {min_box.x, max_box.y, min_box.z},
+        },
+        {
+            {max_box.x, min_box.y, min_box.z},
+            {max_box.x, max_box.y, min_box.z},
+            {max_box.x, max_box.y, max_box.z},
+            {max_box.x, min_box.y, max_box.z},
+        },
+        {
+            {min_box.x, min_box.y, min_box.z},
+            {max_box.x, min_box.y, min_box.z},
+            {max_box.x, min_box.y, max_box.z},
+            {min_box.x, min_box.y, max_box.z},
+        },
+        {
+            {min_box.x, max_box.y, min_box.z},
+            {min_box.x, max_box.y, max_box.z},
+            {max_box.x, max_box.y, max_box.z},
+            {max_box.x, max_box.y, min_box.z},
+        },
+        {
+            {min_box.x, min_box.y, min_box.z},
+            {min_box.x, max_box.y, min_box.z},
+            {max_box.x, max_box.y, min_box.z},
+            {max_box.x, min_box.y, min_box.z},
+        },
+        {
+            {min_box.x, min_box.y, max_box.z},
+            {max_box.x, min_box.y, max_box.z},
+            {max_box.x, max_box.y, max_box.z},
+            {min_box.x, max_box.y, max_box.z},
+        },
+    }
+
+    nearest    := max(f32)
+    face_index := 0
+
+    for i in 0..<6 {
+        t := linalg.dot(face_centers[i] - ray_origin, ray_direction)
+        if t < 0 do continue
+
+        projected    := ray_origin + t * ray_direction
+        distance_sqr := linalg.length2(face_centers[i] - projected)
+
+        if distance_sqr < nearest {
+            nearest    = distance_sqr
+            face_index = i
+        }
+    }
+
+    if normal_offset == 0 do return face_centers[face_index], face_rects[face_index]
+    else do return face_centers[face_index] + face_normals[face_index] * normal_offset,
+    {
+        face_rects[face_index][0] + face_normals[face_index] * normal_offset,
+        face_rects[face_index][1] + face_normals[face_index] * normal_offset,
+        face_rects[face_index][2] + face_normals[face_index] * normal_offset,
+        face_rects[face_index][3] + face_normals[face_index] * normal_offset,
+    }
 }
 
 
@@ -351,6 +484,7 @@ check_ray_slope :: proc(
     t_start := max(min(tx1, tx2), min(ty1, ty2), min(tz1, tz2))
     t_end   := min(max(tx1, tx2), max(ty1, ty2), max(tz1, tz2))
 
+    // why the fuck do we insist on naming variables like such meaningless names? 
     nx, ny, plane_val : f32
     sx := slope.size.x
     sy := slope.size.y
@@ -473,4 +607,24 @@ editor_property_vector3 :: proc(
     }
 
     return header_rect.w + 3 * axis_gap + 3 * axis_height
+}
+
+// I think I should say sorry to my math teacher
+// because I used llm to write this and have absolutely
+// no idea how this work at all
+check_ray_plane :: proc(
+    plane_point   : [3]f32,
+    plane_normal  : [3]f32,
+    ray_origin    : [3]f32,
+    ray_direction : [3]f32,
+) -> (distancee : [3]f32, intersected : bool) {
+    denom := linalg.dot(ray_direction, plane_normal)
+    if abs(denom) < 1e-4 {
+        return
+    }
+    t := linalg.dot(plane_point - ray_origin, plane_normal) / denom
+    if t < 0 {
+        return
+    }
+    return t, true
 }
