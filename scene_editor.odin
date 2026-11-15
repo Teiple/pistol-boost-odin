@@ -289,20 +289,6 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             line_point     = scene.face_drag_state.face_position,
                             line_direction = platform_face_normals[scene.face_drag_state.target_face], 
                         )
-
-                        if can_extend {
-                            total_delta := extend_distance - scene.face_drag_state.initial_distance
-                            face := scene.face_drag_state.target_face
-                            normal := platform_face_normals[face]
-                            abs_normal := linalg.abs(normal)
-
-                            new_size := linalg.max([3]f32{0.05, 0.05, 0.05}, scene.face_drag_state.initial_size + abs_normal * total_delta)
-                            actual_delta := (new_size - scene.face_drag_state.initial_size) * normal
-                            current_center := scene.face_drag_state.initial_origin + scene.face_drag_state.initial_size * .5
-                            next_center := current_center + actual_delta * .5
-                            platform.size = new_size
-                            platform.origin = next_center - platform.size * .5
-                        }
                     } else {
                         scene.face_drag_state.active = false
                     }
@@ -394,17 +380,6 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
         free_camera_input(&scene.free_cam, ctx.camera, ev)
     },
-}
-
-extend_platform_along_face :: proc(
-    platform : ^Platform,
-    face     : Platform_Face,
-    distance : f32,
-) {
-    current_center := platform.origin + platform.size * .5
-    next_center    := current_center + platform_face_normals[face] * distance * .5
-    platform.size   += linalg.abs(platform_face_normals[face]) * distance
-    platform.origin  = next_center - platform.size * .5
 }
 
 closest_point_ray_to_line :: proc(
