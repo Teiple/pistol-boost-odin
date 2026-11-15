@@ -373,7 +373,7 @@ debug_draw_push_wire_sphere :: proc(
 
 debug_draw_push_platform_box :: proc(
     draw         : ^Debug_Draw,
-    box          : Platform_Box,
+    box          : Platform_Instance(Platform_Box),
     color        : [4]f32,
     wire_color   : [4]f32,
 ) {
@@ -395,7 +395,7 @@ debug_draw_push_platform_box :: proc(
 
 debug_draw_push_platform_slope :: proc(
     draw         : ^Debug_Draw,
-    slope        : Platform_Slope,
+    slope        : Platform_Instance(Platform_Slope),
     color        : [4]f32,
     wire_color   : [4]f32,
 ) {
@@ -458,7 +458,7 @@ debug_draw_push_platform_slope :: proc(
 
 debug_draw_push_wire_platform_box :: proc(
     draw  : ^Debug_Draw,
-    box   : Platform_Box,
+    box   : Platform_Instance(Platform_Box),
     color : [4]f32 = {1, 0, 0, 1},
 ) {
     debug_draw_push_wire_box(
@@ -471,7 +471,7 @@ debug_draw_push_wire_platform_box :: proc(
 
 debug_draw_push_wire_platform_slope :: proc(
     draw  : ^Debug_Draw,
-    slope : Platform_Slope,
+    slope : Platform_Instance(Platform_Slope),
     color : [4]f32 = {1, 0, 0, 1},
 ) {
     assert(draw.active)

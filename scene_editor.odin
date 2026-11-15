@@ -1,24 +1,54 @@
 package main
 
-import "core:fmt"
 import "core:math/linalg"
 import "core:math"
+import "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
-Platform_Box :: struct{
-    origin : [3]f32,
-    size   : [3]f32,
+Platform :: struct {
+    origin  : [3]f32,
+    size    : [3]f32,
+    variant : Platform_Variant
 }
 
+Platform_Face :: enum u8 {
+    Negative_X,
+    Positive_X,
+    Negative_Y,
+    Positive_Y,
+    Negative_Z,
+    Positive_Z,
+}
+
+platform_face_normals := [Platform_Face][3]f32 {
+    .Negative_X = { -1,  0,  0},
+    .Positive_X = {  1,  0,  0},
+    .Negative_Y = {  0, -1,  0},
+    .Positive_Y = {  0,  1,  0},
+    .Negative_Z = {  0,  0, -1},
+    .Positive_Z = {  0,  0,  1},
+}
+
+Platform_Variant :: union {
+    Platform_Box,
+    Platform_Slope,
+}
+
+Platform_Box :: struct{}
+
 Platform_Slope :: struct {
-    origin       : [3]f32,
-    size         : [3]f32,
     corner : Slope_Corner,
 }
 
-Platform :: union {
-    Platform_Box,
-    Platform_Slope,
+Platform_Instance :: struct($T: typeid)
+    where intrinsics.type_is_variant_of(Platform_Variant, T)
+{
+    using base : ^Platform,
+    using var  : ^T,
+}
+
+platform_instance :: proc(platform: ^Platform, variant : ^$T) -> Platform_Instance(T) {
+    return { base = platform, var = variant }
 }
 
 Slope_Corner :: enum u8 {
@@ -28,16 +58,24 @@ Slope_Corner :: enum u8 {
     Top_Right,
 }
 
-Editor_Runtime :: struct {
-    platforms : [dynamic]Platform,
+Face_Drag_State :: struct {
+    initial_distance : f32,
+    target_face      : Platform_Face,
+    face_position    : [3]f32,
+    initial_origin   : [3]f32,
+    initial_size     : [3]f32,
+    active           : bool,
 }
 
 Scene_Editor :: struct {
     debug_draw        : Debug_Draw, 
     free_cam          : Free_Camera,
-    selected_platform : Maybe(int),
+    platforms         : [dynamic]Platform,
+    mouse_hold_delta  : [2]f32,
     pending_selected  : Pending_Action(int),
-    runtime           : Editor_Runtime,
+    selected_platform : Maybe(int),
+    modifier_shift    : bool,
+    face_drag_state   : Face_Drag_State,
 }
 
 SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -51,22 +89,25 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
         ctx.camera.position = {0, 2, 10}
 
-        append(&scene.runtime.platforms,
-            Platform_Box{
-                origin = {0,0,0},
-                size   = {2,1,1}    
+        append(&scene.platforms,
+            Platform {
+                origin  = {0,0,0},
+                size    = {2,1,1},
+                variant = Platform_Box {},
             },
-            Platform_Slope{
+            Platform {
                 origin = {0,2,0},
                 size   = {2,1,1},
-                corner = .Bottom_Left,
+                variant = Platform_Slope {
+                    corner = .Bottom_Left,
+                }
             },
 
         )
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)        
-        delete(scene.runtime.platforms)
+        delete(scene.platforms)
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         ui := ctx.ui
@@ -119,16 +160,8 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 prop_gap    :: 16
                 prop_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
 
-                origin, size : ^[3]f32
-                platform := &scene.runtime.platforms[scene.selected_platform.?]
-                switch &p in platform {
-                    case Platform_Box: {
-                        origin = &p.origin; size = &p.size
-                    }
-                    case Platform_Slope: {
-                        origin = &p.origin; size = &p.size
-                    }
-                }
+                platform := &scene.platforms[scene.selected_platform.?]
+                origin, size : ^[3]f32 = &platform.origin, &platform.size 
 
                 prop_anchor.offset.y += editor_property_vector3(
                     ui,
@@ -160,10 +193,10 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 )
                 prop_anchor.offset.y += prop_gap
 
-                if p, ok := &platform.(Platform_Slope); ok {
+                if slope, ok := &platform.variant.(Platform_Slope); ok {
                     editor_property_slope_corner(
                         ui     = ui,
-                        value  = &p.corner,
+                        value  = &slope.corner,
                         width  = inspector_width,
                         id     = "slope_corner",
                         label  = "Slope Corner",
@@ -174,7 +207,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         // Platform selection
-        if  ui_get_mouse_button_state(ctx.ui) == .Pressed {
+        if  ui_get_mouse_button_state(ctx.ui) == .Released {
             mouse_on_ui := false 
             for &rect in ui_rects do if ui_mouse_is_inside_rect(ui, rect) {
                 mouse_on_ui = true; break;
@@ -189,13 +222,13 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 min_select_dist := max(f32)
                 closest_index   := -1
                 
-                for platform, i in scene.runtime.platforms {
-                    switch p in platform {
+                for &platform, i in scene.platforms {
+                    switch &variant in platform.variant {
                         case Platform_Box:
                             if dist, hit := check_ray_box(
                                 ray_origin    = ray_origin,
                                 ray_direction = ray_direction,
-                                box           = p,
+                                box           = platform_instance(&platform, &variant),
                             ); hit && dist < min_select_dist {
                                 min_select_dist = dist
                                 closest_index   = i
@@ -204,7 +237,7 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             if dist, hit := check_ray_slope(
                                 ray_origin    = ray_origin,
                                 ray_direction = ray_direction,
-                                slope         = p,
+                                slope         = platform_instance(&platform, &variant),
                             ); hit && dist < min_select_dist {
                                 min_select_dist = dist
                                 closest_index   = i
@@ -239,22 +272,49 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             planes     = {.Y}
         )
 
-        for platform, i in scene.runtime.platforms {
-            switch p in platform {
-                case Platform_Box:
-                    if selected_index, ok := scene.selected_platform.?; ok && i == selected_index {
-                        ray_origin, ray_direction := viewport_get_mouse_world_ray(
-                            ctx.viewport,
-                            ctx.camera,
-                            ctx.mouse.position
+        for &platform, i in scene.platforms {
+            selected := scene.selected_platform != nil && i == scene.selected_platform.?
+            if selected {
+                ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                    ctx.viewport,
+                    ctx.camera,
+                    ctx.mouse.position
+                )
+
+                if scene.face_drag_state.active {
+                    if ctx.mouse.state[.Left] == .Down {
+                        extend_distance, can_extend := closest_point_ray_to_line(
+                            ray_origin     = ray_origin,
+                            ray_direction  = ray_direction,
+                            line_point     = scene.face_drag_state.face_position,
+                            line_direction = platform_face_normals[scene.face_drag_state.target_face], 
                         )
-                        center, rect := check_ray_nearest_box_face(
-                            ray_origin    = ray_origin,
-                            ray_direction = ray_direction,
-                            box_origin    = p.origin,
-                            box_size      = p.size,
-                            normal_offset  = 0.02,
-                        )
+
+                        if can_extend {
+                            total_delta := extend_distance - scene.face_drag_state.initial_distance
+                            face := scene.face_drag_state.target_face
+                            normal := platform_face_normals[face]
+                            abs_normal := linalg.abs(normal)
+
+                            new_size := linalg.max([3]f32{0.05, 0.05, 0.05}, scene.face_drag_state.initial_size + abs_normal * total_delta)
+                            actual_delta := (new_size - scene.face_drag_state.initial_size) * normal
+                            current_center := scene.face_drag_state.initial_origin + scene.face_drag_state.initial_size * .5
+                            next_center := current_center + actual_delta * .5
+                            platform.size = new_size
+                            platform.origin = next_center - platform.size * .5
+                        }
+                    } else {
+                        scene.face_drag_state.active = false
+                    }
+                } else {
+                    if center, rect, nearest_face, found := check_ray_nearest_box_face(
+                        ray_origin    = ray_origin,
+                        ray_direction = ray_direction,
+                        box_origin    = platform.origin,
+                        box_size      = platform.size,
+                        normal_offset = .02,
+                        threshold     = 2,
+                    ); found {
                         debug_draw_push_box(
                             draw      = &scene.debug_draw,
                             position  = center,
@@ -266,46 +326,45 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             points = rect,
                             color  = hsv(54),
                         )
+
+                        extend_distance, can_extend := closest_point_ray_to_line(
+                            ray_origin     = ray_origin,
+                            ray_direction  = ray_direction,
+                            line_point     = center,
+                            line_direction = platform_face_normals[nearest_face], 
+                        )
+
+                        if can_extend && ctx.mouse.state[.Left] == .Pressed {
+                            scene.face_drag_state = {
+                                target_face      = nearest_face,
+                                initial_distance = extend_distance,
+                                face_position    = center,
+                                initial_origin   = platform.origin,
+                                initial_size     = platform.size,
+                                active           = true,
+                            }
+                        }
                     }
-                    debug_draw_push_platform_box(
-                        draw         = &scene.debug_draw,
-                        box          = p,
-                        color        = hsv(200, 1, 1),
-                        wire_color   = hsv(200, .4, .4),
-                    )
-                case Platform_Slope:
-                    if selected_index, ok := scene.selected_platform.?; ok && i == selected_index {
-                        ray_origin, ray_direction := viewport_get_mouse_world_ray(
-                            ctx.viewport,
-                            ctx.camera,
-                            ctx.mouse.position
-                        )
-                        center, rect := check_ray_nearest_box_face(
-                            ray_origin    = ray_origin,
-                            ray_direction = ray_direction,
-                            box_origin    = p.origin,
-                            box_size      = p.size,
-                            normal_offset  = 0.02,
-                        )
-                        debug_draw_push_box(
-                            draw      = &scene.debug_draw,
-                            position  = center,
-                            half_size = .01,
-                            color     = hsv(54),
-                        )
-                        debug_draw_push_rect(
-                            draw   = &scene.debug_draw,
-                            points = rect,
-                            color  = hsv(54),
-                        )
-                    }
-                    debug_draw_push_platform_slope(
-                        draw         = &scene.debug_draw,
-                        slope        = p,
-                        color        = hsv(200, 1, 1),
-                        wire_color   = hsv(200, .4, .4),
-                    )
+                }
             }
+
+            switch &variant in platform.variant {
+            case Platform_Box:
+                debug_draw_push_platform_box(
+                    draw         = &scene.debug_draw,
+                    box          = platform_instance(&platform, &variant),
+                    color        = selected ? hsv(190, 1,  1) : hsv(200, 1, 1),
+                    wire_color   = selected ? hsv(190, 1, .4) : hsv(200, .4, .4),
+                )
+            case Platform_Slope: 
+                debug_draw_push_platform_slope(
+                    draw         = &scene.debug_draw,
+                    slope        = platform_instance(&platform, &variant),
+                    color        = selected ? hsv(190, 1,  1) : hsv(200, 1, 1),
+                    wire_color   = selected ? hsv(190, 1, .4) : hsv(200, .4, .4),
+                )
+            }
+            
         }
 
 
@@ -320,12 +379,50 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             game_request_quit()
             return
         }
-        
+
+        // Clear modifers
+        scene.modifier_shift = false
+
         ui_text_edit_input(ui, ev)
     }, 
     input_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
+        if ev.type == .KEY_DOWN && ev.key_code == .LEFT_SHIFT {
+            scene.modifier_shift = true
+        }
+        if ev.type == .KEY_DOWN && ev.key_code == .LEFT_SHIFT {
+            scene.modifier_shift = false
+        }
         free_camera_input(&scene.free_cam, ctx.camera, ev)
     },
+}
+
+extend_platform_along_face :: proc(
+    platform : ^Platform,
+    face     : Platform_Face,
+    distance : f32,
+) {
+    current_center := platform.origin + platform.size * .5
+    next_center    := current_center + platform_face_normals[face] * distance * .5
+    platform.size   += linalg.abs(platform_face_normals[face]) * distance
+    platform.origin  = next_center - platform.size * .5
+}
+
+closest_point_ray_to_line :: proc(
+    ray_origin     : [3]f32,
+    ray_direction  : [3]f32,
+    line_point     : [3]f32,
+    line_direction : [3]f32,
+) -> (distance_along_line : f32, ok : bool) {
+    w0 := ray_origin - line_point
+    a  := linalg.dot(ray_direction,  ray_direction)
+    b  := linalg.dot(ray_direction,  line_direction)
+    c  := linalg.dot(line_direction, line_direction)
+    d  := linalg.dot(ray_direction,  w0)
+    e  := linalg.dot(line_direction, w0)
+    denom := a * c - b * b
+
+    if abs(denom) < 1e-4 do return
+    return (a * e - b * d) / denom, true
 }
 
 check_ray_nearest_box_face :: proc(
@@ -334,91 +431,97 @@ check_ray_nearest_box_face :: proc(
     box_origin    : [3]f32,
     box_size      : [3]f32,
     normal_offset : f32,
-) -> (center: [3]f32, rect : [4][3]f32) {
+    threshold     : f32,
+) -> (
+    center : [3]f32,
+    rect   : [4][3]f32,
+    face   : Platform_Face,
+    ok     : bool
+) {
     @(static)
-    face_rects   : [6][4][3]f32
+    face_rects   : [Platform_Face][4][3]f32
     @(static)
-    face_centers  : [6][3]f32
-    @(static, rodata)
-    face_normals := [6][3]f32{
-        {-1,0,0}, {1,0,0}, {0,-1,0}, {0,1,0}, {0,0,-1}, {0,0,1},
-    }
+    face_centers : [Platform_Face][3]f32
 
     box_center := box_origin + box_size * .5
     min_box    := box_center - box_size * .5
     max_box    := box_center + box_size * .5
 
     face_centers = {
-        {min_box.x,    box_center.y, box_center.z},
-        {max_box.x,    box_center.y, box_center.z},
-        {box_center.x, min_box.y,    box_center.z},
-        {box_center.x, max_box.y,    box_center.z},
-        {box_center.x, box_center.y, min_box.z},
-        {box_center.x, box_center.y, max_box.z},
+        .Negative_X = { min_box.x,    box_center.y, box_center.z },
+        .Positive_X = { max_box.x,    box_center.y, box_center.z },
+        .Negative_Y = { box_center.x, min_box.y,    box_center.z },
+        .Positive_Y = { box_center.x, max_box.y,    box_center.z },
+        .Negative_Z = { box_center.x, box_center.y, min_box.z },
+        .Positive_Z = { box_center.x, box_center.y, max_box.z },
     }
     face_rects = {
-        {
-            {min_box.x, min_box.y, min_box.z},
-            {min_box.x, min_box.y, max_box.z},
-            {min_box.x, max_box.y, max_box.z},
-            {min_box.x, max_box.y, min_box.z},
+        .Negative_X = {
+            { min_box.x, min_box.y, min_box.z },
+            { min_box.x, min_box.y, max_box.z },
+            { min_box.x, max_box.y, max_box.z },
+            { min_box.x, max_box.y, min_box.z },
         },
-        {
-            {max_box.x, min_box.y, min_box.z},
-            {max_box.x, max_box.y, min_box.z},
-            {max_box.x, max_box.y, max_box.z},
-            {max_box.x, min_box.y, max_box.z},
+        .Positive_X = {
+            { max_box.x, min_box.y, min_box.z },
+            { max_box.x, max_box.y, min_box.z },
+            { max_box.x, max_box.y, max_box.z },
+            { max_box.x, min_box.y, max_box.z },
         },
-        {
-            {min_box.x, min_box.y, min_box.z},
-            {max_box.x, min_box.y, min_box.z},
-            {max_box.x, min_box.y, max_box.z},
-            {min_box.x, min_box.y, max_box.z},
+        .Negative_Y = {
+            { min_box.x, min_box.y, min_box.z },
+            { max_box.x, min_box.y, min_box.z },
+            { max_box.x, min_box.y, max_box.z },
+            { min_box.x, min_box.y, max_box.z },
         },
-        {
-            {min_box.x, max_box.y, min_box.z},
-            {min_box.x, max_box.y, max_box.z},
-            {max_box.x, max_box.y, max_box.z},
-            {max_box.x, max_box.y, min_box.z},
+        .Positive_Y ={
+            { min_box.x, max_box.y, min_box.z },
+            { min_box.x, max_box.y, max_box.z },
+            { max_box.x, max_box.y, max_box.z },
+            { max_box.x, max_box.y, min_box.z },
         },
-        {
-            {min_box.x, min_box.y, min_box.z},
-            {min_box.x, max_box.y, min_box.z},
-            {max_box.x, max_box.y, min_box.z},
-            {max_box.x, min_box.y, min_box.z},
+        .Negative_Z = {
+            { min_box.x, min_box.y, min_box.z },
+            { min_box.x, max_box.y, min_box.z },
+            { max_box.x, max_box.y, min_box.z },
+            { max_box.x, min_box.y, min_box.z },
         },
-        {
-            {min_box.x, min_box.y, max_box.z},
-            {max_box.x, min_box.y, max_box.z},
-            {max_box.x, max_box.y, max_box.z},
-            {min_box.x, max_box.y, max_box.z},
+        .Positive_Z = {
+            { min_box.x, min_box.y, max_box.z },
+            { max_box.x, min_box.y, max_box.z },
+            { max_box.x, max_box.y, max_box.z },
+            { min_box.x, max_box.y, max_box.z },
         },
     }
 
-    nearest    := max(f32)
-    face_index := 0
+    nearest      := max(f32)
+    nearest_face :  Platform_Face
 
-    for i in 0..<6 {
-        t := linalg.dot(face_centers[i] - ray_origin, ray_direction)
+    for face in Platform_Face {
+        t := linalg.dot(face_centers[face] - ray_origin, ray_direction)
         if t < 0 do continue
 
         projected    := ray_origin + t * ray_direction
-        distance_sqr := linalg.length2(face_centers[i] - projected)
+        distance_sqr := linalg.length2(face_centers[face] - projected)
 
         if distance_sqr < nearest {
-            nearest    = distance_sqr
-            face_index = i
+            nearest      = distance_sqr
+            nearest_face = face
         }
     }
 
-    if normal_offset == 0 do return face_centers[face_index], face_rects[face_index]
-    else do return face_centers[face_index] + face_normals[face_index] * normal_offset,
-    {
-        face_rects[face_index][0] + face_normals[face_index] * normal_offset,
-        face_rects[face_index][1] + face_normals[face_index] * normal_offset,
-        face_rects[face_index][2] + face_normals[face_index] * normal_offset,
-        face_rects[face_index][3] + face_normals[face_index] * normal_offset,
-    }
+    if nearest > threshold do return
+    if normal_offset == 0  do return face_centers[nearest_face], face_rects[nearest_face], nearest_face, true
+    
+    return face_centers[nearest_face] + platform_face_normals[nearest_face] * normal_offset,
+        {
+            face_rects[nearest_face][0] + platform_face_normals[nearest_face] * normal_offset,
+            face_rects[nearest_face][1] + platform_face_normals[nearest_face] * normal_offset,
+            face_rects[nearest_face][2] + platform_face_normals[nearest_face] * normal_offset,
+            face_rects[nearest_face][3] + platform_face_normals[nearest_face] * normal_offset,
+        },
+        nearest_face,
+        true
 }
 
 
@@ -426,7 +529,7 @@ check_ray_nearest_box_face :: proc(
 check_ray_box :: proc(
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
-    box           : Platform_Box,
+    box           : Platform_Instance(Platform_Box),
 ) -> (distance : f32, hit: bool) {
     box_position  := box.origin + box.size * .5
     box_half_size := box.size * .5
@@ -457,11 +560,10 @@ check_ray_box :: proc(
     return t_start, t_end > t_start && t_start > 0
 }
 
-// don't ask me, ask antigravity
 check_ray_slope :: proc(
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
-    slope         : Platform_Slope,
+    slope         : Platform_Instance(Platform_Slope),
 ) -> (distance : f32, hit: bool) {
     min_x := slope.origin.x
     max_x := slope.origin.x + slope.size.x
@@ -484,7 +586,6 @@ check_ray_slope :: proc(
     t_start := max(min(tx1, tx2), min(ty1, ty2), min(tz1, tz2))
     t_end   := min(max(tx1, tx2), max(ty1, ty2), max(tz1, tz2))
 
-    // why the fuck do we insist on naming variables like such meaningless names? 
     nx, ny, plane_val : f32
     sx := slope.size.x
     sy := slope.size.y
@@ -617,7 +718,7 @@ check_ray_plane :: proc(
     plane_normal  : [3]f32,
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
-) -> (distancee : [3]f32, intersected : bool) {
+) -> (distance : [3]f32, intersected : bool) {
     denom := linalg.dot(ray_direction, plane_normal)
     if abs(denom) < 1e-4 {
         return

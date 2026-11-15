@@ -4,6 +4,15 @@
 		{
 			"path": ".",
 		},
+		{
+			"path": "/home/hongphuc/odin-lang/odin/vendor",
+		},
+		{
+			"path": "/home/hongphuc/odin-lang/odin/base",
+		},
+		{
+			"path": "/home/hongphuc/odin-lang/odin/core"
+		},
 	],
 	"build_systems":
 	[
@@ -14,12 +23,12 @@
 		}
 	],
 	"settings":
-{
+	{
 		"LSP":
 		{
 			"odin":
 			{
-				"enabled": true,
+				"enabled": false,
 			},
 		},
 	},
