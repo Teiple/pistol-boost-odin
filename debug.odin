@@ -596,7 +596,7 @@ debug_draw_push_grid :: proc(
     }
 }
 
-debug_draw_push_rect :: proc(
+debug_draw_push_quad :: proc(
     draw   : ^Debug_Draw,
     points : [4][3]f32,
     color  : [4]f32,

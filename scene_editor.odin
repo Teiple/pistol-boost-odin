@@ -11,7 +11,7 @@ Platform :: struct {
     variant : Platform_Variant
 }
 
-Platform_Face :: enum u8 {
+Box_Face :: enum u8 {
     Negative_X,
     Positive_X,
     Negative_Y,
@@ -20,7 +20,7 @@ Platform_Face :: enum u8 {
     Positive_Z,
 }
 
-platform_face_normals := [Platform_Face][3]f32 {
+box_face_normals := [Box_Face][3]f32 {
     .Negative_X = { -1,  0,  0},
     .Positive_X = {  1,  0,  0},
     .Negative_Y = {  0, -1,  0},
@@ -59,11 +59,10 @@ Slope_Corner :: enum u8 {
 }
 
 Face_Drag_State :: struct {
-    initial_distance : f32,
-    target_face      : Platform_Face,
-    face_position    : [3]f32,
-    initial_origin   : [3]f32,
-    initial_size     : [3]f32,
+    extend_direction : [3]f32,
+    extend_point     : [3]f32,
+    initial_origin    : [3]f32,
+    initial_size      : [3]f32,
     active           : bool,
 }
 
@@ -228,7 +227,8 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             if dist, hit := check_ray_box(
                                 ray_origin    = ray_origin,
                                 ray_direction = ray_direction,
-                                box           = platform_instance(&platform, &variant),
+                                box_position  = platform.origin + platform.size * .5,
+                                box_half_size = platform.size * .5,
                             ); hit && dist < min_select_dist {
                                 min_select_dist = dist
                                 closest_index   = i
@@ -281,57 +281,55 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     ctx.mouse.position
                 )
 
-                if scene.face_drag_state.active {
-                    if ctx.mouse.state[.Left] == .Down {
-                        extend_distance, can_extend := closest_point_ray_to_line(
-                            ray_origin     = ray_origin,
-                            ray_direction  = ray_direction,
-                            line_point     = scene.face_drag_state.face_position,
-                            line_direction = platform_face_normals[scene.face_drag_state.target_face], 
-                        )
-                    } else {
-                        scene.face_drag_state.active = false
-                    }
-                } else {
-                    if center, rect, nearest_face, found := check_ray_nearest_box_face(
-                        ray_origin    = ray_origin,
-                        ray_direction = ray_direction,
-                        box_origin    = platform.origin,
-                        box_size      = platform.size,
-                        normal_offset = .02,
-                        threshold     = 2,
-                    ); found {
-                        debug_draw_push_box(
-                            draw      = &scene.debug_draw,
-                            position  = center,
-                            half_size = .01,
-                            color     = hsv(54),
-                        )
-                        debug_draw_push_rect(
-                            draw   = &scene.debug_draw,
-                            points = rect,
-                            color  = hsv(54),
-                        )
+                face := pick_box_face(
+                    ray_origin    = ray_origin,
+                    ray_direction = ray_direction,
+                    box_origin    = platform.origin,
+                    box_size      = platform.size,
+                )
 
-                        extend_distance, can_extend := closest_point_ray_to_line(
-                            ray_origin     = ray_origin,
-                            ray_direction  = ray_direction,
-                            line_point     = center,
-                            line_direction = platform_face_normals[nearest_face], 
-                        )
+                quad := get_box_quad_by_face(
+                    box_origin = platform.origin,
+                    box_size   = platform.size,
+                    face       = face,
+                )
+                // offset from edge
+                for &point in quad do point += box_face_normals[face] * .02
+                
+                center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4
 
-                        if can_extend && ctx.mouse.state[.Left] == .Pressed {
-                            scene.face_drag_state = {
-                                target_face      = nearest_face,
-                                initial_distance = extend_distance,
-                                face_position    = center,
-                                initial_origin   = platform.origin,
-                                initial_size     = platform.size,
-                                active           = true,
-                            }
-                        }
+                debug_draw_push_quad(&scene.debug_draw, quad, hsv(40))
+                debug_draw_push_box(
+                    &scene.debug_draw, 
+                    half_size = .02,
+                    position  = center,
+                    color     = hsv(40),
+                )
+                
+                if ctx.mouse.state[.Left] == .Pressed {
+                    scene.face_drag_state = {
+                        active            = true,
+                        extend_point      = center, 
+                        extend_direction  = box_face_normals[face], 
+                        initial_size      = platform.size,
+                        initial_origin    = platform.origin,
                     }
                 }
+
+                // if ctx.mouse.state[.Left] == .Down && scene.face_drag_state.active {
+                //     extend_distance, can_extend := closest_point_ray_to_line(
+                //         ray_origin, ray_direction,
+                //         scene.face_drag_state.extend_point,
+                //         scene.face_drag_state.extend_direction,
+                //     )
+
+                //     if can_extend {
+                //         position        := scene.face_drag_state.initial_origin + scene.face_drag_state.initial_size * .5  
+                //         position        += scene.face_drag_state.extend_direction * extend_distance * .5
+                //         platform.size    = scene.face_drag_state.initial_size + linalg.abs(scene.face_drag_state.extend_direction) * extend_distance
+                //         platform.origin  = position - platform.size * .5 
+                //     }
+                // }
             }
 
             switch &variant in platform.variant {
@@ -406,17 +404,15 @@ check_ray_nearest_box_face :: proc(
     box_origin    : [3]f32,
     box_size      : [3]f32,
     normal_offset : f32,
-    threshold     : f32,
 ) -> (
     center : [3]f32,
     rect   : [4][3]f32,
-    face   : Platform_Face,
-    ok     : bool
+    face   : Box_Face,
 ) {
     @(static)
-    face_rects   : [Platform_Face][4][3]f32
+    face_rects   : [Box_Face][4][3]f32
     @(static)
-    face_centers : [Platform_Face][3]f32
+    face_centers : [Box_Face][3]f32
 
     box_center := box_origin + box_size * .5
     min_box    := box_center - box_size * .5
@@ -470,11 +466,12 @@ check_ray_nearest_box_face :: proc(
     }
 
     nearest      := max(f32)
-    nearest_face :  Platform_Face
+    nearest_face :  Box_Face
 
-    for face in Platform_Face {
+    for face in Box_Face {
         t := linalg.dot(face_centers[face] - ray_origin, ray_direction)
         if t < 0 do continue
+        if linalg.dot(ray_direction, box_face_normals[face]) > 0 do continue
 
         projected    := ray_origin + t * ray_direction
         distance_sqr := linalg.length2(face_centers[face] - projected)
@@ -485,30 +482,61 @@ check_ray_nearest_box_face :: proc(
         }
     }
 
-    if nearest > threshold do return
-    if normal_offset == 0  do return face_centers[nearest_face], face_rects[nearest_face], nearest_face, true
+    if normal_offset == 0  do return face_centers[nearest_face], face_rects[nearest_face], nearest_face
     
-    return face_centers[nearest_face] + platform_face_normals[nearest_face] * normal_offset,
+    return face_centers[nearest_face] + box_face_normals[nearest_face] * normal_offset,
         {
-            face_rects[nearest_face][0] + platform_face_normals[nearest_face] * normal_offset,
-            face_rects[nearest_face][1] + platform_face_normals[nearest_face] * normal_offset,
-            face_rects[nearest_face][2] + platform_face_normals[nearest_face] * normal_offset,
-            face_rects[nearest_face][3] + platform_face_normals[nearest_face] * normal_offset,
+            face_rects[nearest_face][0] + box_face_normals[nearest_face] * normal_offset,
+            face_rects[nearest_face][1] + box_face_normals[nearest_face] * normal_offset,
+            face_rects[nearest_face][2] + box_face_normals[nearest_face] * normal_offset,
+            face_rects[nearest_face][3] + box_face_normals[nearest_face] * normal_offset,
         },
-        nearest_face,
-        true
+        nearest_face
 }
 
+check_ray_nearest_box_face_padding :: proc(
+    ray_origin    : [3]f32,
+    ray_direction : [3]f32,
+    box_origin    : [3]f32, 
+    box_size      : [3]f32, 
+    padding       : f32,
+) {
+    box_center   := box_origin + box_size * .5
+    min_distance := max(f32)
+    nearest_face : Maybe(Box_Face) 
 
-// Checking if the ray will collide with an axis-aligned box
+    // Check distance to all 6 box faces  
+    for face in Box_Face {
+        normal := box_face_normals[face]
+        pad_box_position  := box_center + normal * (box_size * .5 + padding * .5)
+        pad_box_half_size := box_size * ({1, 1, 1} - linalg.abs(normal)) * .5 + linalg.abs(normal) * padding * .5
+        
+        if distance, hit := check_ray_box(
+            ray_origin, ray_direction,
+            pad_box_position, pad_box_half_size 
+        ); hit && distance < min_distance {
+            nearest_face = face
+            min_distance = distance
+        }
+    }
+
+    if face, ok := nearest_face.?; ok  {
+        normal := box_face_normals[face]
+        pad_box_position  := box_center + normal * (box_size * .5 + padding * .5)
+        pad_box_half_size := box_size * ({1, 1, 1} - linalg.abs(normal)) * .5 + linalg.abs(normal) * padding * .5
+        debug_draw_push_wire_box(
+            debug_draw, pad_box_half_size,
+            pad_box_position, color = hsv(54)
+        )
+    }
+}
+
 check_ray_box :: proc(
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
-    box           : Platform_Instance(Platform_Box),
+    box_position  : [3]f32,
+    box_half_size : [3]f32,
 ) -> (distance : f32, hit: bool) {
-    box_position  := box.origin + box.size * .5
-    box_half_size := box.size * .5
-
     min_x := box_position.x - box_half_size.x
     max_x := box_position.x + box_half_size.x
 
@@ -703,4 +731,180 @@ check_ray_plane :: proc(
         return
     }
     return t, true
+}
+
+ray_segment_distance_sqr :: proc(ro, rd, p0, p1: [3]f32) -> f32 {
+    u := p1 - p0
+    v := rd
+    w := p0 - ro
+
+    a := linalg.dot(u, u)
+    b := linalg.dot(u, v)
+    c := linalg.dot(v, v)
+    d := linalg.dot(u, w)
+    e := linalg.dot(v, w)
+
+    denom := a * c - b * b
+    s: f32 = 0
+    t: f32 = 0
+
+    if abs(denom) < 1e-5 {
+        s = 0
+        t = e / c if c > 1e-5 else 0
+    } else {
+        s = (b * e - c * d) / denom
+        t = (a * e - b * d) / denom
+    }
+
+    s = clamp(s, 0, 1)
+    t = max(t, 0)
+
+    closest_seg := p0 + s * u
+    closest_ray := ro + t * v
+    diff := closest_seg - closest_ray
+    return linalg.dot(diff, diff)
+}
+
+Box_Edge :: struct {
+    p0: [3]f32,
+    p1: [3]f32,
+    f0: Box_Face,
+    f1: Box_Face,
+}
+
+get_box_edges :: proc(box_origin, box_size: [3]f32) -> [12]Box_Edge {
+    min_box := box_origin
+    max_box := box_origin + box_size
+
+    return [12]Box_Edge {
+        { {min_box.x, min_box.y, min_box.z}, {max_box.x, min_box.y, min_box.z}, .Negative_Y, .Negative_Z },
+        { {min_box.x, min_box.y, max_box.z}, {max_box.x, min_box.y, max_box.z}, .Negative_Y, .Positive_Z },
+        { {min_box.x, max_box.y, min_box.z}, {max_box.x, max_box.y, min_box.z}, .Positive_Y, .Negative_Z },
+        { {min_box.x, max_box.y, max_box.z}, {max_box.x, max_box.y, max_box.z}, .Positive_Y, .Positive_Z },
+
+        { {min_box.x, min_box.y, min_box.z}, {min_box.x, max_box.y, min_box.z}, .Negative_X, .Negative_Z },
+        { {min_box.x, min_box.y, max_box.z}, {min_box.x, max_box.y, max_box.z}, .Negative_X, .Positive_Z },
+        { {max_box.x, min_box.y, min_box.z}, {max_box.x, max_box.y, min_box.z}, .Positive_X, .Negative_Z },
+        { {max_box.x, min_box.y, max_box.z}, {max_box.x, max_box.y, max_box.z}, .Positive_X, .Positive_Z },
+
+        { {min_box.x, min_box.y, min_box.z}, {min_box.x, min_box.y, max_box.z}, .Negative_X, .Negative_Y },
+        { {min_box.x, max_box.y, min_box.z}, {min_box.x, max_box.y, max_box.z}, .Negative_X, .Positive_Y },
+        { {max_box.x, min_box.y, min_box.z}, {max_box.x, min_box.y, max_box.z}, .Positive_X, .Negative_Y },
+        { {max_box.x, max_box.y, min_box.z}, {max_box.x, max_box.y, max_box.z}, .Positive_X, .Positive_Y },
+    }
+}
+
+check_ray_box_hit_face :: proc(ro, rd, min_box, max_box: [3]f32) -> (hit: bool, face: Box_Face) {
+    t_min := [3]f32{
+        (min_box.x - ro.x) / rd.x,
+        (min_box.y - ro.y) / rd.y,
+        (min_box.z - ro.z) / rd.z,
+    }
+    t_max := [3]f32{
+        (max_box.x - ro.x) / rd.x,
+        (max_box.y - ro.y) / rd.y,
+        (max_box.z - ro.z) / rd.z,
+    }
+
+    t1 := linalg.min(t_min, t_max)
+    t2 := linalg.max(t_min, t_max)
+
+    t_near := max(t1.x, t1.y, t1.z)
+    t_far  := min(t2.x, t2.y, t2.z)
+
+    if t_far < t_near || t_near < 0 do return false, .Negative_X
+
+    if t_near == t1.x {
+        return true, .Negative_X if rd.x > 0 else .Positive_X
+    } else if t_near == t1.y {
+        return true, .Negative_Y if rd.y > 0 else .Positive_Y
+    } else {
+        return true, .Negative_Z if rd.z > 0 else .Positive_Z
+    }
+}
+
+pick_box_face :: proc(
+    ray_origin    : [3]f32,
+    ray_direction : [3]f32,
+    box_origin    : [3]f32,
+    box_size      : [3]f32,
+) -> Box_Face {
+    min_box := box_origin
+    max_box := box_origin + box_size
+
+    if hit, face := check_ray_box_hit_face(ray_origin, ray_direction, min_box, max_box); hit {
+        return face
+    }
+
+    edges     := get_box_edges(box_origin, box_size)
+    best_dist := max(f32)
+    best_face := Box_Face.Negative_X
+
+    for edge in edges {
+        n0 := box_face_normals[edge.f0]
+        n1 := box_face_normals[edge.f1]
+
+        dot0 := linalg.dot(n0, ray_direction)
+        dot1 := linalg.dot(n1, ray_direction)
+
+        if (dot0 < 0) == (dot1 < 0) do continue
+
+        dist := ray_segment_distance_sqr(ray_origin, ray_direction, edge.p0, edge.p1)
+        if dist < best_dist {
+            best_dist = dist
+            best_face = edge.f0 if dot0 > dot1 else edge.f1
+        }
+    }
+
+    return best_face
+}
+
+get_box_quad_by_face :: proc(
+    box_origin : [3]f32,
+    box_size   : [3]f32,
+    face       : Box_Face,
+) -> [4][3]f32 {
+    box_center := box_origin + box_size * .5
+    min_box    := box_center - box_size * .5
+    max_box    := box_center + box_size * .5
+
+    switch face {
+        case .Negative_X: return {
+            { min_box.x, min_box.y, min_box.z },
+            { min_box.x, min_box.y, max_box.z },
+            { min_box.x, max_box.y, max_box.z },
+            { min_box.x, max_box.y, min_box.z },
+        }
+        case .Positive_X: return {
+            { max_box.x, min_box.y, min_box.z },
+            { max_box.x, max_box.y, min_box.z },
+            { max_box.x, max_box.y, max_box.z },
+            { max_box.x, min_box.y, max_box.z },
+        }
+        case .Negative_Y: return {
+            { min_box.x, min_box.y, min_box.z },
+            { max_box.x, min_box.y, min_box.z },
+            { max_box.x, min_box.y, max_box.z },
+            { min_box.x, min_box.y, max_box.z },
+        }
+        case .Positive_Y: return {
+            { min_box.x, max_box.y, min_box.z },
+            { min_box.x, max_box.y, max_box.z },
+            { max_box.x, max_box.y, max_box.z },
+            { max_box.x, max_box.y, min_box.z },
+        }
+        case .Negative_Z: return{
+            { min_box.x, min_box.y, min_box.z },
+            { min_box.x, max_box.y, min_box.z },
+            { max_box.x, max_box.y, min_box.z },
+            { max_box.x, min_box.y, min_box.z },
+        }
+        case .Positive_Z: return {
+            { min_box.x, min_box.y, max_box.z },
+            { max_box.x, min_box.y, max_box.z },
+            { max_box.x, max_box.y, max_box.z },
+            { min_box.x, max_box.y, max_box.z },
+        }
+        case: panic("Invalid face")
+    }   
 }
