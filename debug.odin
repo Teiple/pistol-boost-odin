@@ -10,8 +10,10 @@ debug_draw : ^Debug_Draw
 
 Debug_Draw_Mode :: enum u8{
     // Must order this way, solid then wire on top
-    Triangle,
-    Line,
+    Triangles,
+    Lines,
+    Triangles_Overlay,
+    Lines_Overlay,
 }
 
 Debug_Draw_Mode_Resource :: struct {
@@ -41,7 +43,30 @@ debug_draw_init :: proc(draw : ^Debug_Draw, allocator := context.allocator) {
 
     for &mode, mode_id in draw.modes {
         switch mode_id {
-            case .Line:
+            case .Triangles:
+                mode.pipeline = .Unlit_Triangles
+
+                mode.current_ibuf_cap = 1024
+                mode.current_vbuf_cap = 1024
+                
+                mode.vertices  = make([dynamic]Vertex, len = 0, cap = mode.current_vbuf_cap, allocator = allocator)
+                mode.indices   = make([dynamic]u16,    len = 0, cap = mode.current_ibuf_cap, allocator = allocator)
+
+                mode.bindings.index_buffer = sg.make_buffer({
+                    // write_transient allows us to update the buffer later 
+                    usage = { index_buffer = true, write_transient = true },
+                    size  =  size_of(u16) * mode.current_ibuf_cap,
+                })
+
+                mode.bindings.vertex_buffers[0] = sg.make_buffer({
+                    // vertex buffer is the default btw, just to make it clearer
+                    usage = { vertex_buffer = true, write_transient = true },
+                    size  =  size_of(Vertex) * mode.current_vbuf_cap,
+                })
+                
+                mode.bindings.views[0]    = draw.shared_view
+                mode.bindings.samplers[0] = draw.shared_sampler
+            case .Lines:
                 mode.pipeline = .Unlit_Lines
 
                 mode.current_ibuf_cap = 1024
@@ -64,8 +89,8 @@ debug_draw_init :: proc(draw : ^Debug_Draw, allocator := context.allocator) {
 
                 mode.bindings.views[0]   = draw.shared_view
                 mode.bindings.samplers[0] = draw.shared_sampler
-            case .Triangle:
-                mode.pipeline = .Unlit_Triangles
+            case .Triangles_Overlay:
+                mode.pipeline = .Unlit_Triangles_Overlay
 
                 mode.current_ibuf_cap = 1024
                 mode.current_vbuf_cap = 1024
@@ -85,6 +110,29 @@ debug_draw_init :: proc(draw : ^Debug_Draw, allocator := context.allocator) {
                     size  =  size_of(Vertex) * mode.current_vbuf_cap,
                 })
                 
+                mode.bindings.views[0]    = draw.shared_view
+                mode.bindings.samplers[0] = draw.shared_sampler
+            case .Lines_Overlay:      
+                mode.pipeline = .Unlit_Lines_Overlay
+
+                mode.current_ibuf_cap = 1024
+                mode.current_vbuf_cap = 1024
+                
+                mode.vertices  = make([dynamic]Vertex, len = 0, cap = mode.current_vbuf_cap, allocator = allocator)
+                mode.indices   = make([dynamic]u16,    len = 0, cap = mode.current_ibuf_cap, allocator = allocator)
+
+                mode.bindings.index_buffer = sg.make_buffer({
+                    // write_transient allows us to update the buffer later 
+                    usage = { index_buffer = true, write_transient = true },
+                    size  =  size_of(u16) * mode.current_ibuf_cap,
+                })
+
+                mode.bindings.vertex_buffers[0] = sg.make_buffer({
+                    // vertex buffer is the default btw, just to make it clearer
+                    usage = { vertex_buffer = true, write_transient = true },
+                    size  =  size_of(Vertex) * mode.current_vbuf_cap,
+                })
+
                 mode.bindings.views[0]    = draw.shared_view
                 mode.bindings.samplers[0] = draw.shared_sampler
         }
@@ -213,27 +261,27 @@ debug_draw_push_box :: proc(
         ) * half_size + position
     }
 
-    cur_vbuf_len := len(draw.modes[.Triangle].vertices)
+    cur_vbuf_len := len(draw.modes[.Triangles].vertices)
     vertex_count := len(vertices)
 
-    cur_ibuf_len := len(draw.modes[.Triangle].indices)
+    cur_ibuf_len := len(draw.modes[.Triangles].indices)
     index_count  := len(indices)
 
     // offset other vertices that has been added
     indices += u16(cur_vbuf_len)
     
     assert(
-        uint(cur_vbuf_len + vertex_count) <= draw.modes[.Triangle].current_vbuf_cap,
+        uint(cur_vbuf_len + vertex_count) <= draw.modes[.Triangles].current_vbuf_cap,
         "Exceed vbuf cap!",
     )
 
     assert(
-        uint(cur_ibuf_len + index_count) <= draw.modes[.Triangle].current_ibuf_cap,
+        uint(cur_ibuf_len + index_count) <= draw.modes[.Triangles].current_ibuf_cap,
         "Exceed ibuf cap!",
     )
 
-    append(&draw.modes[.Triangle].vertices, ..vertices[:])
-    append(&draw.modes[.Triangle].indices,  ..indices[:])
+    append(&draw.modes[.Triangles].vertices, ..vertices[:])
+    append(&draw.modes[.Triangles].indices,  ..indices[:])
 }
 
 debug_draw_push_wire_box :: proc(
@@ -268,27 +316,27 @@ debug_draw_push_wire_box :: proc(
         ) * half_size + position
     }
 
-    cur_vbuf_len := len(draw.modes[.Line].vertices)
+    cur_vbuf_len := len(draw.modes[.Lines].vertices)
     vertex_count := len(vertices)
 
-    cur_ibuf_len := len(draw.modes[.Line].indices)
+    cur_ibuf_len := len(draw.modes[.Lines].indices)
     index_count  := len(indices)
 
     // offset other vertices that has been added
     indices += u16(cur_vbuf_len)
 
     assert(
-        uint(cur_vbuf_len + vertex_count) <= draw.modes[.Line].current_vbuf_cap,
+        uint(cur_vbuf_len + vertex_count) <= draw.modes[.Lines].current_vbuf_cap,
         "Exceed vbuf cap!",
     )
 
     assert(
-        uint(cur_ibuf_len + index_count) <= draw.modes[.Line].current_ibuf_cap,
+        uint(cur_ibuf_len + index_count) <= draw.modes[.Lines].current_ibuf_cap,
         "Exceed ibuf cap!",
     )
 
-    append(&draw.modes[.Line].vertices, ..vertices[:])
-    append(&draw.modes[.Line].indices,  ..indices[:])
+    append(&draw.modes[.Lines].vertices, ..vertices[:])
+    append(&draw.modes[.Lines].indices,  ..indices[:])
 }
 
 debug_draw_push_sphere :: proc(
@@ -301,7 +349,7 @@ debug_draw_push_sphere :: proc(
 ) {
     assert(draw.active)
 
-    start_v := u16(len(draw.modes[.Triangle].vertices))
+    start_v := u16(len(draw.modes[.Triangles].vertices))
 
     for i in 0..=stacks {
         phi := math.PI * f32(i) / f32(stacks) - (math.PI * 0.5)
@@ -319,7 +367,7 @@ debug_draw_push_sphere :: proc(
                 position.z + radius * cos_phi * sin_theta,
             }
 
-            append(&draw.modes[.Triangle].vertices, Vertex{position = p, color = color})
+            append(&draw.modes[.Triangles].vertices, Vertex{position = p, color = color})
         }
     }
 
@@ -331,10 +379,10 @@ debug_draw_push_sphere :: proc(
         for j in 0..<sectors {
             s := u16(j)
             if i != 0 {
-                append(&draw.modes[.Triangle].indices, start_v + k1 + s, start_v + k2 + s, start_v + k1 + s + 1)
+                append(&draw.modes[.Triangles].indices, start_v + k1 + s, start_v + k2 + s, start_v + k1 + s + 1)
             }
             if i != (stacks - 1) {
-                append(&draw.modes[.Triangle].indices, start_v + k1 + s + 1, start_v + k2 + s, start_v + k2 + s + 1)
+                append(&draw.modes[.Triangles].indices, start_v + k1 + s + 1, start_v + k2 + s, start_v + k2 + s + 1)
             }
         }
     }
@@ -349,7 +397,7 @@ debug_draw_push_wire_sphere :: proc(
 ) {
     assert(draw.active)
 
-    start_v := u16(len(draw.modes[.Line].vertices))
+    start_v := u16(len(draw.modes[.Lines].vertices))
 
     step := math.TAU / f32(segments)
 
@@ -358,16 +406,16 @@ debug_draw_push_wire_sphere :: proc(
         c := math.cos(theta) * radius
         s := math.sin(theta) * radius
 
-        append(&draw.modes[.Line].vertices, Vertex{position = {position.x + c, position.y + s, position.z}, color = color})
-        append(&draw.modes[.Line].vertices, Vertex{position = {position.x + c, position.y, position.z + s}, color = color})
-        append(&draw.modes[.Line].vertices, Vertex{position = {position.x, position.y + c, position.z + s}, color = color})
+        append(&draw.modes[.Lines].vertices, Vertex{position = {position.x + c, position.y + s, position.z}, color = color})
+        append(&draw.modes[.Lines].vertices, Vertex{position = {position.x + c, position.y, position.z + s}, color = color})
+        append(&draw.modes[.Lines].vertices, Vertex{position = {position.x, position.y + c, position.z + s}, color = color})
 
         next := u16((i + 1) % segments)
         cur  := u16(i)
 
-        append(&draw.modes[.Line].indices, start_v + cur * 3 + 0, start_v + next * 3 + 0)
-        append(&draw.modes[.Line].indices, start_v + cur * 3 + 1, start_v + next * 3 + 1)
-        append(&draw.modes[.Line].indices, start_v + cur * 3 + 2, start_v + next * 3 + 2)
+        append(&draw.modes[.Lines].indices, start_v + cur * 3 + 0, start_v + next * 3 + 0)
+        append(&draw.modes[.Lines].indices, start_v + cur * 3 + 1, start_v + next * 3 + 1)
+        append(&draw.modes[.Lines].indices, start_v + cur * 3 + 2, start_v + next * 3 + 2)
     }
 }
 
@@ -438,16 +486,16 @@ debug_draw_push_platform_slope :: proc(
         3, 0, 2,  5, 3, 2,
     }
 
-    cur_vbuf_len := len(draw.modes[.Triangle].vertices)
-    cur_ibuf_len := len(draw.modes[.Triangle].indices)
+    cur_vbuf_len := len(draw.modes[.Triangles].vertices)
+    cur_ibuf_len := len(draw.modes[.Triangles].indices)
 
     indices += u16(cur_vbuf_len)
 
-    assert(uint(cur_vbuf_len + len(vertices)) <= draw.modes[.Triangle].current_vbuf_cap, "Exceed vbuf cap!")
-    assert(uint(cur_ibuf_len + len(indices))  <= draw.modes[.Triangle].current_ibuf_cap, "Exceed ibuf cap!")
+    assert(uint(cur_vbuf_len + len(vertices)) <= draw.modes[.Triangles].current_vbuf_cap, "Exceed vbuf cap!")
+    assert(uint(cur_ibuf_len + len(indices))  <= draw.modes[.Triangles].current_ibuf_cap, "Exceed ibuf cap!")
 
-    append(&draw.modes[.Triangle].vertices, ..vertices[:])
-    append(&draw.modes[.Triangle].indices,  ..indices[:])
+    append(&draw.modes[.Triangles].vertices, ..vertices[:])
+    append(&draw.modes[.Triangles].indices,  ..indices[:])
 
     debug_draw_push_wire_platform_slope(
         draw  = draw,
@@ -511,16 +559,16 @@ debug_draw_push_wire_platform_slope :: proc(
         0, 3,  1, 4,  2, 5,
     }
 
-    cur_vbuf_len := len(draw.modes[.Line].vertices)
-    cur_ibuf_len := len(draw.modes[.Line].indices)
+    cur_vbuf_len := len(draw.modes[.Lines].vertices)
+    cur_ibuf_len := len(draw.modes[.Lines].indices)
 
     indices += u16(cur_vbuf_len)
 
-    assert(uint(cur_vbuf_len + len(vertices)) <= draw.modes[.Line].current_vbuf_cap, "Exceed vbuf cap!")
-    assert(uint(cur_ibuf_len + len(indices))  <= draw.modes[.Line].current_ibuf_cap, "Exceed ibuf cap!")
+    assert(uint(cur_vbuf_len + len(vertices)) <= draw.modes[.Lines].current_vbuf_cap, "Exceed vbuf cap!")
+    assert(uint(cur_ibuf_len + len(indices))  <= draw.modes[.Lines].current_ibuf_cap, "Exceed ibuf cap!")
 
-    append(&draw.modes[.Line].vertices, ..vertices[:])
-    append(&draw.modes[.Line].indices,  ..indices[:])
+    append(&draw.modes[.Lines].vertices, ..vertices[:])
+    append(&draw.modes[.Lines].indices,  ..indices[:])
 }
 
 debug_draw_push_grid :: proc(
@@ -533,8 +581,8 @@ debug_draw_push_grid :: proc(
 ) {
     assert(draw.active)
 
-    vertices := &draw.modes[.Line].vertices
-    indices  := &draw.modes[.Line].indices
+    vertices := &draw.modes[.Lines].vertices
+    indices  := &draw.modes[.Lines].indices
 
     cur_vbuf_len := len(vertices)
     cur_ibuf_len := len(indices)
@@ -547,8 +595,8 @@ debug_draw_push_grid :: proc(
     vertex_count := 6 + 8 * count/2 * card(planes)
     index_count  := 3 + 4 * count/2 * card(planes)
 
-    assert(uint(cur_vbuf_len + vertex_count) <= draw.modes[.Line].current_vbuf_cap, "Exceed vbuf cap!")
-    assert(uint(cur_ibuf_len + index_count)  <= draw.modes[.Line].current_ibuf_cap, "Exceed ibuf cap!")
+    assert(uint(cur_vbuf_len + vertex_count) <= draw.modes[.Lines].current_vbuf_cap, "Exceed vbuf cap!")
+    assert(uint(cur_ibuf_len + index_count)  <= draw.modes[.Lines].current_ibuf_cap, "Exceed ibuf cap!")
 
     append(vertices, 
         { position = {         0,          0, -half_size}, color = axis_color},
@@ -597,29 +645,32 @@ debug_draw_push_grid :: proc(
 }
 
 debug_draw_push_quad :: proc(
-    draw   : ^Debug_Draw,
-    points : [4][3]f32,
-    color  : [4]f32,
+    draw    : ^Debug_Draw,
+    points  : [4][3]f32,
+    color   : [4]f32,
+    overlay : bool = false,
 ) {
     assert(draw.active)
 
-    cur_vbuf_len := len(draw.modes[.Line].vertices)
-    cur_ibuf_len := len(draw.modes[.Line].indices)
+    mode := overlay ? Debug_Draw_Mode.Lines_Overlay : Debug_Draw_Mode.Lines
+
+    cur_vbuf_len := len(draw.modes[mode].vertices)
+    cur_ibuf_len := len(draw.modes[mode].indices)
 
     vertex_count :: 4
     index_count  :: 8
 
     assert(
-        uint(cur_vbuf_len + vertex_count) <= draw.modes[.Line].current_vbuf_cap,
+        uint(cur_vbuf_len + vertex_count) <= draw.modes[mode].current_vbuf_cap,
         "Exceed vbuf cap!",
     )
 
     assert(
-        uint(cur_ibuf_len + index_count) <= draw.modes[.Line].current_ibuf_cap,
+        uint(cur_ibuf_len + index_count) <= draw.modes[mode].current_ibuf_cap,
         "Exceed ibuf cap!",
     )
 
-    append(&draw.modes[.Line].vertices,
+    append(&draw.modes[mode].vertices,
         { position = points[0], color = color },
         { position = points[1], color = color },
         { position = points[2], color = color },
@@ -629,5 +680,5 @@ debug_draw_push_quad :: proc(
     indices : [8]u16 = { 0, 1, 1, 2, 2, 3, 3, 0 }
     indices += u16(cur_vbuf_len)
 
-    append(&draw.modes[.Line].indices, ..indices[:])
+    append(&draw.modes[mode].indices, ..indices[:])
 }

@@ -77,7 +77,7 @@ Scene_Editor :: struct {
     face_drag_state   : Face_Drag_State,
 }
 
-SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
+SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     init = proc(scene : ^Scene_Editor, ctx : Game_Context) {        
         debug_draw_init(&scene.debug_draw)
         
@@ -224,20 +224,22 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 for &platform, i in scene.platforms {
                     switch &variant in platform.variant {
                         case Platform_Box:
-                            if dist, hit := check_ray_box(
+                            if dist, face, hit := ray_box_intersect(
                                 ray_origin    = ray_origin,
                                 ray_direction = ray_direction,
-                                box_position  = platform.origin + platform.size * .5,
-                                box_half_size = platform.size * .5,
+                                box_origin    = platform.origin,
+                                box_size      = platform.size,
                             ); hit && dist < min_select_dist {
                                 min_select_dist = dist
                                 closest_index   = i
                             }
                         case Platform_Slope:
-                            if dist, hit := check_ray_slope(
+                            if dist, hit := ray_slope_interesect(
                                 ray_origin    = ray_origin,
                                 ray_direction = ray_direction,
-                                slope         = platform_instance(&platform, &variant),
+                                slope_origin  = platform.origin,
+                                slope_size    = platform.size,
+                                slope_corner  = variant.corner,
                             ); hit && dist < min_select_dist {
                                 min_select_dist = dist
                                 closest_index   = i
@@ -292,18 +294,16 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     box_origin = platform.origin,
                     box_size   = platform.size,
                     face       = face,
+                    // offset from edge
+                    offset     = box_face_normals[face] * .01
                 )
-                // offset from edge
-                for &point in quad do point += box_face_normals[face] * .02
-                
                 center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4
 
-                debug_draw_push_quad(&scene.debug_draw, quad, hsv(40))
-                debug_draw_push_box(
-                    &scene.debug_draw, 
-                    half_size = .02,
-                    position  = center,
-                    color     = hsv(40),
+                debug_draw_push_quad(
+                    draw    = &scene.debug_draw,
+                    points  = quad,
+                    color   = hsv(40),
+                    overlay = true,
                 )
                 
                 if ctx.mouse.state[.Left] == .Pressed {
@@ -380,222 +380,35 @@ SCENE_DEBUG_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     },
 }
 
-closest_point_ray_to_line :: proc(
-    ray_origin     : [3]f32,
-    ray_direction  : [3]f32,
-    line_point     : [3]f32,
-    line_direction : [3]f32,
-) -> (distance_along_line : f32, ok : bool) {
-    w0 := ray_origin - line_point
-    a  := linalg.dot(ray_direction,  ray_direction)
-    b  := linalg.dot(ray_direction,  line_direction)
-    c  := linalg.dot(line_direction, line_direction)
-    d  := linalg.dot(ray_direction,  w0)
-    e  := linalg.dot(line_direction, w0)
-    denom := a * c - b * b
-
-    if abs(denom) < 1e-4 do return
-    return (a * e - b * d) / denom, true
-}
-
-check_ray_nearest_box_face :: proc(
+ray_slope_interesect :: proc(
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
-    box_origin    : [3]f32,
-    box_size      : [3]f32,
-    normal_offset : f32,
-) -> (
-    center : [3]f32,
-    rect   : [4][3]f32,
-    face   : Box_Face,
-) {
-    @(static)
-    face_rects   : [Box_Face][4][3]f32
-    @(static)
-    face_centers : [Box_Face][3]f32
+    slope_origin  : [3]f32,
+    slope_size    : [3]f32,
+    slope_corner  : Slope_Corner,
+) -> (dist : f32, hit: bool) {
+    min_box := slope_origin
+    max_box := slope_origin + slope_size
 
-    box_center := box_origin + box_size * .5
-    min_box    := box_center - box_size * .5
-    max_box    := box_center + box_size * .5
+    t_min := (min_box - ray_origin) / ray_direction
+    t_max := (max_box - ray_origin) / ray_direction
 
-    face_centers = {
-        .Negative_X = { min_box.x,    box_center.y, box_center.z },
-        .Positive_X = { max_box.x,    box_center.y, box_center.z },
-        .Negative_Y = { box_center.x, min_box.y,    box_center.z },
-        .Positive_Y = { box_center.x, max_box.y,    box_center.z },
-        .Negative_Z = { box_center.x, box_center.y, min_box.z },
-        .Positive_Z = { box_center.x, box_center.y, max_box.z },
-    }
-    face_rects = {
-        .Negative_X = {
-            { min_box.x, min_box.y, min_box.z },
-            { min_box.x, min_box.y, max_box.z },
-            { min_box.x, max_box.y, max_box.z },
-            { min_box.x, max_box.y, min_box.z },
-        },
-        .Positive_X = {
-            { max_box.x, min_box.y, min_box.z },
-            { max_box.x, max_box.y, min_box.z },
-            { max_box.x, max_box.y, max_box.z },
-            { max_box.x, min_box.y, max_box.z },
-        },
-        .Negative_Y = {
-            { min_box.x, min_box.y, min_box.z },
-            { max_box.x, min_box.y, min_box.z },
-            { max_box.x, min_box.y, max_box.z },
-            { min_box.x, min_box.y, max_box.z },
-        },
-        .Positive_Y ={
-            { min_box.x, max_box.y, min_box.z },
-            { min_box.x, max_box.y, max_box.z },
-            { max_box.x, max_box.y, max_box.z },
-            { max_box.x, max_box.y, min_box.z },
-        },
-        .Negative_Z = {
-            { min_box.x, min_box.y, min_box.z },
-            { min_box.x, max_box.y, min_box.z },
-            { max_box.x, max_box.y, min_box.z },
-            { max_box.x, min_box.y, min_box.z },
-        },
-        .Positive_Z = {
-            { min_box.x, min_box.y, max_box.z },
-            { max_box.x, min_box.y, max_box.z },
-            { max_box.x, max_box.y, max_box.z },
-            { min_box.x, max_box.y, max_box.z },
-        },
-    }
+    t1 := linalg.min(t_min, t_max)
+    t2 := linalg.max(t_min, t_max)
 
-    nearest      := max(f32)
-    nearest_face :  Box_Face
+    t_near := max(t1.x, t1.y, t1.z)
+    t_far  := min(t2.x, t2.y, t2.z)
 
-    for face in Box_Face {
-        t := linalg.dot(face_centers[face] - ray_origin, ray_direction)
-        if t < 0 do continue
-        if linalg.dot(ray_direction, box_face_normals[face]) > 0 do continue
+    if t_far < t_near || t_near < 0 do return 0, false
 
-        projected    := ray_origin + t * ray_direction
-        distance_sqr := linalg.length2(face_centers[face] - projected)
-
-        if distance_sqr < nearest {
-            nearest      = distance_sqr
-            nearest_face = face
-        }
-    }
-
-    if normal_offset == 0  do return face_centers[nearest_face], face_rects[nearest_face], nearest_face
-    
-    return face_centers[nearest_face] + box_face_normals[nearest_face] * normal_offset,
-        {
-            face_rects[nearest_face][0] + box_face_normals[nearest_face] * normal_offset,
-            face_rects[nearest_face][1] + box_face_normals[nearest_face] * normal_offset,
-            face_rects[nearest_face][2] + box_face_normals[nearest_face] * normal_offset,
-            face_rects[nearest_face][3] + box_face_normals[nearest_face] * normal_offset,
-        },
-        nearest_face
-}
-
-check_ray_nearest_box_face_padding :: proc(
-    ray_origin    : [3]f32,
-    ray_direction : [3]f32,
-    box_origin    : [3]f32, 
-    box_size      : [3]f32, 
-    padding       : f32,
-) {
-    box_center   := box_origin + box_size * .5
-    min_distance := max(f32)
-    nearest_face : Maybe(Box_Face) 
-
-    // Check distance to all 6 box faces  
-    for face in Box_Face {
-        normal := box_face_normals[face]
-        pad_box_position  := box_center + normal * (box_size * .5 + padding * .5)
-        pad_box_half_size := box_size * ({1, 1, 1} - linalg.abs(normal)) * .5 + linalg.abs(normal) * padding * .5
-        
-        if distance, hit := check_ray_box(
-            ray_origin, ray_direction,
-            pad_box_position, pad_box_half_size 
-        ); hit && distance < min_distance {
-            nearest_face = face
-            min_distance = distance
-        }
-    }
-
-    if face, ok := nearest_face.?; ok  {
-        normal := box_face_normals[face]
-        pad_box_position  := box_center + normal * (box_size * .5 + padding * .5)
-        pad_box_half_size := box_size * ({1, 1, 1} - linalg.abs(normal)) * .5 + linalg.abs(normal) * padding * .5
-        debug_draw_push_wire_box(
-            debug_draw, pad_box_half_size,
-            pad_box_position, color = hsv(54)
-        )
-    }
-}
-
-check_ray_box :: proc(
-    ray_origin    : [3]f32,
-    ray_direction : [3]f32,
-    box_position  : [3]f32,
-    box_half_size : [3]f32,
-) -> (distance : f32, hit: bool) {
-    min_x := box_position.x - box_half_size.x
-    max_x := box_position.x + box_half_size.x
-
-    min_y := box_position.y - box_half_size.y
-    max_y := box_position.y + box_half_size.y
-
-    min_z := box_position.z - box_half_size.z
-    max_z := box_position.z + box_half_size.z
-
-    tx1 := (min_x - ray_origin.x) / ray_direction.x
-    tx2 := (max_x - ray_origin.x) / ray_direction.x
-
-    ty1 := (min_y - ray_origin.y) / ray_direction.y
-    ty2 := (max_y - ray_origin.y) / ray_direction.y
-
-    tz1 := (min_z - ray_origin.z) / ray_direction.z
-    tz2 := (max_z - ray_origin.z) / ray_direction.z
-
-    t_start := max(min(tx1, tx2), min(ty1, ty2), min(tz1, tz2))
-    t_end   := min(max(tx1, tx2), max(ty1, ty2), max(tz1, tz2))
-    
-    // Miss if exited one slab before entering any of the others
-    // if t_start < 0 the ray entered from behind the ray_origin, we shouldn't include it as a hit 
-    return t_start, t_end > t_start && t_start > 0
-}
-
-check_ray_slope :: proc(
-    ray_origin    : [3]f32,
-    ray_direction : [3]f32,
-    slope         : Platform_Instance(Platform_Slope),
-) -> (distance : f32, hit: bool) {
-    min_x := slope.origin.x
-    max_x := slope.origin.x + slope.size.x
-
-    min_y := slope.origin.y
-    max_y := slope.origin.y + slope.size.y
-
-    min_z := slope.origin.z
-    max_z := slope.origin.z + slope.size.z
-
-    tx1 := (min_x - ray_origin.x) / ray_direction.x
-    tx2 := (max_x - ray_origin.x) / ray_direction.x
-
-    ty1 := (min_y - ray_origin.y) / ray_direction.y
-    ty2 := (max_y - ray_origin.y) / ray_direction.y
-
-    tz1 := (min_z - ray_origin.z) / ray_direction.z
-    tz2 := (max_z - ray_origin.z) / ray_direction.z
-
-    t_start := max(min(tx1, tx2), min(ty1, ty2), min(tz1, tz2))
-    t_end   := min(max(tx1, tx2), max(ty1, ty2), max(tz1, tz2))
-
+    // The diagonal plane
     nx, ny, plane_val : f32
-    sx := slope.size.x
-    sy := slope.size.y
-    ox := slope.origin.x
-    oy := slope.origin.y
+    sx := slope_size.x
+    sy := slope_size.y
+    ox := slope_origin.x
+    oy := slope_origin.y
 
-    switch slope.corner {
+    switch slope_corner {
     case .Bottom_Left:
         nx = sy
         ny = sx
@@ -618,14 +431,14 @@ check_ray_slope :: proc(
     numer := plane_val - (nx * ray_origin.x + ny * ray_origin.y)
 
     if denom < 0 {
-        t_start = max(t_start, numer / denom)
+        t_near = max(t_near, numer / denom)
     } else if denom > 0 {
-        t_end = min(t_end, numer / denom)
+        t_far  = min(t_far , numer / denom)
     } else if numer < 0 {
         return 0, false
     }
 
-    return t_start, t_end > t_start && t_start > 0
+    return t_near, t_far > t_near && t_near > 0
 }
 
 editor_property_slope_corner :: proc(
@@ -713,24 +526,36 @@ editor_property_vector3 :: proc(
     return header_rect.w + 3 * axis_gap + 3 * axis_height
 }
 
-// I think I should say sorry to my math teacher
-// because I used llm to write this and have absolutely
-// no idea how this work at all
-check_ray_plane :: proc(
-    plane_point   : [3]f32,
-    plane_normal  : [3]f32,
+ray_box_intersect :: proc(
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
-) -> (distance : [3]f32, intersected : bool) {
-    denom := linalg.dot(ray_direction, plane_normal)
-    if abs(denom) < 1e-4 {
-        return
+    box_origin    : [3]f32,
+    box_size      : [3]f32,
+) -> (dist: f32, face: Box_Face, hit: bool) {
+    min_box := box_origin
+    max_box := box_origin + box_size
+
+    t_min := (min_box - ray_origin) / ray_direction
+    t_max := (max_box - ray_origin) / ray_direction
+
+    t1 := linalg.min(t_min, t_max)
+    t2 := linalg.max(t_min, t_max)
+
+    t_near := max(t1.x, t1.y, t1.z)
+    t_far  := min(t2.x, t2.y, t2.z)
+
+    if t_far < t_near || t_near < 0 do return
+
+    hit_face: Box_Face
+    if t_near == t1.x {
+        hit_face = .Negative_X if ray_direction.x > 0 else .Positive_X
+    } else if t_near == t1.y {
+        hit_face = .Negative_Y if ray_direction.y > 0 else .Positive_Y
+    } else {
+        hit_face = .Negative_Z if ray_direction.z > 0 else .Positive_Z
     }
-    t := linalg.dot(plane_point - ray_origin, plane_normal) / denom
-    if t < 0 {
-        return
-    }
-    return t, true
+
+    return t_near, hit_face, true
 }
 
 ray_segment_distance_sqr :: proc(ro, rd, p0, p1: [3]f32) -> f32 {
@@ -772,67 +597,18 @@ Box_Edge :: struct {
     f1: Box_Face,
 }
 
-get_box_edges :: proc(box_origin, box_size: [3]f32) -> [12]Box_Edge {
-    min_box := box_origin
-    max_box := box_origin + box_size
-
-    return [12]Box_Edge {
-        { {min_box.x, min_box.y, min_box.z}, {max_box.x, min_box.y, min_box.z}, .Negative_Y, .Negative_Z },
-        { {min_box.x, min_box.y, max_box.z}, {max_box.x, min_box.y, max_box.z}, .Negative_Y, .Positive_Z },
-        { {min_box.x, max_box.y, min_box.z}, {max_box.x, max_box.y, min_box.z}, .Positive_Y, .Negative_Z },
-        { {min_box.x, max_box.y, max_box.z}, {max_box.x, max_box.y, max_box.z}, .Positive_Y, .Positive_Z },
-
-        { {min_box.x, min_box.y, min_box.z}, {min_box.x, max_box.y, min_box.z}, .Negative_X, .Negative_Z },
-        { {min_box.x, min_box.y, max_box.z}, {min_box.x, max_box.y, max_box.z}, .Negative_X, .Positive_Z },
-        { {max_box.x, min_box.y, min_box.z}, {max_box.x, max_box.y, min_box.z}, .Positive_X, .Negative_Z },
-        { {max_box.x, min_box.y, max_box.z}, {max_box.x, max_box.y, max_box.z}, .Positive_X, .Positive_Z },
-
-        { {min_box.x, min_box.y, min_box.z}, {min_box.x, min_box.y, max_box.z}, .Negative_X, .Negative_Y },
-        { {min_box.x, max_box.y, min_box.z}, {min_box.x, max_box.y, max_box.z}, .Negative_X, .Positive_Y },
-        { {max_box.x, min_box.y, min_box.z}, {max_box.x, min_box.y, max_box.z}, .Positive_X, .Negative_Y },
-        { {max_box.x, max_box.y, min_box.z}, {max_box.x, max_box.y, max_box.z}, .Positive_X, .Positive_Y },
-    }
-}
-
-check_ray_box_hit_face :: proc(ro, rd, min_box, max_box: [3]f32) -> (hit: bool, face: Box_Face) {
-    t_min := [3]f32{
-        (min_box.x - ro.x) / rd.x,
-        (min_box.y - ro.y) / rd.y,
-        (min_box.z - ro.z) / rd.z,
-    }
-    t_max := [3]f32{
-        (max_box.x - ro.x) / rd.x,
-        (max_box.y - ro.y) / rd.y,
-        (max_box.z - ro.z) / rd.z,
-    }
-
-    t1 := linalg.min(t_min, t_max)
-    t2 := linalg.max(t_min, t_max)
-
-    t_near := max(t1.x, t1.y, t1.z)
-    t_far  := min(t2.x, t2.y, t2.z)
-
-    if t_far < t_near || t_near < 0 do return false, .Negative_X
-
-    if t_near == t1.x {
-        return true, .Negative_X if rd.x > 0 else .Positive_X
-    } else if t_near == t1.y {
-        return true, .Negative_Y if rd.y > 0 else .Positive_Y
-    } else {
-        return true, .Negative_Z if rd.z > 0 else .Positive_Z
-    }
-}
-
 pick_box_face :: proc(
     ray_origin    : [3]f32,
     ray_direction : [3]f32,
     box_origin    : [3]f32,
     box_size      : [3]f32,
 ) -> Box_Face {
-    min_box := box_origin
-    max_box := box_origin + box_size
-
-    if hit, face := check_ray_box_hit_face(ray_origin, ray_direction, min_box, max_box); hit {
+    if dist, face, hit := ray_box_intersect(
+        ray_origin    = ray_origin,
+        ray_direction = ray_direction,
+        box_origin    = box_origin,
+        box_size      = box_size,
+    ); hit {
         return face
     }
 
@@ -859,52 +635,61 @@ pick_box_face :: proc(
     return best_face
 }
 
+box_unit_face_quads := [Box_Face][4][3]f32 {
+    .Negative_X = { {0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0} },
+    .Positive_X = { {1, 0, 0}, {1, 1, 0}, {1, 1, 1}, {1, 0, 1} },
+    .Negative_Y = { {0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1} },
+    .Positive_Y = { {0, 1, 0}, {0, 1, 1}, {1, 1, 1}, {1, 1, 0} },
+    .Negative_Z = { {0, 0, 0}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0} },
+    .Positive_Z = { {0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1} },
+}
+
 get_box_quad_by_face :: proc(
     box_origin : [3]f32,
     box_size   : [3]f32,
     face       : Box_Face,
+    offset     : [3]f32 = 0,
 ) -> [4][3]f32 {
-    box_center := box_origin + box_size * .5
-    min_box    := box_center - box_size * .5
-    max_box    := box_center + box_size * .5
+    unit_quad := box_unit_face_quads[face]
+    quad: [4][3]f32
+    for i in 0..<4 {
+        quad[i] = box_origin + unit_quad[i] * box_size + offset
+    }
+    return quad
+}
 
-    switch face {
-        case .Negative_X: return {
-            { min_box.x, min_box.y, min_box.z },
-            { min_box.x, min_box.y, max_box.z },
-            { min_box.x, max_box.y, max_box.z },
-            { min_box.x, max_box.y, min_box.z },
+Box_Unit_Edge :: struct {
+    p0 : [3]f32,
+    p1 : [3]f32,
+    f0 : Box_Face,
+    f1 : Box_Face,
+}
+
+box_unit_edges := [12]Box_Unit_Edge {
+    { {0, 0, 0}, {1, 0, 0}, .Negative_Y, .Negative_Z },
+    { {0, 0, 1}, {1, 0, 1}, .Negative_Y, .Positive_Z },
+    { {0, 1, 0}, {1, 1, 0}, .Positive_Y, .Negative_Z },
+    { {0, 1, 1}, {1, 1, 1}, .Positive_Y, .Positive_Z },
+
+    { {0, 0, 0}, {0, 1, 0}, .Negative_X, .Negative_Z },
+    { {0, 0, 1}, {0, 1, 1}, .Negative_X, .Positive_Z },
+    { {1, 0, 0}, {1, 1, 0}, .Positive_X, .Negative_Z },
+    { {1, 0, 1}, {1, 1, 1}, .Positive_X, .Positive_Z },
+
+    { {0, 0, 0}, {0, 0, 1}, .Negative_X, .Negative_Y },
+    { {0, 1, 0}, {0, 1, 1}, .Negative_X, .Positive_Y },
+    { {1, 0, 0}, {1, 0, 1}, .Positive_X, .Negative_Y },
+    { {1, 1, 0}, {1, 1, 1}, .Positive_X, .Positive_Y },
+}
+
+get_box_edges :: proc(box_origin, box_size: [3]f32) -> (edges: [12]Box_Edge) {
+    for e, i in box_unit_edges {
+        edges[i] = {
+            p0 = box_origin + e.p0 * box_size,
+            p1 = box_origin + e.p1 * box_size,
+            f0 = e.f0,
+            f1 = e.f1,
         }
-        case .Positive_X: return {
-            { max_box.x, min_box.y, min_box.z },
-            { max_box.x, max_box.y, min_box.z },
-            { max_box.x, max_box.y, max_box.z },
-            { max_box.x, min_box.y, max_box.z },
-        }
-        case .Negative_Y: return {
-            { min_box.x, min_box.y, min_box.z },
-            { max_box.x, min_box.y, min_box.z },
-            { max_box.x, min_box.y, max_box.z },
-            { min_box.x, min_box.y, max_box.z },
-        }
-        case .Positive_Y: return {
-            { min_box.x, max_box.y, min_box.z },
-            { min_box.x, max_box.y, max_box.z },
-            { max_box.x, max_box.y, max_box.z },
-            { max_box.x, max_box.y, min_box.z },
-        }
-        case .Negative_Z: return{
-            { min_box.x, min_box.y, min_box.z },
-            { min_box.x, max_box.y, min_box.z },
-            { max_box.x, max_box.y, min_box.z },
-            { max_box.x, min_box.y, min_box.z },
-        }
-        case .Positive_Z: return {
-            { min_box.x, min_box.y, max_box.z },
-            { max_box.x, min_box.y, max_box.z },
-            { max_box.x, max_box.y, max_box.z },
-            { min_box.x, max_box.y, max_box.z },
-        }
-        case: panic("Invalid face")
-    }   
+    }
+    return
 }

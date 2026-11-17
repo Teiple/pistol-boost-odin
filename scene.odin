@@ -53,7 +53,7 @@ scene_get_callbacks :: proc(scene : ^Scene) -> Scene_Callbacks_Any {
 		case Scene_Main_Menu:
 			return convert_cbs(&s, SCENE_MAIN_MENU_CALLBACKS)
 		case Scene_Editor:
-			return convert_cbs(&s, SCENE_DEBUG_CALLBACKS)
+			return convert_cbs(&s, SCENE_EDITOR_CALLBACKS)
 	}
 	panic("Unreachable")
 }

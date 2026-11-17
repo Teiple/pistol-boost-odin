@@ -8,6 +8,8 @@ import shaders "shaders"
 Pipeline_Type :: enum u8 {
 	Unlit_Triangles,
 	Unlit_Lines,
+	Unlit_Triangles_Overlay,
+	Unlit_Lines_Overlay,
 	Skinned_Unlit_Triangles,
 }
 
@@ -93,6 +95,55 @@ renderer_init :: proc(renderer : ^Renderer) {
 					depth       = {
 						write_enabled = false,
 						compare       = .LESS_EQUAL
+					},
+					colors      = {
+						0 = {
+							pixel_format = .RGBA8,
+						}
+					},
+					primitive_type = .LINES,
+				})
+			case .Unlit_Triangles_Overlay:
+				pip_res.shader   = unlit_shader
+				pip_res.pipeline = sg.make_pipeline({
+					index_type  = .UINT16,
+					shader      = pip_res.shader,
+					layout      = {
+						attrs   = {
+							shaders.ATTR_unlit_pos       = { format = .FLOAT3 },
+							shaders.ATTR_unlit_color0    = { format = .FLOAT4 },
+							shaders.ATTR_unlit_texcoord0 = { format = .FLOAT2 },
+						}
+					},
+					cull_mode   = .BACK,
+					depth       = {
+						pixel_format  = .DEPTH,
+						write_enabled = false,
+						compare       = .ALWAYS,
+					},
+					colors      = {
+						0 = {
+							pixel_format = .RGBA8,
+						}
+					},
+					primitive_type = .TRIANGLES,
+				})
+			case .Unlit_Lines_Overlay:
+				pip_res.shader   = unlit_shader 
+				pip_res.pipeline = sg.make_pipeline({
+					index_type  = .UINT16,
+					shader      = pip_res.shader,
+					layout      = {
+						attrs   = {
+							shaders.ATTR_unlit_pos       = { format = .FLOAT3 },
+							shaders.ATTR_unlit_color0    = { format = .FLOAT4 },
+							shaders.ATTR_unlit_texcoord0 = { format = .FLOAT2 },
+						}
+					},
+					cull_mode   = .NONE,
+					depth       = {
+						write_enabled = false,
+						compare       = .ALWAYS
 					},
 					colors      = {
 						0 = {
