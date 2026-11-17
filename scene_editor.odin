@@ -58,12 +58,13 @@ Slope_Corner :: enum u8 {
     Top_Right,
 }
 
-Face_Drag_State :: struct {
-    extend_direction : [3]f32,
+Face_Extend_State :: struct {
     extend_point     : [3]f32,
-    initial_origin    : [3]f32,
-    initial_size      : [3]f32,
-    active           : bool,
+    initial_origin   : [3]f32,
+    initial_size     : [3]f32,
+    initial_distance : f32,
+    extend_face      : Box_Face,
+    is_active        : bool,
 }
 
 Scene_Editor :: struct {
@@ -74,7 +75,7 @@ Scene_Editor :: struct {
     pending_selected  : Pending_Action(int),
     selected_platform : Maybe(int),
     modifier_shift    : bool,
-    face_drag_state   : Face_Drag_State,
+    face_extend_state : Face_Extend_State,
 }
 
 SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -206,8 +207,9 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         // Platform selection
-        if  ui_get_mouse_button_state(ctx.ui) == .Released {
+        if ui_get_mouse_button_state(ctx.ui) == .Released {
             mouse_on_ui := false 
+
             for &rect in ui_rects do if ui_mouse_is_inside_rect(ui, rect) {
                 mouse_on_ui = true; break;
             }
@@ -283,70 +285,101 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     ctx.mouse.position
                 )
 
-                face := pick_box_face(
-                    ray_origin    = ray_origin,
-                    ray_direction = ray_direction,
-                    box_origin    = platform.origin,
-                    box_size      = platform.size,
-                )
+                if !scene.face_extend_state.is_active {
+                    face := pick_box_face(
+                        ray_origin    = ray_origin,
+                        ray_direction = ray_direction,
+                        box_origin    = platform.origin,
+                        box_size      = platform.size,
+                    )
 
-                quad := get_box_quad_by_face(
-                    box_origin = platform.origin,
-                    box_size   = platform.size,
-                    face       = face,
-                    // offset from edge
-                    offset     = box_face_normals[face] * .01
-                )
-                center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4
-
-                debug_draw_push_quad(
-                    draw    = &scene.debug_draw,
-                    points  = quad,
-                    color   = hsv(40),
-                    overlay = true,
-                )
+                    quad := get_box_quad_by_face(
+                        box_origin = platform.origin,
+                        box_size   = platform.size,
+                        face       = face,
+                        offset     = .01
+                    )
+                    center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4    
                 
-                if ctx.mouse.state[.Left] == .Pressed {
-                    scene.face_drag_state = {
-                        active            = true,
-                        extend_point      = center, 
-                        extend_direction  = box_face_normals[face], 
-                        initial_size      = platform.size,
-                        initial_origin    = platform.origin,
+                    debug_draw_push_quad(
+                        draw    = &scene.debug_draw,
+                        points  = quad,
+                        color   = hsv(40),
+                        overlay = true,
+                    )
+
+                    if ctx.mouse.state[.Left] == .Pressed {
+                        if dist_to_ray, ok := ray_to_line(
+                            ray_origin       = ray_origin,
+                            ray_direction    = ray_direction,
+                            line_point       = center,
+                            line_direction   = box_face_normals[face],
+                        ); ok {
+                            scene.face_extend_state = {
+                                is_active        = true,
+                                extend_point     = center, 
+                                extend_face      = face,
+                                initial_size     = platform.size,
+                                initial_origin   = platform.origin,
+                                initial_distance = dist_to_ray,
+                            }
+                        }
+                    }
+                } else{
+                    if ctx.mouse.state[.Left] == .Released {
+                        scene.face_extend_state = {}
+                    } else if ctx.mouse.state[.Left] == .Down {
+                        extend_direction := box_face_normals[scene.face_extend_state.extend_face]
+
+                        extend_distance, can_extend := ray_to_line(
+                            ray_origin       = ray_origin,
+                            ray_direction    = ray_direction,
+                            line_point       = scene.face_extend_state.extend_point,
+                            line_direction   = box_face_normals[scene.face_extend_state.extend_face],
+                        )
+                        extend_distance -= scene.face_extend_state.initial_distance
+
+                        if can_extend {
+                            position        := scene.face_extend_state.initial_origin + scene.face_extend_state.initial_size * .5  
+                            position        += extend_direction * extend_distance * .5
+                            platform.size    = scene.face_extend_state.initial_size + linalg.abs(extend_direction) * extend_distance
+                            platform.origin  = position - platform.size * .5 
+                        }
+
+                        // Draw current extending face
+                        quad := get_box_quad_by_face(
+                            box_origin = platform.origin,
+                            box_size   = platform.size,
+                            face       = scene.face_extend_state.extend_face,
+                            offset     = .01
+                        )
+                        center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4    
+                    
+                        debug_draw_push_quad(
+                            draw    = &scene.debug_draw,
+                            points  = quad,
+                            color   = hsv(40),
+                            overlay = true,
+                        )
                     }
                 }
-
-                // if ctx.mouse.state[.Left] == .Down && scene.face_drag_state.active {
-                //     extend_distance, can_extend := closest_point_ray_to_line(
-                //         ray_origin, ray_direction,
-                //         scene.face_drag_state.extend_point,
-                //         scene.face_drag_state.extend_direction,
-                //     )
-
-                //     if can_extend {
-                //         position        := scene.face_drag_state.initial_origin + scene.face_drag_state.initial_size * .5  
-                //         position        += scene.face_drag_state.extend_direction * extend_distance * .5
-                //         platform.size    = scene.face_drag_state.initial_size + linalg.abs(scene.face_drag_state.extend_direction) * extend_distance
-                //         platform.origin  = position - platform.size * .5 
-                //     }
-                // }
             }
 
             switch &variant in platform.variant {
-            case Platform_Box:
-                debug_draw_push_platform_box(
-                    draw         = &scene.debug_draw,
-                    box          = platform_instance(&platform, &variant),
-                    color        = selected ? hsv(190, 1,  1) : hsv(200, 1, 1),
-                    wire_color   = selected ? hsv(190, 1, .4) : hsv(200, .4, .4),
-                )
-            case Platform_Slope: 
-                debug_draw_push_platform_slope(
-                    draw         = &scene.debug_draw,
-                    slope        = platform_instance(&platform, &variant),
-                    color        = selected ? hsv(190, 1,  1) : hsv(200, 1, 1),
-                    wire_color   = selected ? hsv(190, 1, .4) : hsv(200, .4, .4),
-                )
+                case Platform_Box:
+                    debug_draw_push_platform_box(
+                        draw         = &scene.debug_draw,
+                        box          = platform_instance(&platform, &variant),
+                        color        = selected ? hsv(190, 1,  1) : hsv(200, 1, 1),
+                        wire_color   = selected ? hsv(190, 1, .4) : hsv(200, .4, .4),
+                    )
+                case Platform_Slope: 
+                    debug_draw_push_platform_slope(
+                        draw         = &scene.debug_draw,
+                        slope        = platform_instance(&platform, &variant),
+                        color        = selected ? hsv(190, 1,  1) : hsv(200, 1, 1),
+                        wire_color   = selected ? hsv(190, 1, .4) : hsv(200, .4, .4),
+                    )
             }
             
         }
@@ -378,6 +411,24 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
         free_camera_input(&scene.free_cam, ctx.camera, ev)
     },
+}
+
+ray_to_line :: proc(
+    ray_origin     : [3]f32,
+    ray_direction  : [3]f32,
+    line_point     : [3]f32,
+    line_direction : [3]f32,
+) -> (dist_along_line : f32, ok : bool) {
+    w0 := ray_origin - line_point
+    a  := linalg.dot(ray_direction,  ray_direction)
+    b  := linalg.dot(ray_direction,  line_direction)
+    c  := linalg.dot(line_direction, line_direction)
+    d  := linalg.dot(ray_direction,  w0)
+    e  := linalg.dot(line_direction, w0)
+    denom := a * c - b * b
+
+    if abs(denom) < 1e-4 do return
+    return (a * e - b * d) / denom, true
 }
 
 ray_slope_interesect :: proc(
@@ -648,12 +699,13 @@ get_box_quad_by_face :: proc(
     box_origin : [3]f32,
     box_size   : [3]f32,
     face       : Box_Face,
-    offset     : [3]f32 = 0,
+    offset     : f32 = 0,
 ) -> [4][3]f32 {
     unit_quad := box_unit_face_quads[face]
     quad: [4][3]f32
     for i in 0..<4 {
-        quad[i] = box_origin + unit_quad[i] * box_size + offset
+        quad[i] = box_origin + unit_quad[i] * box_size +
+            box_face_normals[face] * offset
     }
     return quad
 }
