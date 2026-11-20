@@ -1,9 +1,15 @@
 package main
 
+import "core:fmt"
+import "core:slice"
 import "core:math/linalg"
 import "core:math"
 import "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
+
+INSPECTOR_WIDTH   :: 300
+STATUS_BAR_HEIGHT :: 50
+MIN_PLATFORM_SIZE :: [3]f32{ .1, .1, .1}
 
 Platform :: struct {
     origin  : [3]f32,
@@ -18,6 +24,11 @@ Box_Face :: enum u8 {
     Positive_Y,
     Negative_Z,
     Positive_Z,
+}
+
+Editor_Region :: enum u8 {
+    Region_3D,
+    Region_Ui,
 }
 
 box_face_normals := [Box_Face][3]f32 {
@@ -67,6 +78,11 @@ Face_Extend_State :: struct {
     is_active        : bool,
 }
 
+Move_State :: struct {
+    initial_offset   : [3]f32,
+    is_active        : bool,
+}
+
 Scene_Editor :: struct {
     debug_draw        : Debug_Draw, 
     free_cam          : Free_Camera,
@@ -74,8 +90,10 @@ Scene_Editor :: struct {
     mouse_hold_delta  : [2]f32,
     pending_selected  : Pending_Action(int),
     selected_platform : Maybe(int),
-    modifier_shift    : bool,
+    modifiers         : bit_set[enum{ SHIFT, ALT }; u8],
     face_extend_state : Face_Extend_State,
+    move_state        : Move_State,
+    focused_region    : Editor_Region,
 }
 
 SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -112,15 +130,12 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         ui := ctx.ui
 
-        ui_rects : [dynamic; 4][4]f32
-
         // View mode selection
         view_mode_rect, _ := ui_push_rect(
             ui     = ui,
-            sizing = {220, 50},
+            sizing = { 220, STATUS_BAR_HEIGHT },
             anchor = { element = {0, 1}, parent = {0, 1} } 
         )
-        append(&ui_rects, view_mode_rect)
         
         ui_push_container(ui, view_mode_rect)
         {
@@ -144,14 +159,13 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         if scene.selected_platform != nil {
             inspector_rect, _ := ui_push_rect(
                 ui     = ui,
-                sizing = { 300, Percent{1}},
+                sizing = { INSPECTOR_WIDTH, Percent{1}},
                 anchor = { element = {1, 0}, parent = {1, 0} },
                 color  = hsv(0, 0, .25),
             )
-            append(&ui_rects, inspector_rect)
-
-            inspector_padding    :: 8
-            inspector_width := inspector_rect.z - inspector_padding * 2
+        
+            inspector_padding :: 8
+            inspector_width   := inspector_rect.z - inspector_padding * 2
 
             ui_push_container(ui, inspector_rect)
             {
@@ -182,6 +196,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     ui,
                     label     = "Size",
                     id        = "size",
+                    min_value = MIN_PLATFORM_SIZE,
                     axis_ids  = {
                         { text_edit = "size:x", up_control = "size:x:up", down_control = "size:x:down"},
                         { text_edit = "size:y", up_control = "size:y:up", down_control = "size:y:down"},
@@ -205,58 +220,60 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 }
             }
         }
-
+        
         // Platform selection
-        if ui_get_mouse_button_state(ctx.ui) == .Released {
-            mouse_on_ui := false 
-
-            for &rect in ui_rects do if ui_mouse_is_inside_rect(ui, rect) {
-                mouse_on_ui = true; break;
-            }
-            if !mouse_on_ui {
-                ray_origin, ray_direction := viewport_get_mouse_world_ray(
-                    ctx.viewport,
-                    ctx.camera,
-                    ctx.mouse.position
-                )
-
-                min_select_dist := max(f32)
-                closest_index   := -1
-                
-                for &platform, i in scene.platforms {
-                    switch &variant in platform.variant {
-                        case Platform_Box:
-                            if dist, face, hit := ray_box_intersect(
-                                ray_origin    = ray_origin,
-                                ray_direction = ray_direction,
-                                box_origin    = platform.origin,
-                                box_size      = platform.size,
-                            ); hit && dist < min_select_dist {
-                                min_select_dist = dist
-                                closest_index   = i
-                            }
-                        case Platform_Slope:
-                            if dist, hit := ray_slope_interesect(
-                                ray_origin    = ray_origin,
-                                ray_direction = ray_direction,
-                                slope_origin  = platform.origin,
-                                slope_size    = platform.size,
-                                slope_corner  = variant.corner,
-                            ); hit && dist < min_select_dist {
-                                min_select_dist = dist
-                                closest_index   = i
-                            }
-                    }
-                }
-
-                if closest_index == -1 {
-                    pending_action_clear(&scene.pending_selected)
-                } else {            
-                    pending_action_set(
-                        &scene.pending_selected,
-                        &scene.selected_platform,
-                        closest_index
+        if ctx.mouse.state[.Left] == .Released {
+            if scene.focused_region == .Region_3D {
+                if scene.face_extend_state.is_active {
+                    scene.face_extend_state = {}
+                } else if scene.move_state.is_active{
+                    scene.move_state = {}
+                } else {
+                    ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                        ctx.viewport,
+                        ctx.camera,
+                        ctx.mouse.position
                     )
+
+                    min_select_dist := max(f32)
+                    closest_index   := -1
+                    
+                    for &platform, i in scene.platforms {
+                        switch &variant in platform.variant {
+                            case Platform_Box:
+                                if dist, _, hit := ray_box_intersect(
+                                    ray_origin    = ray_origin,
+                                    ray_direction = ray_direction,
+                                    box_origin    = platform.origin,
+                                    box_size      = platform.size,
+                                ); hit && dist < min_select_dist {
+                                    min_select_dist = dist
+                                    closest_index   = i
+                                }
+                            case Platform_Slope:
+                                if dist, hit := ray_slope_interesect(
+                                    ray_origin    = ray_origin,
+                                    ray_direction = ray_direction,
+                                    slope_origin  = platform.origin,
+                                    slope_size    = platform.size,
+                                    slope_corner  = variant.corner,
+                                ); hit && dist < min_select_dist {
+                                    min_select_dist = dist
+                                    closest_index   = i
+                                }
+                        }
+                    }
+
+                    if closest_index == -1 {
+                        pending_action_clear(&scene.pending_selected)
+                    } else {            
+                        fmt.println("shape")
+                        pending_action_set(
+                            &scene.pending_selected,
+                            &scene.selected_platform,
+                            closest_index
+                        )
+                    }
                 }
             }
 
@@ -266,6 +283,10 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     },
     update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
         debug_draw_begin(&scene.debug_draw)
+
+        if ctx.mouse.state[.Left] == .Pressed {
+            scene.focused_region = editor_is_position_in_3d_region(ctx, ctx.mouse.position) ? .Region_3D : .Region_Ui  
+        }
 
         debug_draw_push_grid(
             draw       = &scene.debug_draw,
@@ -279,13 +300,13 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         for &platform, i in scene.platforms {
             selected := scene.selected_platform != nil && i == scene.selected_platform.?
             if selected {
-                ray_origin, ray_direction := viewport_get_mouse_world_ray(
-                    ctx.viewport,
-                    ctx.camera,
-                    ctx.mouse.position
-                )
+                if !scene.face_extend_state.is_active && .SHIFT in scene.modifiers {
+                    ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                        ctx.viewport,
+                        ctx.camera,
+                        ctx.mouse.position
+                    )
 
-                if !scene.face_extend_state.is_active {
                     face := pick_box_face(
                         ray_origin    = ray_origin,
                         ray_direction = ray_direction,
@@ -325,44 +346,112 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             }
                         }
                     }
-                } else{
-                    if ctx.mouse.state[.Left] == .Released {
-                        scene.face_extend_state = {}
-                    } else if ctx.mouse.state[.Left] == .Down {
-                        extend_direction := box_face_normals[scene.face_extend_state.extend_face]
+                }
+                if scene.face_extend_state.is_active && ctx.mouse.state[.Left] == .Down {
+                    ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                        ctx.viewport,
+                        ctx.camera,
+                        ctx.mouse.position
+                    )
 
-                        extend_distance, can_extend := ray_to_line(
-                            ray_origin       = ray_origin,
-                            ray_direction    = ray_direction,
-                            line_point       = scene.face_extend_state.extend_point,
-                            line_direction   = box_face_normals[scene.face_extend_state.extend_face],
-                        )
-                        extend_distance -= scene.face_extend_state.initial_distance
+                    extend_direction := box_face_normals[scene.face_extend_state.extend_face]
 
-                        if can_extend {
-                            position        := scene.face_extend_state.initial_origin + scene.face_extend_state.initial_size * .5  
-                            position        += extend_direction * extend_distance * .5
-                            platform.size    = scene.face_extend_state.initial_size + linalg.abs(extend_direction) * extend_distance
-                            platform.origin  = position - platform.size * .5 
+                    extend_distance, can_extend := ray_to_line(
+                        ray_origin       = ray_origin,
+                        ray_direction    = ray_direction,
+                        line_point       = scene.face_extend_state.extend_point,
+                        line_direction   = box_face_normals[scene.face_extend_state.extend_face],
+                    )
+                    extend_distance -= scene.face_extend_state.initial_distance
+
+                    if can_extend {
+                        min_size : [3]f32 : {.1, .1, .1}
+
+                        platform.size = scene.face_extend_state.initial_size + linalg.abs(extend_direction) * extend_distance
+                        if platform.size.x < min_size.x || platform.size.y < min_size.y || platform.size.z < min_size.z {
+                            platform.size = linalg.max(platform.size, min_size)
+                        } else {
+                            position := scene.face_extend_state.initial_origin + scene.face_extend_state.initial_size * .5  
+                            position += extend_direction * extend_distance * .5
+                            
+                            platform.origin = position - platform.size * .5 
                         }
+                    }
 
-                        // Draw current extending face
-                        quad := get_box_quad_by_face(
-                            box_origin = platform.origin,
-                            box_size   = platform.size,
-                            face       = scene.face_extend_state.extend_face,
-                            offset     = .01
-                        )
-                        center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4    
-                    
-                        debug_draw_push_quad(
-                            draw    = &scene.debug_draw,
-                            points  = quad,
-                            color   = hsv(40),
-                            overlay = true,
-                        )
+                    // Draw current extending face
+                    quad := get_box_quad_by_face(
+                        box_origin = platform.origin,
+                        box_size   = platform.size,
+                        face       = scene.face_extend_state.extend_face,
+                        offset     = .01
+                    )
+                    center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4    
+                
+                    debug_draw_push_quad(
+                        draw    = &scene.debug_draw,
+                        points  = quad,
+                        color   = hsv(40),
+                        overlay = true,
+                    )
+                }
+
+                if !scene.face_extend_state.is_active && ctx.mouse.state[.Left] == .Pressed {
+                    ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                        viewport       = ctx.viewport,
+                        camera         = ctx.camera,
+                        mouse_position = ctx.mouse.position, 
+                    )
+
+                    hit := false
+                    switch &variant in platform.variant {
+                        case Platform_Box:
+                            _, _, hit = ray_box_intersect(
+                                ray_origin    = ray_origin,
+                                ray_direction = ray_direction,
+                                box_origin    = platform.origin,
+                                box_size      = platform.size,
+                            )
+                        case Platform_Slope:
+                            _, hit = ray_slope_interesect(
+                                ray_origin    = ray_origin,
+                                ray_direction = ray_direction,
+                                slope_origin  = platform.origin,
+                                slope_size    = platform.size,
+                                slope_corner  = variant.corner,
+                            );
+                    }
+
+                    if hit {
+                        if point, ok := ray_plane_intersect(
+                            ray_origin    = ray_origin,
+                            ray_direction = ray_direction,
+                            plane_normal  = {0, 1, 0}, 
+                            plane_point   = platform.origin, 
+                        ); ok {
+                            scene.move_state = {
+                                is_active      = true,
+                                initial_offset = point - platform.origin,
+                            }
+                        }
                     }
                 }
+                
+                if scene.move_state.is_active && ctx.mouse.state[.Left] == .Down {
+                    ray_origin, ray_direction := viewport_get_mouse_world_ray(
+                        viewport       = ctx.viewport,
+                        camera         = ctx.camera,
+                        mouse_position = ctx.mouse.position, 
+                    )
+
+                    if point, ok := ray_plane_intersect(
+                        ray_origin    = ray_origin,
+                        ray_direction = ray_direction,
+                        plane_normal  = {0, 1, 0}, 
+                        plane_point   = platform.origin, 
+                    ); ok {
+                        platform.origin = point - scene.move_state.initial_offset
+                    }
+                } 
             }
 
             switch &variant in platform.variant {
@@ -397,21 +486,32 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             return
         }
 
-        // Clear modifers
-        scene.modifier_shift = false
-
         ui_text_edit_input(ui, ev)
     }, 
     input_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
         if ev.type == .KEY_DOWN && ev.key_code == .LEFT_SHIFT {
-            scene.modifier_shift = true
+            scene.modifiers += {.SHIFT}
         }
-        if ev.type == .KEY_DOWN && ev.key_code == .LEFT_SHIFT {
-            scene.modifier_shift = false
+        if ev.type == .KEY_UP   && ev.key_code == .LEFT_SHIFT {
+            scene.modifiers -= {.SHIFT}
         }
+
+        if ev.type == .KEY_DOWN && ev.key_code == .LEFT_ALT {
+            scene.modifiers += {.ALT}
+        }
+        if ev.type == .KEY_UP   && ev.key_code == .LEFT_ALT {
+            scene.modifiers -= {.ALT}
+        }
+
         free_camera_input(&scene.free_cam, ctx.camera, ev)
     },
 }
+
+editor_is_position_in_3d_region :: proc(ctx: Game_Context, position : [2]f32) -> bool {
+    return position.x < ctx.viewport.base_size.x - INSPECTOR_WIDTH &&
+        position.y < ctx.viewport.base_size.y - STATUS_BAR_HEIGHT
+}
+
 
 ray_to_line :: proc(
     ray_origin     : [3]f32,
@@ -529,17 +629,18 @@ editor_property_slope_corner :: proc(
 }
 
 editor_property_vector3 :: proc(
-    ui       : ^Ui,
-    id       : Ui_Id,
-    value    : ^[3]f32,
-    axis_ids : [3]struct {
+    ui        : ^Ui,
+    id        : Ui_Id,
+    value     : ^[3]f32,
+    axis_ids  : [3]struct {
         text_edit    : Ui_Id,
         up_control   : Ui_Id,
         down_control : Ui_Id,
     },
-    label    : string,
-    width    : f32,
-    anchor   : Anchor,
+    label     : string,
+    width     : f32,
+    anchor    : Anchor,
+    min_value : Maybe([3]f32) = nil, 
 ) -> (height: f32) {
     axis_width  : [3]f32 = {32, width - 52, 20}
     axis_height :: 42
@@ -566,6 +667,7 @@ editor_property_vector3 :: proc(
             label           = axis_labels[i], 
             value           = value[i],
             step            = .01,
+            min_val         = min_value != nil ? min_value.?[0] : nil,
             label_color     = hsv(axis_colors[i]),
             height          = axis_height,
             width           = axis_width,
@@ -744,4 +846,21 @@ get_box_edges :: proc(box_origin, box_size: [3]f32) -> (edges: [12]Box_Edge) {
         }
     }
     return
+}
+
+ray_plane_intersect :: proc(
+    ray_origin    : [3]f32,
+    ray_direction : [3]f32,
+    plane_normal  : [3]f32,
+    plane_point   : [3]f32,
+) -> (point : [3]f32, hit: bool){
+    if abs(linalg.dot(ray_direction, plane_normal)) < 1e-4 {
+        return
+    }
+    
+    t := linalg.dot(plane_point - ray_origin, plane_normal) / linalg.dot(ray_direction, plane_normal)
+    
+    if t < 0 do return
+
+    return ray_origin + t * ray_direction, true
 }

@@ -260,8 +260,6 @@ viewport_request_size :: proc(viewport : ^Viewport, size: [2]f32) {
 }
 
 viewport_get_mouse_world_position_on_zplane :: proc(viewport: ^Viewport, camera: ^Camera, mouse_position : [2]f32, z_plane: f32 = 0) -> [3]f32 {
-	// llm made this i don't understand this
-	
 	// normalize screen space mouse position to ndc space
 	ndc_x := (mouse_position.x / viewport.base_size.x) * 2.0 - 1.0
 	ndc_y := 1.0 - (mouse_position.y / viewport.base_size.y) * 2.0
@@ -290,8 +288,6 @@ viewport_get_mouse_world_ray :: proc(
 	camera: ^Camera,
 	mouse_position : [2]f32,
 ) -> (ray_origin : [3]f32, ray_direction : [3]f32) {
-	// llm made this i don't understand this
-	
 	// normalize screen space mouse position to ndc space
 	ndc_x := (mouse_position.x / viewport.base_size.x) * 2.0 - 1.0
 	ndc_y := 1.0 - (mouse_position.y / viewport.base_size.y) * 2.0
