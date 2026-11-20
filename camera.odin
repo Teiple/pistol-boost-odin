@@ -116,7 +116,11 @@ Free_Camera :: struct {
     mode_orthorgonal : bool,
 }
 
-free_camera_input :: proc(free_cam: ^Free_Camera, camera: ^Camera, ev : sapp.Event) {    
+free_camera_input :: proc(free_cam: ^Free_Camera, camera: ^Camera, ev : sapp.Event) {
+    if ev.modifiers & sapp.MODIFIER_CTRL != 0 {
+        return
+    }
+
     #partial switch ev.type {
         case .KEY_DOWN:
             #partial switch ev.key_code {
