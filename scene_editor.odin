@@ -40,6 +40,15 @@ box_face_normals := [Box_Face][3]f32 {
     .Positive_Z = {  0,  0,  1},
 }
 
+box_face_normal_indices := [Box_Face]int {
+    .Negative_X = 0,
+    .Positive_X = 0,
+    .Negative_Y = 1,
+    .Positive_Y = 1,
+    .Negative_Z = 2,
+    .Positive_Z = 2,
+}
+
 Platform_Variant :: union {
     Platform_Box,
     Platform_Slope,
@@ -365,17 +374,21 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     extend_distance -= scene.face_extend_state.initial_distance
 
                     if can_extend {
-                        min_size : [3]f32 : {.1, .1, .1}
+                        min_size := MIN_PLATFORM_SIZE
 
-                        platform.size = scene.face_extend_state.initial_size + linalg.abs(extend_direction) * extend_distance
-                        if platform.size.x < min_size.x || platform.size.y < min_size.y || platform.size.z < min_size.z {
-                            platform.size = linalg.max(platform.size, min_size)
-                        } else {
-                            position := scene.face_extend_state.initial_origin + scene.face_extend_state.initial_size * .5  
-                            position += extend_direction * extend_distance * .5
-                            
-                            platform.origin = position - platform.size * .5 
+                        extend_index := box_face_normal_indices[scene.face_extend_state.extend_face]
+                        prev_size    := scene.face_extend_state.initial_size[extend_index]
+                        
+                        platform.size[extend_index] = prev_size + linalg.abs(extend_direction[extend_index]) * extend_distance
+                        
+                        if platform.size[extend_index] < min_size[extend_index] {
+                            platform.size[extend_index] = min_size[extend_index]
                         }
+                        
+                        position := scene.face_extend_state.initial_origin + scene.face_extend_state.initial_size * .5  
+                        position += extend_direction * (platform.size[extend_index] - prev_size) * .5
+                        
+                        platform.origin = position - platform.size * .5
                     }
 
                     // Draw current extending face
