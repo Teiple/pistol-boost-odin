@@ -254,10 +254,11 @@ pending_action_set :: proc(pending_action : ^Pending_Action($T), current_value: 
     }
 }
 
-pending_action_clear :: proc(pending_action: ^Pending_Action($T)) {
-    // Don't clear existing set action (e.g. some elements in the same frame may require pending)
-    if _, keep := pending_action.(Pending_Action_Keep); keep {
-        pending_action^ = Pending_Action_Clear{}
+pending_action_clear :: proc(pending_action: ^Pending_Action($T), forced := false) {
+    // Normally, don't clear existing set action (e.g. some elements in the same frame may require pending)
+    _, kept := pending_action.(Pending_Action_Keep)
+    if forced || kept {
+	    pending_action^ = Pending_Action_Clear{}
     }
 }
 

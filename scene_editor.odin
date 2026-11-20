@@ -110,6 +110,7 @@ Scene_Editor :: struct {
     pending_selected  : Pending_Action(int),
     is_new_selection  : bool,
     selected_platform : Maybe(int),
+    delete_selected   : bool,
 
     modifier_state    : [Editor_Modifer_Key]Editor_Modifer_Key_State,
     face_extend_state : Face_Extend_State,
@@ -198,6 +199,14 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 platform := &scene.platforms[scene.selected_platform.?]
                 origin, size : ^[3]f32 = &platform.origin, &platform.size 
 
+                index_rect := ui_push_text(
+                    ui     = ui,
+                    text   = fmt.tprintf("Index %03d", scene.selected_platform.?),
+                    anchor = prop_anchor,
+                )
+
+                prop_anchor.offset.y += index_rect.w
+
                 prop_anchor.offset.y += editor_property_vector3(
                     ui,
                     label     = "Origin",
@@ -263,7 +272,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             ray_direction = ray_direction,
                             box_origin    = platform.origin,
                             box_size      = platform.size,
-                        ); hit && dist < min_select_dist {
+                        ); hit && (dist < min_select_dist || (dist == min_select_dist && i == scene.selected_platform)) {
                             min_select_dist = dist
                             closest_index   = i
                         }
@@ -525,6 +534,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         free_camera_update_3d(&scene.free_cam, ctx, dt)
+
+        // End Of Frame:
     
         // Update modifiers
         for &state in scene.modifier_state {
@@ -535,12 +546,21 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             }
         }
 
-        // Handle new selection at end of frame
+        // Handle deletion
+        if scene.delete_selected {
+            // we only use platform index for check selected platform for now, so unorder_remove kinda make sense
+            unordered_remove(&scene.platforms, scene.selected_platform.?)                    
+            pending_action_clear(&scene.pending_selected, forced = true)
+            
+            scene.delete_selected = false
+        }
+
+        // Handle new selection
         scene.is_new_selection = pending_resolve(&scene.pending_selected, &scene.selected_platform) && scene.selected_platform != nil
-    
+        
         if scene.is_new_selection {
             clear_hold_state(scene, ctx)
-        } 
+        }
     },
     draw_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, renderer : ^Renderer) {
         debug_draw_3d(&scene.debug_draw, renderer)
@@ -567,14 +587,24 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             }
         }
 
-        if (ev.modifiers & sapp.MODIFIER_CTRL != 0) && ev.type == .KEY_UP && ev.key_code == .D {
+        ctrl := ev.modifiers & sapp.MODIFIER_CTRL != 0
+
+        if ctrl && ev.type == .KEY_UP && ev.key_code == .D{
             // duplicate current selected platform
-            duplicate_offset : [3]f32 : {.1, .1, .1}
+            duplicate_offset : [3]f32 : {0, 0, 0}
             if selected_index, ok := scene.selected_platform.?; ok {
                 platform := scene.platforms[selected_index]
                 platform.origin += duplicate_offset
                 append(&scene.platforms, platform)
+                pending_action_set(&scene.pending_selected, &scene.selected_platform, len(scene.platforms) - 1)
             }
+        }
+
+        if scene.selected_platform != nil && 
+            ((ev.type == .KEY_UP && ev.key_code == .DELETE) ||
+             (ctrl && ev.type == .KEY_UP && ev.key_code == .X))
+        {
+            scene.delete_selected = true
         }
 
         free_camera_input(&scene.free_cam, ctx.camera, ev)
