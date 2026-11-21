@@ -113,6 +113,8 @@ Scene_Editor :: struct {
     selected_platform : Maybe(int),
     delete_selected   : bool,
     lock_z            : bool,
+    snap_to_grid      : bool,
+    grid_size         : f32,
 
     modifier_state    : [Editor_Modifer_Key]Editor_Modifer_Key_State,
     face_extend_state : Face_Extend_State,
@@ -124,7 +126,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     init = proc(scene : ^Scene_Editor, ctx : Game_Context) {        
         debug_draw_init(&scene.debug_draw)
 
-        ctx.camera.position = {2, 4, 10}
+        ctx.camera.position = {.5, 2, 10}
         free_camera_init_default(&scene.free_cam, ctx.camera, ctx.viewport)
 
         append(&scene.platforms,
@@ -140,8 +142,11 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     corner = .Bottom_Left,
                 }
             },
-
         )
+
+        scene.snap_to_grid = true
+        scene.lock_z       = true
+        scene.grid_size    = .5
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)        
@@ -161,7 +166,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             ui     = ui,
             sizing = { Percent{1}, STATUS_BAR_HEIGHT },
             anchor = { element = {0, 1}, parent = {0, 1} },
-            color  = hsv(0, 0, .2),
+            color  = hsv(0, 0, .25),
         )
 
         ui_push_container(ui, status_bar_rect)
@@ -190,16 +195,31 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 slot  = ui_slot(&status_layout, 140),
             )
 
-            temp := false
             ui_push_checkbox(
                 ui    = ui,
                 id    = "grid_snap",
                 text  = "Snap",
-                value = &temp,
+                value = &scene.snap_to_grid,
                 slot  = ui_slot(&status_layout, 140)
             )
+
+
+            if new_value, changed := ui_push_spinner(
+                ui              = ui,
+                id              = "grid_size",
+                up_control_id   = "grid_size:up",
+                down_control_id = "grid_size:down",
+                label           = "Grid Size",
+                min_val         = .1,
+                max_val         = 4,
+                step            = .1,
+                label_width     = 140, 
+                value           = scene.grid_size,
+                slot            = ui_slot(&status_layout, 230),
+            ); changed {
+                scene.grid_size = new_value
+            }
         }
-        
 
         // Inspector
         if scene.selected_platform != nil {
@@ -229,21 +249,21 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     editor_property_slope_corner(ui, &layout, "slope_corner", "Slope Corner", &slope.corner)
                 }
 
-                ui_push_label_button(
+                if _, clicked := ui_push_label_button(
                     ui   = ui,
                     id   = "snap_to_grid",
                     text = "Snap to Grid",
                     slot = ui_slot(&layout, 50),
-                )
+                ); clicked {
+                    snap_platform_to_grid(platform, scene.grid_size)
+                }
 
-                _, reset_z_clicked := ui_push_label_button(
+                if _, clicked := ui_push_label_button(
                     ui   = ui,
                     id   = "reset_z",
                     text = "Reset Z",
                     slot = ui_slot(&layout, 50),
-                )
-
-                if reset_z_clicked {
+                ); clicked {
                     platform.origin.z = 0
                 }
             }
@@ -401,7 +421,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         
                         platform.origin = position - platform.size * .5
                     
-                        snap_platform_to_grid(&platform, .2)
+                        if scene.snap_to_grid do snap_platform_to_grid(&platform, scene.grid_size)
                     }
 
                     // Draw current extending face
@@ -488,7 +508,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                                 scene.move_state.initial_height = point.y - platform.origin.y
                             } else {
                                 platform.origin.y = point.y - scene.move_state.initial_height
-                                snap_platform_to_grid(&platform, .2)
+                                if scene.snap_to_grid do snap_platform_to_grid(&platform, scene.grid_size)
                             }
                         }
                     } else {
@@ -504,7 +524,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             if scene.lock_z {
                                 platform.origin.z = scene.move_state.initial_origin.z
                             }
-                            snap_platform_to_grid(&platform, .2)
+                            if scene.snap_to_grid do snap_platform_to_grid(&platform, .2)
                         }
                     }
                 } 

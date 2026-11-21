@@ -281,8 +281,8 @@ ui_init :: proc(
         ui_init_lang_font(&ui.lang_fonts[font_cfg.language][.Normal], font_cfg)
     } 
 
-    ui.cur_ibuf_cap = 1024
-    ui.cur_vbuf_cap = 1024
+    ui.cur_ibuf_cap = 1024 * 2
+    ui.cur_vbuf_cap = 1024 * 2
 
     ui.vertices = make([dynamic]Vertex, 0, ui.cur_vbuf_cap)
     ui.indices  = make([dynamic]u16, 0, ui.cur_ibuf_cap)
@@ -1197,11 +1197,13 @@ ui_push_checkbox :: proc(
     value : ^bool,
     slot  : Ui_Slot,
 ) -> (rect : [4]f32, changed : bool) {
-    rect, _ = ui_push_rect(
+    is_clicked : bool
+    rect, is_clicked = ui_push_rect(
         ui     = ui,
         sizing = { slot.size.x, slot.size.y },
         anchor = slot.anchor,
-        color  = hsv(0, 0, .15)
+        color  = hsv(0, 0, .15),
+        interactive = { id = id, hovered_color = hsv(0, 0, .17)},    
     )
     ui_push_container(ui, rect)
     {
@@ -1209,13 +1211,15 @@ ui_push_checkbox :: proc(
         
         box_size :: 42
 
-        box_rect, is_clicked := ui_push_rect(
+        box_rect, box_clicked := ui_push_rect(
             ui          = ui,
             sizing      = { box_size, Percent{1} },
             anchor      = { element = {0, .5}, parent = {0, .5} },
-            interactive = { id = id, hovered_color = hsv(0, 0, .35)},
+            interactive = { id = fmt.tprintf("%v%v", id, ":checkbox"), hovered_color = hsv(0, 0, .35)},
             color       = hsv(0, 0, .3),
         )
+
+        is_clicked |= box_clicked
 
         ui_push_container(ui, box_rect)
         {
@@ -1236,12 +1240,12 @@ ui_push_checkbox :: proc(
             text   = text,
             anchor = { element = {0, .5}, parent = {0, .5}, offset = {box_size +  8, 0}} 
         )
-    
-        if is_clicked {
-            value^  = !value^
-            changed = true
-        }
     }
+
+    if is_clicked {
+        value^  = !value^
+        changed = true
+    }        
     return
 }
 
@@ -1362,7 +1366,7 @@ ui_push_spinner :: proc(
                     element = {0, .5},
                     parent  = {0, .5},
                 },
-                padding = {4, 0, 0, 0},
+                padding = {8, 0, 0, 0},
                 color   = label_color,
             )
         }
@@ -1380,7 +1384,6 @@ ui_push_spinner :: proc(
                 parent  = {0, .5},
                 offset  = {label_width, 0},
             },
-            padding_x = 4,
         )
 
         // 2 controls, up and down, to step through the value when text input is not focused
@@ -1499,11 +1502,11 @@ ui_push_text_edit :: proc(
     id         : Ui_Id,
     font_id    : Font_Id = .Normal,
     font_size  : f32 = 32,
-    padding_x  : f32 = 4,
+    padding_x  : f32 = 8,
     sizing     : [2]Sizing = { 200, 42 },
     anchor     : Anchor    = {},
 ) -> (current_text: string, submitted : bool) {
-	font        := &ui.lang_fonts[ui.language][font_id]
+	font := &ui.lang_fonts[ui.language][font_id]
         
     rect, is_clicked := ui_push_rect(
         ui,
@@ -1517,7 +1520,6 @@ ui_push_text_edit :: proc(
     )
 
     if is_clicked {
-        fmt.println("clicked", id)
         ui_focus_set(ui, id)
     }
     
