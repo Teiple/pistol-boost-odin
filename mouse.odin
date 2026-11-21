@@ -1,6 +1,7 @@
 package main
 
 import sapp "sokol-odin/sokol/app"
+import "core:fmt"
 
 Mouse_Button_State :: enum u8 {
     None,
@@ -17,11 +18,12 @@ Mouse_Button :: enum u8 {
 
 // confined mouse, never escape window
 Mouse_Input :: struct {
-    state       : [Mouse_Button]Mouse_Button_State,
-    position    : [2]f32, // relative to the viewport 
-    delta       : [2]f32, // relative to the viewport
-    sensitivity : [2]f32,
-    invert_y    : bool,
+    state        : [Mouse_Button]Mouse_Button_State,
+    position     : [2]f32, // relative to the viewport 
+    delta        : [2]f32, // relative to the viewport
+    sensitivity  : [2]f32,
+    invert_y     : bool,
+    scroll       : [2]f32, 
 }
 
 mouse_init :: proc(mouse : ^Mouse_Input) {
@@ -39,6 +41,10 @@ mouse_input :: proc(mouse : ^Mouse_Input, vp : ^Viewport, ev : sapp.Event) {
         mouse.delta    += move_delta 
         mouse.position += move_delta
         mouse.position  = viewport_confine_mouse_pos(vp, mouse.position)
+    }
+
+    if ev.type == .MOUSE_SCROLL {
+        mouse.scroll += {ev.scroll_x, ev.scroll_y} 
     }
 
     #partial switch ev.type {
@@ -74,7 +80,8 @@ mouse_input_end :: proc(mouse : ^Mouse_Input) {
             mb = .None
         }
     }
-    mouse.delta = 0
+    mouse.delta  = 0
+    mouse.scroll = 0
 }
 
 mouse_is_inside_rect :: proc(mouse : ^Mouse_Input, rect : [4]f32) -> bool {

@@ -575,6 +575,41 @@ ui_clear_held_id :: proc(ui :^Ui) {
     ui.builder.hold.held_id     = nil
 }
 
+ui_push_label_button :: proc(
+    ui     : ^Ui,
+    id     : Ui_Id,
+    text   : string,
+    sizing : [2]Sizing,
+    anchor : Anchor,
+) -> (rect : [4]f32, clicked: bool) {
+    rect, clicked = ui_push_rect(
+        ui          = ui,
+        sizing      = sizing,
+        anchor      = anchor,
+        color       = hsv(0, 0, .3),
+        interactive = {
+            id            = id,
+            hovered_color = hsv(0, 0, .35),
+            held_color    = hsv(0, 0, .28)
+        }
+    )
+
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+        
+        ui_push_text(
+            ui     = ui,
+            text   = text,
+            anchor = {
+                element = {.5, .5},
+                parent  = {.5, .5 },
+            }   
+        )
+    }
+    return
+}
+
 ui_push_text :: proc(
     ui             : ^Ui,
     text           : string,
@@ -1085,6 +1120,15 @@ ui_accept_pressed :: proc(ui : ^Ui) -> bool {
 
 ui_cancel_pressed :: proc(ui : ^Ui) -> bool {
     return .Escape in ui.builder.keyboard_input 
+}
+
+ui_push_checkbox :: proc(
+    ui     : ^Ui,
+    id     : Ui_Id,
+    text   : string, 
+    sizing : [2]Sizing, 
+) {
+    
 }
 
 ui_push_combo_box :: proc(

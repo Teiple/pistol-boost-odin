@@ -92,6 +92,7 @@ Move_State :: struct {
     initial_height   : f32,
     vertical         : bool,
     is_active        : bool,
+    lock_z           : bool,
 }
 
 Editor_Modifer_Key :: enum u8 {
@@ -121,13 +122,9 @@ Scene_Editor :: struct {
 SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     init = proc(scene : ^Scene_Editor, ctx : Game_Context) {        
         debug_draw_init(&scene.debug_draw)
-        
-        scene.free_cam = {
-            move_speed = 8,
-            look_speed = .01,
-            yaw        = math.PI,
-        }
-        ctx.camera.position = {0, 2, 10}
+
+        ctx.camera.position = {2, 4, 10}
+        free_camera_init_default(&scene.free_cam, ctx.camera, ctx.viewport)
 
         append(&scene.platforms,
             Platform {
@@ -153,29 +150,73 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         ui := ctx.ui
 
         // View mode selection
-        view_mode_rect, _ := ui_push_rect(
+        status_bar_rect, _ := ui_push_rect(
             ui     = ui,
-            sizing = { 220, STATUS_BAR_HEIGHT },
-            anchor = { element = {0, 1}, parent = {0, 1} } 
+            sizing = { PercentOffset{1, -INSPECTOR_WIDTH}, STATUS_BAR_HEIGHT },
+            anchor = { element = {0, 1}, parent = {0, 1} }, 
         )
-        
-        ui_push_container(ui, view_mode_rect)
+
+        ui_push_container(ui, status_bar_rect)
         {
             defer ui_pop_container(ui)
 
-            if new_value, changed := ui_push_combo_box(
-                ui      = ui,
-                id      = "view_mode",
-                width   = {170, 50},
-                height  = 50,
-                anchor  = { element = {0, 1}, parent = {0, 1} },         
-                options = [enum { Perspective, Orthorgonal }]string {
-                    .Perspective = "Perspective",
-                    .Orthorgonal = "Orthorgonal"
-                },
-                value   = scene.free_cam.mode_orthorgonal ? .Orthorgonal : .Perspective,
-            ); changed do scene.free_cam.mode_orthorgonal = new_value == .Orthorgonal
+            prop_anchor : Anchor
+
+            view_mode_rect, _ := ui_push_rect(
+                ui     = ui,
+                sizing = { 220, Percent{1} },
+                anchor = prop_anchor
+            )
+
+            prop_anchor.offset.x += 220
+            
+            ui_push_container(ui, view_mode_rect)
+            {
+                defer ui_pop_container(ui)
+
+                if new_value, changed := ui_push_combo_box(
+                    ui      = ui,
+                    id      = "view_mode",
+                    width   = {170, 50},
+                    height  = 50,
+                    anchor  = { element = {0, 1}, parent = {0, 1} },         
+                    options = [Free_Camera_Mode]string {
+                        .Perspective = "Perspective",
+                        .Ortho_Front = "Ortho Front",
+                        .Ortho_Back  = "Ortho Back",
+                    },
+                    value   = scene.free_cam.mode,
+                ); changed do scene.free_cam.mode = new_value
+            }
+
+            lock_z_rect, _ := ui_push_rect(
+                ui     = ui,
+                sizing = { 220, Percent{1} },
+                anchor = prop_anchor
+            )
+
+            ui_push_container(ui, lock_z_rect)
+            {
+                defer ui_pop_container(ui)
+
+                if new_value, changed := ui_push_combo_box(
+                    ui      = ui,
+                    id      = "view_mode",
+                    width   = {170, 50},
+                    height  = 50,
+                    anchor  = { element = {0, 1}, parent = {0, 1} },         
+                    options = [Free_Camera_Mode]string {
+                        .Perspective = "Perspective",
+                        .Ortho_Front = "Ortho Front",
+                        .Ortho_Back  = "Ortho Back",
+                    },
+                    value   = scene.free_cam.mode,
+                ); changed do scene.free_cam.mode = new_value
+            }
+
+            
         }
+        
 
         // Inspector
         if scene.selected_platform != nil {
@@ -239,7 +280,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 prop_anchor.offset.y += prop_gap
 
                 if slope, ok := &platform.variant.(Platform_Slope); ok {
-                    editor_property_slope_corner(
+                    prop_anchor.offset.y += editor_property_slope_corner(
                         ui     = ui,
                         value  = &slope.corner,
                         width  = inspector_width,
@@ -248,12 +289,37 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         anchor = prop_anchor,
                     )
                 }
+                prop_anchor.offset.y += prop_gap
+
+                snap_to_grid_rect, snap_to_grid_clicked := ui_push_label_button(
+                    ui     = ui,
+                    id     = "snap_to_grid",
+                    text   = "Snap to Grid",
+                    anchor = prop_anchor,
+                    sizing = {inspector_width, 50},
+                )
+                prop_anchor.offset.y += snap_to_grid_rect.w + prop_gap
+
+                reset_z_rect, reset_z_clicked := ui_push_label_button(
+                    ui     = ui,
+                    id     = "reset_z",
+                    text   = "Reset Z",
+                    anchor = prop_anchor,
+                    sizing = {inspector_width, 50},
+                )
+
+                if reset_z_clicked {
+                    platform.origin.z = 0
+                }
             }
         }
         
                 
     },
     update_3d = proc(scene : ^Scene_Editor, ctx : Game_Context, dt : f32) {
+        get_move_plane_normal :: proc(scene : ^Scene_Editor) -> [3]f32 {
+            return scene.free_cam.mode == .Perspective ? {0, 1, 0} : {0, 0, scene.free_cam.mode == .Ortho_Front ? 1 : -1}
+        }
         get_platform_under_cursor :: proc(scene : ^Scene_Editor, ctx : Game_Context) -> (index: int) {
             ray_origin, ray_direction := viewport_get_mouse_world_ray(
                 ctx.viewport,
@@ -296,12 +362,16 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         debug_draw_begin(&scene.debug_draw)
 
         clicked_platform := -1
+        clicked_on_3d    := false
 
-        if ctx.mouse.state[.Left] == .Pressed {
+        if ctx.mouse.state[.Left] == .Pressed && editor_is_position_in_3d_region(ctx, ctx.mouse.position) {
+            clicked_on_3d = true
             scene.focused_region =
-                editor_is_position_in_3d_region(ctx, ctx.mouse.position) ? .Region_3D : .Region_Ui  
-            clicked_platform = get_platform_under_cursor(scene, ctx)
+                editor_is_position_in_3d_region(ctx, ctx.mouse.position) ? .Region_3D : .Region_Ui
+            clicked_platform = get_platform_under_cursor(scene, ctx)  
         }
+
+
 
         debug_draw_push_grid(
             draw       = &scene.debug_draw,
@@ -344,7 +414,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         overlay = true,
                     )
 
-                    if ctx.mouse.state[.Left] == .Pressed {
+                    if clicked_on_3d {
                         if dist, ok := ray_to_line(
                             ray_origin       = ray_origin,
                             ray_direction    = ray_direction,
@@ -395,6 +465,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         position += extend_direction * (platform.size[extend_index] - prev_size) * .5
                         
                         platform.origin = position - platform.size * .5
+                    
+                        snap_platform_to_grid(&platform, .2)
                     }
 
                     // Draw current extending face
@@ -428,29 +500,30 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         if point, ok := ray_plane_intersect(
                             ray_origin    = ray_origin,
                             ray_direction = ray_direction,
-                            plane_normal  = {0, 1, 0}, 
+                            plane_normal  = get_move_plane_normal(scene), 
                             plane_point   = platform.origin, 
                         ); ok {
                             scene.move_state = {
                                 is_active      = true,
                                 initial_offset = point - platform.origin,
                             }
+                        }
 
-                            if scene.modifier_state[.Alt] == .Down {
-                                if dist, ok := ray_to_line(
-                                    ray_origin     = ray_origin,
-                                    ray_direction  = ray_direction,
-                                    line_direction = {0, 1, 0}, 
-                                    line_point     = platform.origin, 
-                                ); ok {
-                                    point := platform.origin + {0, 1, 0} * dist
+                        if scene.modifier_state[.Alt] == .Down {
+                            if dist, ok := ray_to_line(
+                                ray_origin     = ray_origin,
+                                ray_direction  = ray_direction,
+                                line_direction = {0, 1, 0}, 
+                                line_point     = platform.origin, 
+                            ); ok {
+                                point := platform.origin + {0, 1, 0} * dist
                                 
-                                    scene.move_state.initial_height = point.y - platform.origin.y
-                                    scene.move_state.vertical = true
-                                }
-
+                                scene.move_state.is_active      = true
+                                scene.move_state.vertical       = true
+                                scene.move_state.initial_height = point.y - platform.origin.y
                             }
                         }
+                        
                     }
                 }
                 
@@ -479,16 +552,21 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                                 scene.move_state.initial_height = point.y - platform.origin.y
                             } else {
                                 platform.origin.y = point.y - scene.move_state.initial_height
+                                snap_platform_to_grid(&platform, .2)
                             }
                         }
                     } else {
+                        move_plane_normal := get_move_plane_normal(scene)
                         if point, ok := ray_plane_intersect(
                             ray_origin    = ray_origin,
                             ray_direction = ray_direction,
-                            plane_normal  = {0, 1, 0}, 
+                            plane_normal  = move_plane_normal, 
                             plane_point   = platform.origin, 
                         ); ok {
-                            platform.origin = point - scene.move_state.initial_offset
+                            fmt.println(move_plane_normal)
+                            platform.origin = (1 - move_plane_normal) * (point - scene.move_state.initial_offset) + 
+                                platform.origin * move_plane_normal
+                            snap_platform_to_grid(&platform, .2)
                         }
                     }
                 } 
@@ -525,7 +603,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             clear_hold_state(scene, ctx)
         }
 
-        if ctx.mouse.state[.Left] == .Pressed && !has_hold_state(scene, ctx) {
+        if clicked_on_3d && !has_hold_state(scene, ctx) {
             if clicked_platform < 0 {
                 pending_action_clear(&scene.pending_selected)
             } else {
@@ -607,7 +685,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             scene.delete_selected = true
         }
 
-        free_camera_input(&scene.free_cam, ctx.camera, ev)
+        free_camera_input(&scene.free_cam, ev)
     },
 }
 
@@ -959,12 +1037,22 @@ ray_plane_intersect :: proc(
     plane_point   : [3]f32,
 ) -> (point : [3]f32, hit: bool){
     if abs(linalg.dot(ray_direction, plane_normal)) < 1e-4 {
+        fmt.println("dot: ", linalg.dot(ray_direction, plane_normal))
         return
     }
     
     t := linalg.dot(plane_point - ray_origin, plane_normal) / linalg.dot(ray_direction, plane_normal)
     
-    if t < 0 do return
+    if t < 0 {
+        fmt.println("t: ", t)
+        return
+    }
 
     return ray_origin + t * ray_direction, true
+}
+
+snap_platform_to_grid :: proc(platform : ^Platform, grid_unit : f32) {
+    platform.origin = linalg.round(platform.origin / grid_unit) * grid_unit
+    platform.size   = linalg.round(platform.size / grid_unit) * grid_unit
+    platform.size   = linalg.max(platform.size, MIN_PLATFORM_SIZE)
 }
