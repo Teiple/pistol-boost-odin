@@ -25,6 +25,73 @@ Anchor :: struct {
     offset    : [2]f32,
 }
 
+Ui_Layout_Axis :: enum u8 {
+    Vertical,
+    Horizontal,
+}
+
+Ui_Slot :: struct {
+    size   : [2]f32,
+    anchor : Anchor,
+}
+
+Ui_Layout :: struct {
+    axis       : Ui_Layout_Axis,
+    cursor     : [2]f32,
+    cross_size : f32,
+    gap        : f32,
+    pad        : [2]f32,
+}
+
+ui_layout_begin :: proc(ui: ^Ui, axis: Ui_Layout_Axis, pad: [2]f32 = {8, 8}, gap: f32 = 8) -> Ui_Layout {
+    parent := ui_top_container(ui)
+    cross: f32 = axis == .Vertical ? (parent.z - pad.x * 2) : (parent.w - pad.y * 2)
+    return {
+        axis       = axis,
+        cursor     = pad,
+        cross_size = cross,
+        gap        = gap,
+        pad        = pad,
+    }
+}
+
+ui_slot :: proc(layout: ^Ui_Layout, main_size: f32) -> Ui_Slot {
+    anchor := Anchor{ offset = layout.cursor }
+    size : [2]f32
+    if layout.axis == .Vertical {
+        size = { layout.cross_size, main_size }
+        layout.cursor.y += main_size + layout.gap
+    } else {
+        size = { main_size, layout.cross_size }
+        layout.cursor.x += main_size + layout.gap
+    }
+    return { size = size, anchor = anchor }
+}
+
+ui_layout_text :: proc(
+    ui        : ^Ui,
+    layout    : ^Ui_Layout,
+    text      : string,
+    font_id   : Font_Id = .Normal,
+    font_size : f32     = 32,
+    color     : [4]f32  = 1,
+) -> [4]f32 {
+    rect := ui_push_text(
+        ui        = ui,
+        text      = text,
+        font_id   = font_id,
+        font_size = font_size,
+        color     = color,
+        anchor    = { offset = layout.cursor },
+    )
+    if layout.axis == .Vertical {
+        layout.cursor.y += rect.w + layout.gap
+    } else {
+        layout.cursor.x += rect.z + layout.gap
+    }
+    return rect
+}
+
 Sizing :: union {Fixed, Percent, PercentOffset}
 
 Fixed :: f32
@@ -55,6 +122,7 @@ Ui_Icon :: enum u8 {
     Minus,
     Up_Arrow,
     Down_Arrow,
+    Tick,
 }
 
 Font :: struct {
@@ -104,6 +172,7 @@ ui_icon_files : [Ui_Icon][]byte = {
     .Down_Arrow  = #load("assets/images/down_arrow.png"),
     .Plus        = #load("assets/images/plus.png"),
     .Minus       = #load("assets/images/minus.png"),
+    .Tick        = #load("assets/images/tick.png"),
 }
 
 Ui_Keys :: enum u8 {
@@ -576,22 +645,21 @@ ui_clear_held_id :: proc(ui :^Ui) {
 }
 
 ui_push_label_button :: proc(
-    ui     : ^Ui,
-    id     : Ui_Id,
-    text   : string,
-    sizing : [2]Sizing,
-    anchor : Anchor,
+    ui   : ^Ui,
+    id   : Ui_Id,
+    text : string,
+    slot : Ui_Slot,
 ) -> (rect : [4]f32, clicked: bool) {
     rect, clicked = ui_push_rect(
         ui          = ui,
-        sizing      = sizing,
-        anchor      = anchor,
+        sizing      = { slot.size.x, slot.size.y },
+        anchor      = slot.anchor,
         color       = hsv(0, 0, .3),
         interactive = {
             id            = id,
             hovered_color = hsv(0, 0, .35),
-            held_color    = hsv(0, 0, .28)
-        }
+            held_color    = hsv(0, 0, .28),
+        },
     )
 
     ui_push_container(ui, rect)
@@ -1123,29 +1191,74 @@ ui_cancel_pressed :: proc(ui : ^Ui) -> bool {
 }
 
 ui_push_checkbox :: proc(
-    ui     : ^Ui,
-    id     : Ui_Id,
-    text   : string, 
-    sizing : [2]Sizing, 
-) {
+    ui    : ^Ui,
+    id    : Ui_Id,
+    text  : string,
+    value : ^bool,
+    slot  : Ui_Slot,
+) -> (rect : [4]f32, changed : bool) {
+    rect, _ = ui_push_rect(
+        ui     = ui,
+        sizing = { slot.size.x, slot.size.y },
+        anchor = slot.anchor,
+        color  = hsv(0, 0, .15)
+    )
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+        
+        box_size :: 42
+
+        box_rect, is_clicked := ui_push_rect(
+            ui          = ui,
+            sizing      = { box_size, Percent{1} },
+            anchor      = { element = {0, .5}, parent = {0, .5} },
+            interactive = { id = id, hovered_color = hsv(0, 0, .35)},
+            color       = hsv(0, 0, .3),
+        )
+
+        ui_push_container(ui, box_rect)
+        {
+            defer ui_pop_container(ui)
+            if value^ {
+                ui_push_rect(
+                    ui      = ui,
+                    sizing  = { 32, 32 },
+                    anchor  = { element = {.5, .5}, parent = {.5, .5} },
+                    color   = hsv(0, 0,  1),
+                    icon    = .Tick,
+                )
+            }
+        }
+
+        ui_push_text(
+            ui     = ui,
+            text   = text,
+            anchor = { element = {0, .5}, parent = {0, .5}, offset = {box_size +  8, 0}} 
+        )
     
+        if is_clicked {
+            value^  = !value^
+            changed = true
+        }
+    }
+    return
 }
 
 ui_push_combo_box :: proc(
-    ui      : ^Ui,
-    id      : Ui_Id,
-    options : [$T]string,
-    value   : T,
-    width   : [2]f32 = { 100, 50 },
-    height  : f32    = 42,
-    anchor  : Anchor = {},
+    ui           : ^Ui,
+    id           : Ui_Id,
+    options      : [$T]string,
+    value        : T,
+    slot         : Ui_Slot,
+    button_width : f32 = 50,
 ) -> (new_value : T, changed : bool) where
     intrinsics.type_is_enum(T), intrinsics.type_enum_is_contiguous(T)
 {
     rect, _ := ui_push_rect(
         ui     = ui,
-        anchor = anchor,
-        sizing = { width.x + width.y, height }, 
+        anchor = slot.anchor,
+        sizing = { slot.size.x, slot.size.y }, 
     )
     ui_push_container(ui, rect)
     {
@@ -1153,12 +1266,12 @@ ui_push_combo_box :: proc(
 
         option_rect, is_clicked := ui_push_rect(
             ui          = ui,
-            sizing      = {width.x , Percent{1}},
+            sizing      = { slot.size.x - button_width, Percent{1} },
             color       = hsv(0, 0, .3),
             interactive = {
                 id            = id,
                 hovered_color = hsv(0, 0, .35),
-            }
+            },
         )
 
         ui_push_container(ui, option_rect)
@@ -1169,13 +1282,13 @@ ui_push_combo_box :: proc(
                 ui      = ui,
                 text    = options[value],
                 anchor  = {element = {0, .5}, parent = {0, .5}},
-                padding = {8, 0, 0, 0}  
+                padding = {8, 0, 0, 0},
             )
         }
 
         count_rect, _ := ui_push_rect(
             ui     = ui,
-            sizing = {width.y , Percent{1}},
+            sizing = { button_width, Percent{1} },
             anchor = {element = {1, 0}, parent = {1, 0}},
             color  = hsv(0, 0, .15),
         )
@@ -1201,25 +1314,25 @@ ui_push_combo_box :: proc(
 }
 
 ui_push_spinner :: proc(
-    ui              : ^Ui,
-    id              : Ui_Id,
-    up_control_id   : Ui_Id,
-    down_control_id : Ui_Id,
-    value           : f32,
-    label           : string,
-    step            : f32,
-    min_val         : Maybe(f32) = nil,
-    max_val         : Maybe(f32) = nil,
-    width           : [3]f32     = { 100, 50, 20 },
-    height          : f32        = 42,
-    label_color     : [4]f32     = 1, 
-    anchor          : Anchor     = {},
-    mouse_drag_sensitivity : f32 = .1,
+    ui                     : ^Ui,
+    id                     : Ui_Id,
+    up_control_id          : Ui_Id,
+    down_control_id        : Ui_Id,
+    value                  : f32,
+    label                  : string,
+    step                   : f32,
+    slot                   : Ui_Slot,
+    min_val                : Maybe(f32) = nil,
+    max_val                : Maybe(f32) = nil,
+    label_width            : f32        = 32,
+    btn_width              : f32        = 20,
+    label_color            : [4]f32     = 1, 
+    mouse_drag_sensitivity : f32        = .1,
 ) -> (new_value : f32, changed: bool) {
     rect, _ := ui_push_rect(
         ui,
-        anchor = anchor,
-        sizing = { width.x + width.y + width.z, height}, 
+        anchor = slot.anchor,
+        sizing = { slot.size.x, slot.size.y }, 
         color  = hsv(0, 0, .15),
     )
 
@@ -1230,7 +1343,7 @@ ui_push_spinner :: proc(
         // Content rect
         label_rect, _ := ui_push_rect(                
             ui,
-            sizing = { width.x, height},
+            sizing = { label_width, slot.size.y },
             anchor = {
                 element = {0, .5},
                 parent  = {0, .5},
@@ -1256,15 +1369,16 @@ ui_push_spinner :: proc(
 
         text := fmt.tprintf("%.4g", value)
 
+        text_edit_width := slot.size.x - label_width - btn_width
         new_text, submitted := ui_push_text_edit(
             ui, 
             id     = id,
             text   = text,
-            sizing = { width.y, height },
+            sizing = { text_edit_width, slot.size.y },
             anchor = {
                 element = {0, .5},
                 parent  = {0, .5},
-                offset  = {width.x, 0},
+                offset  = {label_width, 0},
             },
             padding_x = 4,
         )
@@ -1272,7 +1386,7 @@ ui_push_spinner :: proc(
         // 2 controls, up and down, to step through the value when text input is not focused
         up_control_rect, up_clicked := ui_push_rect(
             ui,
-            sizing      = { width.z, height * .5 },
+            sizing      = { btn_width, slot.size.y * .5 },
             anchor      = {
                 element = {1, 0},
                 parent  = {1, 0},
@@ -1300,7 +1414,7 @@ ui_push_spinner :: proc(
        
         down_control_rect, down_clicked := ui_push_rect(
             ui,
-            sizing = { width.z, height * .5 },
+            sizing = { btn_width, slot.size.y * .5 },
             anchor = {
                 element = {1, 1},
                 parent  = {1, 1},

@@ -89,10 +89,10 @@ Face_Extend_State :: struct {
 
 Move_State :: struct {
     initial_offset   : [3]f32,
+    initial_origin   : [3]f32,
     initial_height   : f32,
     vertical         : bool,
     is_active        : bool,
-    lock_z           : bool,
 }
 
 Editor_Modifer_Key :: enum u8 {
@@ -112,6 +112,7 @@ Scene_Editor :: struct {
     is_new_selection  : bool,
     selected_platform : Maybe(int),
     delete_selected   : bool,
+    lock_z            : bool,
 
     modifier_state    : [Editor_Modifer_Key]Editor_Modifer_Key_State,
     face_extend_state : Face_Extend_State,
@@ -153,68 +154,50 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         status_bar_rect, _ := ui_push_rect(
             ui     = ui,
             sizing = { PercentOffset{1, -INSPECTOR_WIDTH}, STATUS_BAR_HEIGHT },
-            anchor = { element = {0, 1}, parent = {0, 1} }, 
+            anchor = { element = {0, 1}, parent = {0, 1} },
+        )
+
+        ui_push_rect(
+            ui     = ui,
+            sizing = { Percent{1}, STATUS_BAR_HEIGHT },
+            anchor = { element = {0, 1}, parent = {0, 1} },
+            color  = hsv(0, 0, .2),
         )
 
         ui_push_container(ui, status_bar_rect)
         {
             defer ui_pop_container(ui)
 
-            prop_anchor : Anchor
+            status_layout := ui_layout_begin(ui, .Horizontal, pad = 4, gap = 8)
 
-            view_mode_rect, _ := ui_push_rect(
-                ui     = ui,
-                sizing = { 220, Percent{1} },
-                anchor = prop_anchor
+            if new_value, changed := ui_push_combo_box(
+                ui      = ui,
+                id      = "view_mode",
+                slot    = ui_slot(&status_layout, 220),
+                options = [Free_Camera_Mode]string {
+                    .Perspective = "Perspective",
+                    .Ortho_Front = "Ortho Front",
+                    .Ortho_Back  = "Ortho Back",
+                },
+                value   = scene.free_cam.mode,
+            ); changed do scene.free_cam.mode = new_value
+
+            ui_push_checkbox(
+                ui    = ui,
+                id    = "lock_z",
+                text  = "Lock Z",
+                value = &scene.lock_z,
+                slot  = ui_slot(&status_layout, 140),
             )
 
-            prop_anchor.offset.x += 220
-            
-            ui_push_container(ui, view_mode_rect)
-            {
-                defer ui_pop_container(ui)
-
-                if new_value, changed := ui_push_combo_box(
-                    ui      = ui,
-                    id      = "view_mode",
-                    width   = {170, 50},
-                    height  = 50,
-                    anchor  = { element = {0, 1}, parent = {0, 1} },         
-                    options = [Free_Camera_Mode]string {
-                        .Perspective = "Perspective",
-                        .Ortho_Front = "Ortho Front",
-                        .Ortho_Back  = "Ortho Back",
-                    },
-                    value   = scene.free_cam.mode,
-                ); changed do scene.free_cam.mode = new_value
-            }
-
-            lock_z_rect, _ := ui_push_rect(
-                ui     = ui,
-                sizing = { 220, Percent{1} },
-                anchor = prop_anchor
+            temp := false
+            ui_push_checkbox(
+                ui    = ui,
+                id    = "grid_snap",
+                text  = "Snap",
+                value = &temp,
+                slot  = ui_slot(&status_layout, 140)
             )
-
-            ui_push_container(ui, lock_z_rect)
-            {
-                defer ui_pop_container(ui)
-
-                if new_value, changed := ui_push_combo_box(
-                    ui      = ui,
-                    id      = "view_mode",
-                    width   = {170, 50},
-                    height  = 50,
-                    anchor  = { element = {0, 1}, parent = {0, 1} },         
-                    options = [Free_Camera_Mode]string {
-                        .Perspective = "Perspective",
-                        .Ortho_Front = "Ortho Front",
-                        .Ortho_Back  = "Ortho Back",
-                    },
-                    value   = scene.free_cam.mode,
-                ); changed do scene.free_cam.mode = new_value
-            }
-
-            
         }
         
 
@@ -227,85 +210,37 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 color  = hsv(0, 0, .25),
             )
         
-            inspector_padding :: 8
-            inspector_width   := inspector_rect.z - inspector_padding * 2
-
             ui_push_container(ui, inspector_rect)
             {
                 defer ui_pop_container(ui)
 
-                prop_gap    :: 16
-                prop_anchor : Anchor = { offset = {inspector_padding, inspector_padding} }
+                layout := ui_layout_begin(ui, .Vertical, pad = 8, gap = 8)
 
                 platform := &scene.platforms[scene.selected_platform.?]
                 origin, size : ^[3]f32 = &platform.origin, &platform.size 
 
-                index_rect := ui_push_text(
-                    ui     = ui,
-                    text   = fmt.tprintf("Index %03d", scene.selected_platform.?),
-                    anchor = prop_anchor,
-                )
+                ui_layout_text(ui, &layout, fmt.tprintf("Index %03d", scene.selected_platform.?))
 
-                prop_anchor.offset.y += index_rect.w
+                editor_property_vector3(ui, &layout, "origin", "Origin", origin)
 
-                prop_anchor.offset.y += editor_property_vector3(
-                    ui,
-                    label     = "Origin",
-                    id        = "origin",
-                    axis_ids  = {
-                        { text_edit = "origin:x", up_control = "origin:x:up", down_control = "origin:x:down"},
-                        { text_edit = "origin:y", up_control = "origin:y:up", down_control = "origin:y:down"},
-                        { text_edit = "origin:z", up_control = "origin:z:up", down_control = "origin:z:down"},
-                    },
-                    value     = origin,
-                    width     = inspector_width,
-                    anchor    = prop_anchor,
-                )
-                prop_anchor.offset.y += prop_gap
-
-                prop_anchor.offset.y += editor_property_vector3(
-                    ui,
-                    label     = "Size",
-                    id        = "size",
-                    min_value = MIN_PLATFORM_SIZE,
-                    axis_ids  = {
-                        { text_edit = "size:x", up_control = "size:x:up", down_control = "size:x:down"},
-                        { text_edit = "size:y", up_control = "size:y:up", down_control = "size:y:down"},
-                        { text_edit = "size:z", up_control = "size:z:up", down_control = "size:z:down"},
-                    },
-                    value     = size,
-                    width     = inspector_width,
-                    anchor    = prop_anchor,
-                )
-                prop_anchor.offset.y += prop_gap
+                editor_property_vector3(ui, &layout, "size", "Size", size, MIN_PLATFORM_SIZE)
 
                 if slope, ok := &platform.variant.(Platform_Slope); ok {
-                    prop_anchor.offset.y += editor_property_slope_corner(
-                        ui     = ui,
-                        value  = &slope.corner,
-                        width  = inspector_width,
-                        id     = "slope_corner",
-                        label  = "Slope Corner",
-                        anchor = prop_anchor,
-                    )
+                    editor_property_slope_corner(ui, &layout, "slope_corner", "Slope Corner", &slope.corner)
                 }
-                prop_anchor.offset.y += prop_gap
 
-                snap_to_grid_rect, snap_to_grid_clicked := ui_push_label_button(
-                    ui     = ui,
-                    id     = "snap_to_grid",
-                    text   = "Snap to Grid",
-                    anchor = prop_anchor,
-                    sizing = {inspector_width, 50},
+                ui_push_label_button(
+                    ui   = ui,
+                    id   = "snap_to_grid",
+                    text = "Snap to Grid",
+                    slot = ui_slot(&layout, 50),
                 )
-                prop_anchor.offset.y += snap_to_grid_rect.w + prop_gap
 
-                reset_z_rect, reset_z_clicked := ui_push_label_button(
-                    ui     = ui,
-                    id     = "reset_z",
-                    text   = "Reset Z",
-                    anchor = prop_anchor,
-                    sizing = {inspector_width, 50},
+                _, reset_z_clicked := ui_push_label_button(
+                    ui   = ui,
+                    id   = "reset_z",
+                    text = "Reset Z",
+                    slot = ui_slot(&layout, 50),
                 )
 
                 if reset_z_clicked {
@@ -506,6 +441,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             scene.move_state = {
                                 is_active      = true,
                                 initial_offset = point - platform.origin,
+                                initial_origin = platform.origin,
                             }
                         }
 
@@ -563,9 +499,11 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             plane_normal  = move_plane_normal, 
                             plane_point   = platform.origin, 
                         ); ok {
-                            fmt.println(move_plane_normal)
                             platform.origin = (1 - move_plane_normal) * (point - scene.move_state.initial_offset) + 
                                 platform.origin * move_plane_normal
+                            if scene.lock_z {
+                                platform.origin.z = scene.move_state.initial_origin.z
+                            }
                             snap_platform_to_grid(&platform, .2)
                         }
                     }
@@ -776,89 +714,59 @@ ray_slope_interesect :: proc(
 
 editor_property_slope_corner :: proc(
     ui     : ^Ui,
+    layout : ^Ui_Layout,
     id     : Ui_Id,
-    width  : f32,
     label  : string,
     value  : ^Slope_Corner,
-    anchor : Anchor,
-) -> (height: f32) {
-    row_height :: 42
-    row_gap    :: 8
-
-    anchor := anchor
-    header_rect := ui_push_text(
-        ui,
-        text   = label,
-        anchor = anchor,
-    )
-    anchor.offset.y += header_rect.w + row_gap
+) {
+    ui_layout_text(ui, layout, label)
 
     if new_value, changed := ui_push_combo_box(
         ui      = ui,
         id      = id,
         value   = value^,
-        width   = {width - 50, 50},
+        slot    = ui_slot(layout, 42),
         options = [Slope_Corner]string {
             .Bottom_Left  = "Bottom Left",
             .Bottom_Right = "Bottom Right",
             .Top_Left     = "Top Left",
             .Top_Right    = "Top Right",
         },
-        anchor  = anchor,
     ); changed do value^ = new_value
-
-    return header_rect.w + row_gap + 50
 }
 
 editor_property_vector3 :: proc(
     ui        : ^Ui,
+    layout    : ^Ui_Layout,
     id        : Ui_Id,
-    value     : ^[3]f32,
-    axis_ids  : [3]struct {
-        text_edit    : Ui_Id,
-        up_control   : Ui_Id,
-        down_control : Ui_Id,
-    },
     label     : string,
-    width     : f32,
-    anchor    : Anchor,
-    min_value : Maybe([3]f32) = nil, 
-) -> (height: f32) {
-    axis_width  : [3]f32 = {32, width - 52, 20}
-    axis_height :: 42
-    axis_gap    :: 8
+    value     : ^[3]f32,
+    min_value : Maybe([3]f32) = nil,
+) {
+    ui_layout_text(ui, layout, label)
 
-    anchor := anchor
+    axis_labels   : [3]string = {"X", "Y", "Z"}
+    axis_suffixes : [3]string = {"x", "y", "z"}
+    axis_colors   : [3]f32    = {332, 100, 200}
 
-    header_rect := ui_push_text(
-        ui,
-        text   = label,
-        anchor = anchor,
-    )
-
-    anchor.offset.y += header_rect.w + axis_gap
-    axis_labels : [3]string = {"X", "Y", "Z"}
-    axis_colors : [3]f32    = {332, 100, 200}
-    
     for i in 0..<3 {
+        text_id := fmt.tprintf("%v:%s", id, axis_suffixes[i])
+        up_id   := fmt.tprintf("%v:%s:up", id, axis_suffixes[i])
+        down_id := fmt.tprintf("%v:%s:down", id, axis_suffixes[i])
+
         if new_value, changed := ui_push_spinner(
-            ui,
-            id              = axis_ids[i].text_edit,
-            up_control_id   = axis_ids[i].up_control,
-            down_control_id = axis_ids[i].down_control,
-            label           = axis_labels[i], 
+            ui              = ui,
+            id              = text_id,
+            up_control_id   = up_id,
+            down_control_id = down_id,
+            label           = axis_labels[i],
             value           = value[i],
             step            = .01,
+            slot            = ui_slot(layout, 42),
             min_val         = min_value != nil ? min_value.?[0] : nil,
             label_color     = hsv(axis_colors[i]),
-            height          = axis_height,
-            width           = axis_width,
-            anchor          = anchor,
         ); changed do value[i] = new_value
-        anchor.offset.y += axis_height + axis_gap
     }
-
-    return header_rect.w + 3 * axis_gap + 3 * axis_height
 }
 
 ray_box_intersect :: proc(
