@@ -163,7 +163,7 @@ editor_push_snapshot :: proc(scene : ^Scene_Editor, skip_time_check := false) {
     snapshot := editor_snapshot_make(scene)
 
     scene.undo_stack_current += 1
-    scene.undo_stack_max = max(scene.undo_stack_max, scene.undo_stack_current)
+    scene.undo_stack_max = scene.undo_stack_current
 
     resolved_index := scene.undo_stack_current % len(scene.undo_stack)
     delete(scene.undo_stack[resolved_index].platforms, allocator = context.allocator)
@@ -546,20 +546,29 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         min_size := MIN_PLATFORM_SIZE
 
                         extend_index := box_face_normal_indices[scene.face_extend_state.extend_face]
-                        prev_size    := scene.face_extend_state.initial_size[extend_index]
-                        
-                        platform.size[extend_index] = prev_size + linalg.abs(extend_direction[extend_index]) * extend_distance
-                        
-                        if platform.size[extend_index] < min_size[extend_index] {
-                            platform.size[extend_index] = min_size[extend_index]
+                        initial_origin := scene.face_extend_state.initial_origin
+                        initial_size := scene.face_extend_state.initial_size
+
+                        if extend_direction[extend_index] > 0 {
+                            current_face_pos := initial_origin[extend_index] + initial_size[extend_index] + extend_distance
+                            if scene.snap_to_grid {
+                                current_face_pos = linalg.round(current_face_pos / scene.grid_size) * scene.grid_size
+                            }
+                            platform.origin = initial_origin
+                            platform.size = initial_size
+                            platform.size[extend_index] = max(min_size[extend_index], current_face_pos - initial_origin[extend_index])
+                        } else {
+                            fixed_opposite := initial_origin[extend_index] + initial_size[extend_index]
+                            current_face_pos := initial_origin[extend_index] - extend_distance
+                            if scene.snap_to_grid {
+                                current_face_pos = linalg.round(current_face_pos / scene.grid_size) * scene.grid_size
+                            }
+                            current_face_pos = min(current_face_pos, fixed_opposite - min_size[extend_index])
+                            platform.origin = initial_origin
+                            platform.origin[extend_index] = current_face_pos
+                            platform.size = initial_size
+                            platform.size[extend_index] = fixed_opposite - current_face_pos
                         }
-                        
-                        position := scene.face_extend_state.initial_origin + scene.face_extend_state.initial_size * .5  
-                        position += extend_direction * (platform.size[extend_index] - prev_size) * .5
-                        
-                        platform.origin = position - platform.size * .5
-                    
-                        if scene.snap_to_grid do snap_platform_to_grid(&platform, scene.grid_size)
                     }
 
                     // Draw current extending face
@@ -646,7 +655,9 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                                 scene.move_state.initial_height = point.y - platform.origin.y
                             } else {
                                 platform.origin.y = point.y - scene.move_state.initial_height
-                                if scene.snap_to_grid do snap_platform_to_grid(&platform, scene.grid_size)
+                                if scene.snap_to_grid {
+                                    platform.origin.y = linalg.round(platform.origin.y / scene.grid_size) * scene.grid_size
+                                }
                             }
                         }
                     } else {
@@ -660,10 +671,12 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             scene.move_state.has_delta |= ctx.mouse.delta != 0
                             platform.origin = (1 - move_plane_normal) * (point - scene.move_state.initial_offset) + 
                                 platform.origin * move_plane_normal
+                            if scene.snap_to_grid {
+                                platform.origin = linalg.round(platform.origin / scene.grid_size) * scene.grid_size
+                            }
                             if scene.lock_z {
                                 platform.origin.z = scene.move_state.initial_origin.z
                             }
-                            if scene.snap_to_grid do snap_platform_to_grid(&platform, .2)
                         }
                     }
                 } 
