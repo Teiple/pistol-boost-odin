@@ -1,15 +1,17 @@
 package main
 
 import "core:fmt"
+import "core:time"
 import "core:slice"
 import "core:math/linalg"
 import "core:math"
 import "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
-INSPECTOR_WIDTH   :: 300
+INSPECTOR_WIDTH   :: 250
 STATUS_BAR_HEIGHT :: 50
 MIN_PLATFORM_SIZE :: [3]f32{ .1, .1, .1}
+DEFAULT_UNDO_TIMEOUT :: 300 * time.Millisecond
 
 Editor_Snapshot :: struct {
     platforms         : []Platform,
@@ -95,6 +97,7 @@ Face_Extend_State :: struct {
     initial_distance : f32,
     extend_face      : Box_Face,
     is_active        : bool,
+    has_delta        : bool,
 }
 
 Move_State :: struct {
@@ -103,6 +106,7 @@ Move_State :: struct {
     initial_height   : f32,
     vertical         : bool,
     is_active        : bool,
+    has_delta        : bool,
 }
 
 Editor_Modifer_Key :: enum u8 {
@@ -116,7 +120,8 @@ Editor_Modifer_Key_State :: enum {
 MAX_UNDO_SNAPSHOTS :: 24
 
 Editor_Frame_Action :: enum u8 {
-    Delete_Selected,
+    Delete,
+    Duplicate,
     Undo, Redo,
 }
 
@@ -138,9 +143,10 @@ Scene_Editor :: struct {
     move_state        : Move_State,
     focused_region    : Editor_Region,
 
-    undo_stack         : [MAX_UNDO_SNAPSHOTS]Editor_Snapshot,
-    undo_stack_current : int,
-    undo_stack_max     : int,
+    undo_stack          : [MAX_UNDO_SNAPSHOTS]Editor_Snapshot,
+    undo_stack_current  : int,
+    undo_stack_max      : int,
+    last_undo_time      : time.Tick,
 }
 
 editor_snapshot_make :: proc(scene : ^Scene_Editor) -> Editor_Snapshot {
@@ -150,41 +156,55 @@ editor_snapshot_make :: proc(scene : ^Scene_Editor) -> Editor_Snapshot {
     }
 }
 
-editor_push_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot) {
+editor_push_snapshot :: proc(scene : ^Scene_Editor, skip_time_check := false) {
+    if !skip_time_check && time.tick_diff(scene.last_undo_time, time.tick_now()) <= DEFAULT_UNDO_TIMEOUT {
+        return
+    }
+    snapshot := editor_snapshot_make(scene)
+
     scene.undo_stack_current += 1
     scene.undo_stack_max = max(scene.undo_stack_max, scene.undo_stack_current)
-    
-    for index in scene.undo_stack_current..=scene.undo_stack_max {
-        resolved_index := scene.undo_stack_current % len(scene.undo_stack)
-        delete(scene.undo_stack[resolved_index].platforms, allocator = context.allocator)
-    }
 
     resolved_index := scene.undo_stack_current % len(scene.undo_stack)
+    delete(scene.undo_stack[resolved_index].platforms, allocator = context.allocator)
+
     scene.undo_stack[resolved_index] = snapshot
+
+    scene.last_undo_time = time.tick_now()
 }
 
 editor_restore_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot) {
     delete(scene.platforms)
     scene.platforms         = slice.clone_to_dynamic(snapshot.platforms[:])
-    scene.selected_platform = snapshot.selected_platform >= 0 ? snapshot.selected_platform : nil
+    if snapshot.selected_platform >= 0 {
+        pending_action_set(&scene.pending_selected, &scene.selected_platform, snapshot.selected_platform, forced = true)
+    } else {
+        pending_action_clear(&scene.pending_selected, forced = true)
+    }
 }
 
 editor_undo :: proc(scene : ^Scene_Editor) {
-    if scene.undo_stack_current == 0 || scene.undo_stack_current == scene.undo_stack_max - len(scene.undo_stack) + 1 {
-        fmt.println("Nothing to undo")
+    if !editor_has_undo(scene) {
         return
     } 
     scene.undo_stack_current -= 1
     editor_restore_snapshot(scene, scene.undo_stack[scene.undo_stack_current % len(scene.undo_stack)])
 }
 
+editor_has_undo :: proc(scene : ^Scene_Editor) -> bool {
+    return scene.undo_stack_current > 0 && scene.undo_stack_current > scene.undo_stack_max - len(scene.undo_stack) + 1
+}
+
 editor_redo :: proc(scene : ^Scene_Editor) {
-    if scene.undo_stack_current == scene.undo_stack_max {
-        fmt.println("Nothing to redo")
+    if !editor_has_redo(scene) {
         return
     } 
     scene.undo_stack_current += 1
     editor_restore_snapshot(scene, scene.undo_stack[scene.undo_stack_current % len(scene.undo_stack)])
+}
+
+editor_has_redo :: proc(scene : ^Scene_Editor) -> bool {
+    return scene.undo_stack_current < scene.undo_stack_max
 }
 
 SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
@@ -214,7 +234,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         scene.grid_size    = .5    
 
         scene.undo_stack_current = -1
-        editor_push_snapshot(scene, editor_snapshot_make(scene))
+        editor_push_snapshot(scene)
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)        
@@ -226,7 +246,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         ui := ctx.ui
 
-        // View mode selection
+        // Status bar
         status_bar_rect, _ := ui_push_rect(
             ui     = ui,
             sizing = { PercentOffset{1, -INSPECTOR_WIDTH}, STATUS_BAR_HEIGHT },
@@ -244,12 +264,12 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         {
             defer ui_pop_container(ui)
 
-            status_layout := ui_layout_begin(ui, .Horizontal, pad = 4, gap = 8)
+            layout := ui_layout_begin(ui, .Horizontal, pad = 4, gap = 8)
 
             if new_value, changed := ui_push_combo_box(
                 ui      = ui,
                 id      = "view_mode",
-                slot    = ui_slot(&status_layout, 220),
+                slot    = ui_slot(&layout, 220),
                 options = [Free_Camera_Mode]string {
                     .Perspective = "Perspective",
                     .Ortho_Front = "Ortho Front",
@@ -263,7 +283,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 id    = "lock_z",
                 text  = "Lock Z",
                 value = &scene.lock_z,
-                slot  = ui_slot(&status_layout, 140),
+                slot  = ui_slot(&layout, 140),
             )
 
             ui_push_checkbox(
@@ -271,7 +291,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 id    = "grid_snap",
                 text  = "Snap",
                 value = &scene.snap_to_grid,
-                slot  = ui_slot(&status_layout, 140)
+                slot  = ui_slot(&layout, 140)
             )
 
             if new_value, changed := ui_push_spinner(
@@ -285,9 +305,29 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 step            = .125,
                 label_width     = 140,
                 value           = scene.grid_size,
-                slot            = ui_slot(&status_layout, 250),
+                slot            = ui_slot(&layout, 250),
             ); changed {
                 scene.grid_size = new_value
+            }
+
+            if _, clicked := ui_push_label_button(
+                ui       = ui,
+                id       = "undo",
+                text     = "Undo",
+                slot     = ui_slot(&layout, 80),
+                disabled = !editor_has_undo(scene),
+            ); clicked {
+                scene.frame_actions += {.Undo}
+            }
+
+            if _, clicked := ui_push_label_button(
+                ui       = ui,
+                id       = "redo",
+                text     = "Redo",
+                slot     = ui_slot(&layout, 80),
+                disabled = !editor_has_redo(scene),
+            ); clicked {
+                scene.frame_actions += {.Redo}
             }
         }
 
@@ -318,7 +358,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     value  = platform.origin,
                 ); changed {
                     platform.origin = new_value
-                    editor_push_snapshot(scene, editor_snapshot_make(scene))
+                    editor_push_snapshot(scene)
                 }
 
                 if new_value, changed := editor_property_vector3(
@@ -330,11 +370,20 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     min_value = MIN_PLATFORM_SIZE, 
                 ); changed {
                     platform.size = new_value
-                    editor_push_snapshot(scene, editor_snapshot_make(scene))
+                    editor_push_snapshot(scene)
                 }
 
                 if slope, ok := &platform.variant.(Platform_Slope); ok {
-                    editor_property_slope_corner(ui, &layout, "slope_corner", "Slope Corner", &slope.corner)
+                    if new_value, changed := editor_property_slope_corner(
+                        ui     = ui,
+                        layout = &layout,
+                        id     = "slope_corner",
+                        label  = "Slope Corner",
+                        value  = slope.corner
+                    ); changed {
+                        slope.corner = new_value
+                        editor_push_snapshot(scene)
+                    }
                 }
 
                 if _, clicked := ui_push_label_button(
@@ -344,6 +393,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     slot = ui_slot(&layout, 50),
                 ); clicked {
                     snap_platform_to_grid(platform, scene.grid_size)
+                    editor_push_snapshot(scene)
                 }
 
                 if _, clicked := ui_push_label_button(
@@ -353,6 +403,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     slot = ui_slot(&layout, 50),
                 ); clicked {
                     platform.origin.z = 0
+                    editor_push_snapshot(scene)
                 }
             }
         }
@@ -489,6 +540,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         line_direction   = box_face_normals[scene.face_extend_state.extend_face],
                     )
                     extend_distance -= scene.face_extend_state.initial_distance
+                    scene.face_extend_state.has_delta |= ctx.mouse.delta != 0
 
                     if can_extend {
                         min_size := MIN_PLATFORM_SIZE
@@ -576,7 +628,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         mouse_position = ctx.mouse.position, 
                     )
 
-                    if scene.modifier_state[.Alt] == .Released {
+                    if scene.modifier_state[.Alt] != .Down {
                         scene.move_state.vertical = false
                     }
 
@@ -587,8 +639,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             line_point      = platform.origin,
                             line_direction  = {0, 1, 0},
                         ); ok {
+                            scene.move_state.has_delta |= ctx.mouse.delta != 0
                             point := platform.origin + {0, 1, 0} * dist
-                            
                             if scene.modifier_state[.Alt] == .Pressed {
                                 scene.move_state.vertical       = true
                                 scene.move_state.initial_height = point.y - platform.origin.y
@@ -605,6 +657,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             plane_normal  = move_plane_normal, 
                             plane_point   = platform.origin, 
                         ); ok {
+                            scene.move_state.has_delta |= ctx.mouse.delta != 0
                             platform.origin = (1 - move_plane_normal) * (point - scene.move_state.initial_offset) + 
                                 platform.origin * move_plane_normal
                             if scene.lock_z {
@@ -634,9 +687,19 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             }
         }
 
-        clear_hold_state :: proc(scene : ^Scene_Editor, ctx : Game_Context) {
-            if scene.face_extend_state.is_active do scene.face_extend_state = {}
-            if scene.move_state.is_active        do scene.move_state = {}
+        finish_hold_state :: proc(scene : ^Scene_Editor, ctx : Game_Context) {
+            if scene.face_extend_state.is_active {
+                if scene.face_extend_state.has_delta {
+                    editor_push_snapshot(scene, skip_time_check = true)
+                }
+                scene.face_extend_state = {}
+            }
+            if scene.move_state.is_active {
+                if scene.move_state.has_delta {
+                    editor_push_snapshot(scene, skip_time_check = true)
+                }
+                scene.move_state = {}
+            }
         }
 
         has_hold_state :: proc(scene : ^Scene_Editor, ctx : Game_Context) -> bool {
@@ -644,7 +707,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         if ctx.mouse.state[.Left] == .Released && scene.focused_region == .Region_3D {
-            clear_hold_state(scene, ctx)
+            finish_hold_state(scene, ctx)
         }
 
         if clicked_on_3d && !has_hold_state(scene, ctx) {
@@ -675,17 +738,32 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 editor_redo(scene)
             } else
             // Handle deletion
-            if .Delete_Selected in scene.frame_actions {
-                // we only use platform index for check selected platform for now, so unorder_remove make sense
-                unordered_remove(&scene.platforms, scene.selected_platform.?)
-                pending_action_clear(&scene.pending_selected, forced = true)
+            if .Delete in scene.frame_actions {
+                if selected_index, ok := scene.selected_platform.?; ok {
+                    // we only use platform index for check selected platform for now,
+                    // so unorder_remove make sense, we would clear the selection any way
+                    unordered_remove(&scene.platforms, scene.selected_platform.?)
+                    pending_action_clear(&scene.pending_selected, forced = true)
+                }
+            } else
+            // Handle deletion
+            if .Duplicate in scene.frame_actions {
+                if selected_index, ok := scene.selected_platform.?; ok {
+                    duplicate_offset : [3]f32 : {0, 0, 0}
+                    
+                    platform := scene.platforms[selected_index]
+                    platform.origin += duplicate_offset
+                    scene.frame_actions += { .Duplicate }
+                    append(&scene.platforms, platform)
+                    pending_action_set(&scene.pending_selected, &scene.selected_platform, len(scene.platforms) - 1)
+                }
             }
 
             // Handle new selection
             scene.is_new_selection = pending_resolve(&scene.pending_selected, &scene.selected_platform) && scene.selected_platform != nil
             
             if scene.is_new_selection {
-                clear_hold_state(scene, ctx)
+                finish_hold_state(scene, ctx)
             }
 
             scene.frame_actions = {}
@@ -720,24 +798,16 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         shift := ev.modifiers & sapp.MODIFIER_SHIFT != 0
 
         if ctrl && ev.type == .KEY_UP && ev.key_code == .D {
-            duplicate_offset : [3]f32 : {0, 0, 0}
-            if selected_index, ok := scene.selected_platform.?; ok {
-                platform := scene.platforms[selected_index]
-                platform.origin += duplicate_offset
-                append(&scene.platforms, platform)
-                pending_action_set(&scene.pending_selected, &scene.selected_platform, len(scene.platforms) - 1)
-            }
+            scene.frame_actions += { .Duplicate }
         }
 
         if ctrl && ev.type == .KEY_UP && ev.key_code == .Z {
             scene.frame_actions += shift ? { .Redo } : { .Undo }
         }
 
-        if scene.selected_platform != nil && 
-            ((ev.type == .KEY_UP && ev.key_code == .DELETE) ||
-             (ctrl && ev.type == .KEY_UP && ev.key_code == .X))
+        if (ev.type == .KEY_UP && ev.key_code == .DELETE) || (ctrl && ev.type == .KEY_UP && ev.key_code == .X)
         {
-            scene.frame_actions += { .Delete_Selected }
+            scene.frame_actions += { .Delete }
         }
 
         free_camera_input(&scene.free_cam, ev)
@@ -834,14 +904,14 @@ editor_property_slope_corner :: proc(
     layout : ^Ui_Layout,
     id     : Ui_Id,
     label  : string,
-    value  : ^Slope_Corner,
-) {
+    value  : Slope_Corner,
+) -> (new_value : Slope_Corner, changed : bool) {
     ui_layout_text(ui, layout, label)
 
-    if new_value, changed := ui_push_combo_box(
+    new_value, changed = ui_push_combo_box(
         ui      = ui,
         id      = id,
-        value   = value^,
+        value   = value,
         slot    = ui_slot(layout, 42),
         options = [Slope_Corner]string {
             .Bottom_Left  = "Bottom Left",
@@ -849,7 +919,9 @@ editor_property_slope_corner :: proc(
             .Top_Left     = "Top Left",
             .Top_Right    = "Top Right",
         },
-    ); changed do value^ = new_value
+    )
+    
+    return 
 }
 
 editor_property_vector3 :: proc(

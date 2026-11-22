@@ -242,14 +242,11 @@ Pending_Action_Set   :: struct($T: typeid) {
 	value : T
 }
 
-pending_action_set :: proc(pending_action : ^Pending_Action($T), current_value: ^Maybe(T), target_value : T) {
-    // Don't override existing action unless it's a clear action
+pending_action_set :: proc(pending_action : ^Pending_Action($T), current_value: ^Maybe(T), target_value : T, forced := false) {
+    // Normally, don't override existing action unless it's a clear action
     // Also don't set unless it's a different value
-    if current_value^ == target_value {
-        return
-    }
-
-    if _, set := pending_action.(Pending_Action_Set(T)); !set {
+    _, set := pending_action.(Pending_Action_Set(T));
+    if forced || (current_value^ != target_value && !set) {
         pending_action^ = {target_value}
     }
 }

@@ -645,10 +645,11 @@ ui_clear_held_id :: proc(ui :^Ui) {
 }
 
 ui_push_label_button :: proc(
-    ui   : ^Ui,
-    id   : Ui_Id,
-    text : string,
-    slot : Ui_Slot,
+    ui       : ^Ui,
+    id       : Ui_Id,
+    text     : string,
+    slot     : Ui_Slot,
+    disabled : bool = false,
 ) -> (rect : [4]f32, clicked: bool) {
     rect, clicked = ui_push_rect(
         ui          = ui,
@@ -672,9 +673,11 @@ ui_push_label_button :: proc(
             anchor = {
                 element = {.5, .5},
                 parent  = {.5, .5 },
-            }   
+            },
+            color  = disabled ? hsv(0, 0, .6) : hsv(0, 0, 1)
         )
     }
+    clicked &= !disabled
     return
 }
 
