@@ -13,6 +13,7 @@ Game_Settings :: struct #all_or_none {
     controls : Controls_Settings,
     language : Language, 
     audio    : Audio_Settings,
+    editor   : Editor_Settings,
 }
 
 GAME_SETTINGS_DEFAULT :: Game_Settings {
@@ -20,6 +21,7 @@ GAME_SETTINGS_DEFAULT :: Game_Settings {
     language = LANGUAGE_DEFAULT,
     controls = CONTROLS_SETTINGS_DEFAULT,
     audio    = AUDIO_SETTINGS_DEFAULT,
+    editor   = DEFAULT_EDITOR_SETTINGS,
 }
 
 LANGUAGE_DEFAULT :: Language.English
@@ -95,11 +97,11 @@ settings_save :: proc(settings : Game_Settings, allocator := context.temp_alloca
     defer delete(config_data, allocator)
 
     if marshal_err != nil {
-        fmt.eprintfln("Error marshalling graphics setting: %v", marshal_err)
+        fmt.eprintfln("Error marshalling game setting: %v", marshal_err)
     } else {
         save_err := os.write_entire_file(CONFIG_FILE_PATH, config_data)
         if save_err != nil {
-            fmt.eprintfln("Error saving graphics setting: %v", save_err)
+            fmt.eprintfln("Error saving game setting: %v", save_err)
         }
     }
 }
@@ -113,14 +115,14 @@ settings_load :: proc(allocator := context.allocator) -> (settings : Game_Settin
     defer delete(config_data, allocator)
 
     if load_err != nil {
-        fmt.eprintfln("Error loading graphics setting: %v", load_err)
+        fmt.eprintfln("Error loading game setting: %v", load_err)
         return
     }
 
     unmarshal_err := json.unmarshal(config_data, &settings, allocator = allocator)
 
     if unmarshal_err != nil {
-        fmt.eprintfln("Error unmarshalling graphics setting: %v", unmarshal_err)
+        fmt.eprintfln("Error unmarshalling game setting: %v", unmarshal_err)
         return
     }
 

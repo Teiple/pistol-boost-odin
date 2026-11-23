@@ -1,0 +1,20 @@
+{
+	"platforms": [
+		{
+			"origin": [
+				-1.25,
+				0.0,
+				0.0
+			],
+			"size": [
+				5.5,
+				1.0,
+				3.25
+			],
+			"variant": {
+
+			}
+		}
+	],
+	"selected_platform": 0
+}

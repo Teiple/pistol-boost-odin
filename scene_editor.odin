@@ -1,5 +1,8 @@
 package main
 
+import "core:os"
+import "core:encoding/json"
+import "base:runtime"
 import "core:fmt"
 import "core:time"
 import "core:slice"
@@ -12,6 +15,11 @@ INSPECTOR_WIDTH      :: 250
 STATUS_BAR_HEIGHT    :: 50
 MIN_PLATFORM_SIZE    :: [3]f32{ .1, .1, .1}
 DEFAULT_UNDO_TIMEOUT :: 300 * time.Millisecond
+MAX_UNDO_SNAPSHOTS   :: 24
+
+MAP_DIR       :: "."
+MAP_FILE      :: "map.json"
+MAP_FILE_PATH := MAP_DIR + "/" + MAP_FILE
 
 Editor_View_Mode :: enum {
     Perspective,
@@ -137,13 +145,28 @@ Editor_Modifer_Key_State :: enum {
     None, Pressed, Down, Released,
 }
 
-MAX_UNDO_SNAPSHOTS :: 24
-
 Editor_Frame_Action :: enum u8 {
     Delete,
     Add,
     Duplicate,
     Undo, Redo,
+    Save,
+}
+
+Editor_Settings :: struct {
+    grid_size     : f32,
+    view_mode     : Editor_View_Mode,
+    next_platform : Platform_Type,
+    lock_z        : bool,
+    snap_to_grid  : bool,
+}
+
+DEFAULT_EDITOR_SETTINGS : Editor_Settings : {
+    grid_size     = .125,
+    view_mode     = .Perspective,
+    next_platform = .Box,
+    lock_z        = true,
+    snap_to_grid  = true,
 }
 
 Scene_Editor :: struct {
@@ -155,14 +178,6 @@ Scene_Editor :: struct {
         current : Maybe(int),
         is_new  : bool,
         pending : Pending_Action(int),
-    },
-
-    settings : struct {
-        grid_size     : f32,
-        view_mode     : Editor_View_Mode,
-        next_platform : Platform_Type,
-        lock_z        : bool,
-        snap_to_grid  : bool,
     },
 
     input : struct {
@@ -191,18 +206,27 @@ Scene_Editor :: struct {
     },
 
     undo : struct {
-        stack          : [MAX_UNDO_SNAPSHOTS]Editor_Snapshot,
-        stack_current  : int,
-        stack_max      : int,
-        last_undo_time : time.Tick,
+        stack              : [MAX_UNDO_SNAPSHOTS]Editor_Snapshot,
+        snapshot_allocator : runtime.Allocator,
+        last_undo_time     : time.Tick,
+        stack_current      : int,
+        stack_max          : int,
+        saved_index        : int,
     },
 
     frame_actions : bit_set[Editor_Frame_Action; u8],
 }
 
+editor_undo_init :: proc(scene : ^Scene_Editor, snapshot_allocator : runtime.Allocator) {
+    scene.undo.stack_current      = -1
+    scene.undo.saved_index        = 0
+    scene.undo.snapshot_allocator = snapshot_allocator
+    editor_push_snapshot(scene, skip_time_check = true)
+}
+
 editor_snapshot_make :: proc(scene : ^Scene_Editor) -> Editor_Snapshot {
     return {
-        platforms         = slice.clone(scene.platforms[:], allocator = context.allocator),
+        platforms         = slice.clone(scene.platforms[:], allocator = scene.undo.snapshot_allocator),
         selected_platform = scene.selection.current.? or_else -1,
     }
 }
@@ -217,16 +241,22 @@ editor_push_snapshot :: proc(scene : ^Scene_Editor, skip_time_check := false) {
     scene.undo.stack_max = scene.undo.stack_current
 
     resolved_index := scene.undo.stack_current % len(scene.undo.stack)
-    delete(scene.undo.stack[resolved_index].platforms, allocator = context.allocator)
+    delete(scene.undo.stack[resolved_index].platforms, allocator = scene.undo.snapshot_allocator)
 
     scene.undo.stack[resolved_index] = snapshot
 
     scene.undo.last_undo_time = time.tick_now()
 }
 
-editor_restore_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot) {
+editor_restore_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot, skip_selection_pending := false) {
     delete(scene.platforms)
-    scene.platforms         = slice.clone_to_dynamic(snapshot.platforms[:])
+    scene.platforms = slice.clone_to_dynamic(snapshot.platforms[:])
+    
+    if skip_selection_pending {
+        scene.selection.current = snapshot.selected_platform
+        return
+    }
+
     if snapshot.selected_platform >= 0 {
         pending_action_set(&scene.selection.pending, &scene.selection.current, snapshot.selected_platform, forced = true)
     } else {
@@ -265,34 +295,18 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         ctx.camera.position = {.5, 2, 10}
         free_camera_init_default(&scene.free_cam, ctx.camera, ctx.viewport)
 
-        append(&scene.platforms,
-            Platform {
-                origin  = {0,0,0},
-                size    = {2,1,1},
-                variant = Platform_Box {},
-            },
-            Platform {
-                origin = {0,2,0},
-                size   = {2,1,1},
-                variant = Platform_Slope {
-                    corner = .Bottom_Left,
-                }
-            },
-        )
-
-        scene.settings.snap_to_grid = true
-        scene.settings.lock_z       = true
-        scene.settings.grid_size    = .5
-
-        scene.undo.stack_current = -1
-        editor_push_snapshot(scene)
+        snapshot_allocator := context.allocator
+        editor_load_map(scene,  snapshot_allocator = snapshot_allocator, load_allocator = context.allocator)
+        editor_undo_init(scene, snapshot_allocator = snapshot_allocator)
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)        
         delete(scene.platforms)
         for &snapshot in scene.undo.stack {
-            delete(snapshot.platforms, allocator = context.allocator)
+            delete(snapshot.platforms, allocator = scene.undo.snapshot_allocator)
         }
+
+        editor_exit()
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         ui := ctx.ui
@@ -326,7 +340,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     .Ortho_Front = "Ortho Front",
                     .Ortho_Back  = "Ortho Back",
                 },
-                value   = scene.settings.view_mode,
+                value   = ctx.settings.editor.view_mode,
             ); changed {
                 switch new_value {
                     case .Perspective:
@@ -338,14 +352,14 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         scene.free_cam.mode = .Orthogonal
                         scene.free_cam.mode_orthogonal.direction = {0, 0,  1}
                 }
-                scene.settings.view_mode = new_value
+                ctx.settings.editor.view_mode = new_value
             }
 
             ui_push_checkbox(
                 ui    = ui,
                 id    = "lock_z",
                 text  = "Lock Z",
-                value = &scene.settings.lock_z,
+                value = &ctx.settings.editor.lock_z,
                 slot  = ui_slot(&layout, 140),
             )
 
@@ -353,7 +367,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 ui    = ui,
                 id    = "grid_snap",
                 text  = "Snap",
-                value = &scene.settings.snap_to_grid,
+                value = &ctx.settings.editor.snap_to_grid,
                 slot  = ui_slot(&layout, 140)
             )
 
@@ -367,10 +381,10 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 max_val         = 4,
                 step            = .125,
                 label_width     = 140,
-                value           = scene.settings.grid_size,
+                value           = ctx.settings.editor.grid_size,
                 slot            = ui_slot(&layout, 250),
             ); changed {
-                scene.settings.grid_size = new_value
+                ctx.settings.editor.grid_size = new_value
             }
 
             if _, clicked := ui_push_label_button_with_icon(
@@ -403,9 +417,9 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     .Box   = "Box",
                     .Slope = "Slope",
                 },
-                value   = scene.settings.next_platform,
+                value   = ctx.settings.editor.next_platform,
             ); changed {
-                scene.settings.next_platform = new_value
+                ctx.settings.editor.next_platform = new_value
             }
 
             if _, clicked := ui_push_label_button_with_icon(
@@ -481,7 +495,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     icon = .Snap,
                     slot = ui_slot(&layout, 50),
                 ); clicked {
-                    snap_platform_to_grid(platform, scene.settings.grid_size)
+                    snap_platform_to_grid(platform, ctx.settings.editor.grid_size)
                     editor_push_snapshot(scene)
                 }
 
@@ -641,8 +655,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
                         if extend_direction[extend_index] > 0 {
                             current_face_pos := initial_origin[extend_index] + initial_size[extend_index] + extend_distance
-                            if scene.settings.snap_to_grid {
-                                current_face_pos = linalg.round(current_face_pos / scene.settings.grid_size) * scene.settings.grid_size
+                            if ctx.settings.editor.snap_to_grid {
+                                current_face_pos = linalg.round(current_face_pos / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                             }
                             platform.origin = initial_origin
                             platform.size = initial_size
@@ -650,8 +664,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         } else {
                             fixed_opposite := initial_origin[extend_index] + initial_size[extend_index]
                             current_face_pos := initial_origin[extend_index] - extend_distance
-                            if scene.settings.snap_to_grid {
-                                current_face_pos = linalg.round(current_face_pos / scene.settings.grid_size) * scene.settings.grid_size
+                            if ctx.settings.editor.snap_to_grid {
+                                current_face_pos = linalg.round(current_face_pos / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                             }
                             current_face_pos = min(current_face_pos, fixed_opposite - min_size[extend_index])
                             platform.origin = initial_origin
@@ -745,8 +759,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                                 scene.drag_state.move.initial_height = point.y - platform.origin.y
                             } else {
                                 platform.origin.y = point.y - scene.drag_state.move.initial_height
-                                if scene.settings.snap_to_grid {
-                                    platform.origin.y = linalg.round(platform.origin.y / scene.settings.grid_size) * scene.settings.grid_size
+                                if ctx.settings.editor.snap_to_grid {
+                                    platform.origin.y = linalg.round(platform.origin.y / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                                 }
                             }
                         }
@@ -761,10 +775,10 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             scene.drag_state.move.has_delta |= ctx.mouse.delta != 0
                             platform.origin = (1 - move_plane_normal) * (point - scene.drag_state.move.initial_offset) + 
                                 platform.origin * move_plane_normal
-                            if scene.settings.snap_to_grid {
-                                platform.origin = linalg.round(platform.origin / scene.settings.grid_size) * scene.settings.grid_size
+                            if ctx.settings.editor.snap_to_grid {
+                                platform.origin = linalg.round(platform.origin / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                             }
-                            if scene.settings.lock_z {
+                            if ctx.settings.editor.lock_z {
                                 platform.origin.z = scene.drag_state.move.initial_origin.z
                             }
                         }
@@ -824,6 +838,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         free_camera_update_3d(&scene.free_cam, ctx, dt)
 
         end_of_frame : {
+            push_snapshot := false
+
             // Update modifiers
             for &state in scene.input.modifiers {
                 if state == .Pressed {
@@ -845,26 +861,35 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 if selected_index, ok := scene.selection.current.?; ok {
                     unordered_remove(&scene.platforms, scene.selection.current.?)
                     pending_action_clear(&scene.selection.pending, forced = true)
+                    // This would change selection so undo push will do after selection is resolved
+                    push_snapshot = true
                 }
             } else
             // Handle adding
             if .Add in scene.frame_actions {
-                switch scene.settings.next_platform {
+                spawn_position : [3]f32   
+                if scene.selection.current != nil {
+                    spawn_position = scene.platforms[scene.selection.current.?].origin +
+                        {0, scene.platforms[scene.selection.current.?].size.y, 0}
+                }
+                switch ctx.settings.editor.next_platform {
                     case .Box:
                         append(&scene.platforms, {
-                            origin  = 0,
+                            origin  = spawn_position,
                             size    = 1,
                             variant = Platform_Box {},
                         })
                     case .Slope:
                         append(&scene.platforms, {
-                            origin  = 0,
+                            origin  = spawn_position,
                             size    = 1,
                             variant = Platform_Slope {
                                 corner = .Bottom_Left,
                             }
                         })
                 }
+                // We can technically push snapshot directly now but let go with a standard
+                push_snapshot = true
             } else
             // Handle duplication
             if .Duplicate in scene.frame_actions {
@@ -877,14 +902,27 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     append(&scene.platforms, platform)
                     pending_action_set(&scene.selection.pending, &scene.selection.current, len(scene.platforms) - 1)
                 }
-            }
-            // Handle new selection
-            scene.selection.is_new = pending_resolve(&scene.selection.pending, &scene.selection.current) && scene.selection.current != nil
-            
-            if scene.selection.is_new {
-                finish_hold_state(scene, ctx)
+            } else
+            // Handle saving
+            if .Save in scene.frame_actions {
+                scene.undo.saved_index = scene.undo.stack_current
+                editor_save_map(scene)
             }
 
+            // Handle new selection
+            if selection_changed := pending_resolve(&scene.selection.pending, &scene.selection.current);
+                selection_changed && scene.selection.current != nil {
+                scene.selection.is_new = true
+                finish_hold_state(scene, ctx)
+                // It's not worth wasting memory to save undo snapshot with only the selection change
+            } else {
+                scene.selection.is_new = false
+            }
+
+            if push_snapshot {
+                editor_push_snapshot(scene)
+            }
+            
             scene.frame_actions = {}
         }
     },
@@ -929,7 +967,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             scene.frame_actions += { .Delete }
         }
 
-        if ev.type == .KEY_DOWN && ev.key_code == .SPACE {
+        if ev.type == .KEY_DOWN && ev.key_code == .V {
             free_cam := &scene.free_cam
             if free_cam.mode == .Perspective {
                 free_cam.mode = .Orthogonal
@@ -941,8 +979,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 free_cam.mode_orthogonal.position.z = -free_cam.mode_orthogonal.direction.z * 10
             
                 if scene.selection.current != nil {
-                    selected_platform := scene.platforms[scene.selection.current.?]
-                    centroid := selected_platform.origin + selected_platform.size * .5
+                    selected := scene.platforms[scene.selection.current.?]
+                    centroid := selected.origin + selected.size * .5
                     free_cam.mode_orthogonal.position.xy = centroid.xy
                 } else {
                     centroid : [3]f32
@@ -957,6 +995,14 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             } else {
                 free_cam.mode = .Perspective
             }
+        }
+
+        if ctrl && ev.type == .KEY_DOWN && ev.key_code == .S {
+            scene.frame_actions += { .Save }
+        }
+
+        if shift && ev.type == .KEY_DOWN && ev.key_code == .A {
+            scene.frame_actions += { .Add }
         }
 
         free_camera_input(&scene.free_cam, ev)
@@ -1268,4 +1314,64 @@ snap_platform_to_grid :: proc(platform : ^Platform, grid_unit : f32) {
     platform.origin = linalg.round(platform.origin / grid_unit) * grid_unit
     platform.size   = linalg.round(platform.size / grid_unit) * grid_unit
     platform.size   = linalg.max(platform.size, MIN_PLATFORM_SIZE)
+}
+
+editor_exit :: proc() {
+    game_save_settings() 
+}
+
+
+editor_save_map :: proc(scene : ^Scene_Editor, allocator := context.allocator) {
+    if !os.exists(MAP_DIR) {
+        err := os.make_directory_all(MAP_DIR)
+        if err != nil {
+            fmt.eprintfln("Cannot create directory %v for save file", MAP_DIR)
+            return
+        }
+    }
+
+    map_data, marshal_err := json.marshal(
+        scene.undo.stack[scene.undo.stack_current],
+        {
+            use_enum_names = true,
+            pretty         = true,
+        },
+        allocator = allocator,
+    )
+    defer delete(map_data, allocator)
+
+    if marshal_err != nil {
+        fmt.eprintfln("Error marshalling editor map: %v", marshal_err)
+    } else {
+        save_err := os.write_entire_file(MAP_FILE_PATH, map_data)
+        if save_err != nil {
+            fmt.eprintfln("Error saving editor map: %v", save_err)
+        }
+    }
+}
+
+editor_load_map :: proc(scene : ^Scene_Editor, snapshot_allocator : runtime.Allocator, load_allocator := context.allocator) {
+    if !os.exists(MAP_FILE_PATH) {
+        panic("Map file doesn't exist!")
+    }
+
+    map_data, load_err := os.read_entire_file(MAP_FILE_PATH, allocator = load_allocator)
+    defer delete(map_data, load_allocator)
+
+    snapshot : Editor_Snapshot
+
+    if load_err != nil {
+        fmt.eprintfln("Error loading editor map: %v", load_err)
+        return
+    }
+
+    // Must use the snapshot alloctor here (i guess) since the destroyer assumps it 
+    unmarshal_err := json.unmarshal(map_data, &snapshot, allocator = snapshot_allocator)
+
+    if unmarshal_err != nil {
+        fmt.eprintfln("Error unmarshalling editor map: %v", unmarshal_err)
+        return
+    }
+
+    editor_restore_snapshot(scene, snapshot, skip_selection_pending = true)
 }
