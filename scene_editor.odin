@@ -14,8 +14,9 @@ import sapp "sokol-odin/sokol/app"
 INSPECTOR_WIDTH      :: 250
 STATUS_BAR_HEIGHT    :: 50
 MIN_PLATFORM_SIZE    :: [3]f32{ .1, .1, .1}
-DEFAULT_UNDO_TIMEOUT :: 300 * time.Millisecond
-MAX_UNDO_SNAPSHOTS   :: 24
+UNDO_TIMEOUT         :: 300 * time.Millisecond
+SAVED_MARKER_TIMEOUT :: 1   * time.Second
+UNDO_MAX_STEPS       :: 24
 
 MAP_DIR       :: "."
 MAP_FILE      :: "map.json"
@@ -153,12 +154,17 @@ Editor_Frame_Action :: enum u8 {
     Save,
 }
 
+Editor_Map_Save :: struct {
+    snapshot : Editor_Snapshot,
+    free_cam : Free_Camera, 
+}
+
 Editor_Settings :: struct {
-    grid_size     : f32,
-    view_mode     : Editor_View_Mode,
-    next_platform : Platform_Type,
-    lock_z        : bool,
-    snap_to_grid  : bool,
+    grid_size      : f32,
+    view_mode      : Editor_View_Mode,
+    next_platform  : Platform_Type,
+    lock_z         : bool,
+    snap_to_grid   : bool,
 }
 
 DEFAULT_EDITOR_SETTINGS : Editor_Settings : {
@@ -206,7 +212,7 @@ Scene_Editor :: struct {
     },
 
     undo : struct {
-        stack              : [MAX_UNDO_SNAPSHOTS]Editor_Snapshot,
+        stack              : [UNDO_MAX_STEPS]Editor_Snapshot,
         snapshot_allocator : runtime.Allocator,
         last_undo_time     : time.Tick,
         stack_current      : int,
@@ -214,7 +220,8 @@ Scene_Editor :: struct {
         saved_index        : int,
     },
 
-    frame_actions : bit_set[Editor_Frame_Action; u8],
+    last_save_time : time.Tick, 
+    frame_actions  : bit_set[Editor_Frame_Action; u8],
 }
 
 editor_undo_init :: proc(scene : ^Scene_Editor, snapshot_allocator : runtime.Allocator) {
@@ -232,7 +239,7 @@ editor_snapshot_make :: proc(scene : ^Scene_Editor) -> Editor_Snapshot {
 }
 
 editor_push_snapshot :: proc(scene : ^Scene_Editor, skip_time_check := false) {
-    if !skip_time_check && time.tick_diff(scene.undo.last_undo_time, time.tick_now()) <= DEFAULT_UNDO_TIMEOUT {
+    if !skip_time_check && time.tick_diff(scene.undo.last_undo_time, time.tick_now()) <= UNDO_TIMEOUT {
         return
     }
     snapshot := editor_snapshot_make(scene)
@@ -250,7 +257,7 @@ editor_push_snapshot :: proc(scene : ^Scene_Editor, skip_time_check := false) {
 
 editor_restore_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot, skip_selection_pending := false) {
     delete(scene.platforms)
-    scene.platforms = slice.clone_to_dynamic(snapshot.platforms[:])
+    scene.platforms = slice.clone_to_dynamic(snapshot.platforms[:], allocator = context.allocator)
     
     if skip_selection_pending {
         scene.selection.current = snapshot.selected_platform
@@ -292,24 +299,49 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     init = proc(scene : ^Scene_Editor, ctx : Game_Context) {        
         debug_draw_init(&scene.debug_draw)
 
-        ctx.camera.position = {.5, 2, 10}
-        free_camera_init_default(&scene.free_cam, ctx.camera, ctx.viewport)
-
         snapshot_allocator := context.allocator
-        editor_load_map(scene,  snapshot_allocator = snapshot_allocator, load_allocator = context.allocator)
+        editor_load_map(scene, ctx)
         editor_undo_init(scene, snapshot_allocator = snapshot_allocator)
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)        
         delete(scene.platforms)
         for &snapshot in scene.undo.stack {
-            delete(snapshot.platforms, allocator = scene.undo.snapshot_allocator)
+            editor_destroy_snapshot(snapshot, allocator = scene.undo.snapshot_allocator)
         }
 
         editor_exit()
     },
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         ui := ctx.ui
+
+        show_inspector := scene.selection.current != nil
+
+        // FPS counter
+        ui_push_text(
+            ui     = ui,
+            text   = fmt.tprintf("FPS: % 4.f", ctx.frame_time.average_fps),
+            anchor = {
+                element = {1, 0},
+                parent  = {1, 0},
+                offset = { (show_inspector ? -INSPECTOR_WIDTH : 0) - 16, 0}
+            } 
+        )
+
+        // Save/Dirty marker
+        if scene.undo.saved_index != scene.undo.stack_current {
+            ui_push_text(
+                ui     = ui,
+                text   = "*Unsaved",
+                anchor = { offset = { 8, 0} }
+            )
+        } else if time.tick_diff(scene.last_save_time, time.tick_now()) < SAVED_MARKER_TIMEOUT {
+            ui_push_text(
+                ui     = ui,
+                text   = "Saved!",
+                anchor = { offset = { 8, 0} }
+            )
+        } 
 
         // Status bar
         status_bar_rect, _ := ui_push_rect(
@@ -434,7 +466,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         // Inspector
-        if scene.selection.current != nil {
+        if show_inspector {
             inspector_rect, _ := ui_push_rect(
                 ui     = ui,
                 sizing = { INSPECTOR_WIDTH, Percent_Offset{1, -STATUS_BAR_HEIGHT}},
@@ -644,7 +676,6 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         line_direction   = box_face_normals[scene.drag_state.face_extend.extend_face],
                     )
                     extend_distance -= scene.drag_state.face_extend.initial_distance
-                    scene.drag_state.face_extend.has_delta |= ctx.mouse.delta != 0
 
                     if can_extend {
                         min_size := MIN_PLATFORM_SIZE
@@ -653,26 +684,32 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         initial_origin := scene.drag_state.face_extend.initial_origin
                         initial_size   := scene.drag_state.face_extend.initial_size
 
+                        prev_origin := platform.origin
+                        prev_size   := platform.size
+
                         if extend_direction[extend_index] > 0 {
                             current_face_pos := initial_origin[extend_index] + initial_size[extend_index] + extend_distance
                             if ctx.settings.editor.snap_to_grid {
                                 current_face_pos = linalg.round(current_face_pos / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                             }
                             platform.origin = initial_origin
-                            platform.size = initial_size
+                            platform.size   = initial_size
                             platform.size[extend_index] = max(min_size[extend_index], current_face_pos - initial_origin[extend_index])
                         } else {
-                            fixed_opposite := initial_origin[extend_index] + initial_size[extend_index]
+                            fixed_opposite   := initial_origin[extend_index] + initial_size[extend_index]
                             current_face_pos := initial_origin[extend_index] - extend_distance
                             if ctx.settings.editor.snap_to_grid {
                                 current_face_pos = linalg.round(current_face_pos / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                             }
                             current_face_pos = min(current_face_pos, fixed_opposite - min_size[extend_index])
-                            platform.origin = initial_origin
+                            platform.origin  = initial_origin
                             platform.origin[extend_index] = current_face_pos
                             platform.size = initial_size
                             platform.size[extend_index] = fixed_opposite - current_face_pos
                         }
+
+                        // We don't compare to initial values here to match move state behavior, move state doesn't save intial values, just offsets
+                        scene.drag_state.face_extend.has_delta |= platform.origin != prev_origin || platform.size != prev_size
                     }
 
                     // Draw current extending face
@@ -752,7 +789,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             line_point      = platform.origin,
                             line_direction  = {0, 1, 0},
                         ); ok {
-                            scene.drag_state.move.has_delta |= ctx.mouse.delta != 0
+                            prev_origin := platform.origin
+
                             point := platform.origin + {0, 1, 0} * dist
                             if scene.input.modifiers[.Alt] == .Pressed {
                                 scene.drag_state.move.vertical       = true
@@ -763,6 +801,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                                     platform.origin.y = linalg.round(platform.origin.y / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                                 }
                             }
+                            scene.drag_state.move.has_delta |= prev_origin != platform.origin
                         }
                     } else {
                         move_plane_normal := get_move_plane_normal(scene)
@@ -772,7 +811,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             plane_normal  = move_plane_normal, 
                             plane_point   = platform.origin, 
                         ); ok {
-                            scene.drag_state.move.has_delta |= ctx.mouse.delta != 0
+                            prev_origin := platform.origin
+                            
                             platform.origin = (1 - move_plane_normal) * (point - scene.drag_state.move.initial_offset) + 
                                 platform.origin * move_plane_normal
                             if ctx.settings.editor.snap_to_grid {
@@ -781,6 +821,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             if ctx.settings.editor.lock_z {
                                 platform.origin.z = scene.drag_state.move.initial_origin.z
                             }
+                            scene.drag_state.move.has_delta |= prev_origin != platform.origin
                         }
                     }
                 } 
@@ -971,7 +1012,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             free_cam := &scene.free_cam
             if free_cam.mode == .Perspective {
                 free_cam.mode = .Orthogonal
-                if (free_cam.camera.target - free_cam.camera.position).z < 0 {
+                if (ctx.camera.target - ctx.camera.position).z < 0 {
                     free_cam.mode_orthogonal.direction = { 0, 0, -1}
                 } else {
                     free_cam.mode_orthogonal.direction = { 0, 0, 1}
@@ -1320,7 +1361,6 @@ editor_exit :: proc() {
     game_save_settings() 
 }
 
-
 editor_save_map :: proc(scene : ^Scene_Editor, allocator := context.allocator) {
     if !os.exists(MAP_DIR) {
         err := os.make_directory_all(MAP_DIR)
@@ -1330,8 +1370,15 @@ editor_save_map :: proc(scene : ^Scene_Editor, allocator := context.allocator) {
         }
     }
 
+    resolved_index := scene.undo.stack_current % len(scene.undo.stack)
+    
+    map_save := Editor_Map_Save {
+        snapshot = scene.undo.stack[resolved_index],
+        free_cam = scene.free_cam,
+    }
+
     map_data, marshal_err := json.marshal(
-        scene.undo.stack[scene.undo.stack_current],
+        map_save,
         {
             use_enum_names = true,
             pretty         = true,
@@ -1346,32 +1393,40 @@ editor_save_map :: proc(scene : ^Scene_Editor, allocator := context.allocator) {
         save_err := os.write_entire_file(MAP_FILE_PATH, map_data)
         if save_err != nil {
             fmt.eprintfln("Error saving editor map: %v", save_err)
+        } else {
+            scene.last_save_time = time.tick_now()
         }
     }
 }
 
-editor_load_map :: proc(scene : ^Scene_Editor, snapshot_allocator : runtime.Allocator, load_allocator := context.allocator) {
+editor_load_map :: proc(scene : ^Scene_Editor, ctx : Game_Context, allocator := context.allocator) {
     if !os.exists(MAP_FILE_PATH) {
-        panic("Map file doesn't exist!")
+        free_camera_init_default(&scene.free_cam, ctx.viewport)
+        return
     }
 
-    map_data, load_err := os.read_entire_file(MAP_FILE_PATH, allocator = load_allocator)
-    defer delete(map_data, load_allocator)
-
-    snapshot : Editor_Snapshot
+    map_data, load_err := os.read_entire_file(MAP_FILE_PATH, allocator = allocator)
+    defer delete(map_data, allocator = allocator)
 
     if load_err != nil {
         fmt.eprintfln("Error loading editor map: %v", load_err)
         return
     }
 
-    // Must use the snapshot alloctor here (i guess) since the destroyer assumps it 
-    unmarshal_err := json.unmarshal(map_data, &snapshot, allocator = snapshot_allocator)
+    map_save : Editor_Map_Save
+    unmarshal_err := json.unmarshal(map_data, &map_save, allocator = allocator)
+    defer editor_destroy_snapshot(map_save.snapshot, allocator = allocator)
 
     if unmarshal_err != nil {
         fmt.eprintfln("Error unmarshalling editor map: %v", unmarshal_err)
         return
     }
 
-    editor_restore_snapshot(scene, snapshot, skip_selection_pending = true)
+    editor_restore_snapshot(scene, map_save.snapshot, skip_selection_pending = true)
+    scene.free_cam = map_save.free_cam
+
+}
+
+editor_destroy_snapshot :: proc(snapshot : Editor_Snapshot, allocator : runtime.Allocator) {
+    delete(snapshot.platforms, allocator = allocator)
 }

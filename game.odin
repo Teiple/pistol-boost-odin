@@ -38,13 +38,14 @@ game : Game
 @(private = "file")
 game_context_make :: proc(game : ^Game) -> Game_Context {
 	return {
-		camera   = &game.camera,
-		viewport = &game.viewport,
-		mouse    = &game.mouse,
-		audio    = &game.audio,
-		ui       = &game.ui,
-		time     = &game.time,
-		settings = &game.settings,
+		camera     = &game.camera,
+		viewport   = &game.viewport,
+		mouse      = &game.mouse,
+		audio      = &game.audio,
+		ui         = &game.ui,
+		time       = &game.time,
+		frame_time = &game.frame_time,
+		settings   = &game.settings,
 	}
 }
 
@@ -103,7 +104,8 @@ game_update :: proc(unscaled_dt : f32) {
 	
 	if cbs.update_ui != nil do cbs.update_ui(&game.scene, ctx)
 	ui_push_cursor(&game.ui, position = game.mouse.position)
-	ui_push_text(&game.ui,   text     = fmt.tprintf("FPS: % 4.f", game.frame_time.average_fps))
+	// FPS counter for everyone
+	// ui_push_text(&game.ui,   text     = fmt.tprintf("FPS: % 4.f", game.frame_time.average_fps))
 	
 	if cbs.update_3d != nil do cbs.update_3d(&game.scene, ctx, dt)
 	
@@ -175,7 +177,7 @@ game_destroy :: proc() {
 // Localization function, basically doing term translation look up
 tr :: proc(term: Loc_Term, params : ..any, allocator := context.temp_allocator) -> string {
 	if len(params) > 0 {
-		return fmt.aprintf(loc_map[game.settings.language][term], params)
+		return fmt.aprintf(loc_map[game.settings.language][term], params, allocator = allocator)
 	}
 	return loc_map[game.settings.language][term]
 }
@@ -236,6 +238,7 @@ Pending_Action :: union($T: typeid) #no_nil {
 	Pending_Action_Clear,
 	Pending_Action_Set(T),
 } 
+
 Pending_Action_Clear :: struct{}
 Pending_Action_Keep  :: struct{}
 Pending_Action_Set   :: struct($T: typeid) {

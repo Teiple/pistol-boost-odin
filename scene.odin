@@ -11,13 +11,14 @@ Scene :: union #no_nil {
 }
 
 Game_Context :: struct {
-	camera   : ^Camera,
-	viewport : ^Viewport,
-	mouse    : ^Mouse_Input,
-	audio    : ^Audio,
-	ui       : ^Ui,
-	time     : ^Game_Time,
-	settings : ^Game_Settings,
+	camera     : ^Camera,
+	viewport   : ^Viewport,
+	mouse      : ^Mouse_Input,
+	audio      : ^Audio,
+	ui         : ^Ui,
+	time       : ^Game_Time,
+	settings   : ^Game_Settings,
+	frame_time : ^Frame_Time, 
 }
 
 // actually this could just be Scene_Callbacks(rawptr)

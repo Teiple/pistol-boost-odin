@@ -111,7 +111,6 @@ Free_Camera :: struct {
     mode_perspective : Free_Camera_Perspective,
     mode_orthogonal  : Free_Camera_Orthogonal,
     move_direction   : [3]f32,
-    camera           : ^Camera,
     move_speed       : f32,
     mode             : Free_Camera_Mode,
 }
@@ -134,9 +133,8 @@ Free_Camera_Orthogonal :: struct {
     position  : [3]f32,
 }
 
-free_camera_init_default :: proc(free_cam: ^Free_Camera, camera: ^Camera, viewport : ^Viewport) {
+free_camera_init_default :: proc(free_cam: ^Free_Camera, viewport : ^Viewport) {
     free_cam^  = {
-        camera           = camera,
         mode_perspective = {
             yaw      = math.PI,
             pitch    = 0,
@@ -179,6 +177,7 @@ free_camera_input :: proc(free_cam: ^Free_Camera, ev : sapp.Event) {
 }
 
 free_camera_update_3d :: proc(free_cam: ^Free_Camera, ctx: Game_Context, dt: f32) {
+    camera := ctx.camera
     if free_cam.mode == .Perspective {
         if (ctx.mouse.state[.Right] == .Pressed || ctx.mouse.state[.Right] == .Down) {
             free_cam.mode_perspective.yaw   -= ctx.mouse.delta.x * free_cam.mode_perspective.look_speed
@@ -202,16 +201,16 @@ free_camera_update_3d :: proc(free_cam: ^Free_Camera, ctx: Game_Context, dt: f32
             forward * free_cam.move_direction.z
         ) * free_cam.move_speed * dt
         
-        free_cam.camera.position   = free_cam.mode_perspective.position 
-        free_cam.camera.ortho_size = 0
-        free_cam.camera.target     = free_cam.camera.position +
+        camera.position   = free_cam.mode_perspective.position 
+        camera.ortho_size = 0
+        camera.target     = camera.position +
         {
             math.cos(free_cam.mode_perspective.pitch) * math.sin(free_cam.mode_perspective.yaw), // x
             math.sin(free_cam.mode_perspective.pitch),                                           // y
             math.cos(free_cam.mode_perspective.pitch) * math.cos(free_cam.mode_perspective.yaw),  // z
         }
     } else {
-        camera_right, camera_up, camera_foward := camera_basis(free_cam.camera, ctx.viewport)
+        camera_right, camera_up, camera_foward := camera_basis(camera, ctx.viewport)
         
         free_cam.mode_orthogonal.position += (
             camera_right * free_cam.move_direction.x + 
@@ -219,8 +218,8 @@ free_camera_update_3d :: proc(free_cam: ^Free_Camera, ctx: Game_Context, dt: f32
         ) * free_cam.move_speed * dt
 
         free_cam.mode_orthogonal.size -= ctx.mouse.scroll.y * 2
-        free_cam.camera.position       = free_cam.mode_orthogonal.position
-        free_cam.camera.ortho_size     = free_cam.mode_orthogonal.size
-        free_cam.camera.target         = free_cam.camera.position + free_cam.mode_orthogonal.direction
+        camera.position       = free_cam.mode_orthogonal.position
+        camera.ortho_size     = free_cam.mode_orthogonal.size
+        camera.target         = camera.position + free_cam.mode_orthogonal.direction
     }    
 }
