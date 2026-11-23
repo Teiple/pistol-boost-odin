@@ -108,32 +108,47 @@ follow_camera_update_3d :: proc(follow_cam: ^Follow_Camera, camera: ^Camera, tar
 }
 
 Free_Camera :: struct {
-    camera         : ^Camera,
-    move_direction : [3]f32,
-    position       : [3]f32,
-    move_speed     : f32,
-    look_speed     : f32,
-    pitch          : f32,
-    yaw            : f32,
-    ortho_size     : f32,
-    mode           : Free_Camera_Mode,
+    mode_perspective : Free_Camera_Perspective,
+    mode_orthogonal  : Free_Camera_Orthogonal,
+    move_direction   : [3]f32,
+    camera           : ^Camera,
+    move_speed       : f32,
+    mode             : Free_Camera_Mode,
 }
 
 Free_Camera_Mode :: enum u8 {
     Perspective,
-    Ortho_Front,
-    Ortho_Back,
+    Orthogonal,
+}
+
+Free_Camera_Perspective :: struct {
+    position   : [3]f32,
+    pitch      : f32,
+    yaw        : f32,
+    look_speed : f32,
+}
+
+Free_Camera_Orthogonal :: struct {
+    size      : f32,
+    direction : [3]f32,
+    position  : [3]f32,
 }
 
 free_camera_init_default :: proc(free_cam: ^Free_Camera, camera: ^Camera, viewport : ^Viewport) {
     free_cam^  = {
-        camera     = camera,
-        position   = camera.position,
-        yaw        = math.PI,
-        pitch      = 0,
+        camera           = camera,
+        mode_perspective = {
+            yaw      = math.PI,
+            pitch    = 0,
+            position = { 0, 2, 10 },
+            look_speed = .005,
+        },
+        mode_orthogonal  = {
+            size      = 8,
+            direction = { 0, 0, -1 }, 
+            position  = { 0, 2, 10 },
+        },
         move_speed = 5,
-        look_speed = .005,
-        ortho_size = 8,
     }
 }
 
@@ -159,23 +174,6 @@ free_camera_input :: proc(free_cam: ^Free_Camera, ev : sapp.Event) {
                 case .D: free_cam.move_direction.x = 0
                 case .Q: free_cam.move_direction.y = 0
                 case .E: free_cam.move_direction.y = 0
-            
-                case ._1: free_cam.mode = .Perspective
-                case ._2: free_cam.mode = .Ortho_Front
-                case ._3: free_cam.mode = .Ortho_Back
-
-                case .SPACE : if free_cam.mode == .Perspective {
-                    if (free_cam.camera.target - free_cam.camera.position).z < 0 {
-                        free_cam.mode = .Ortho_Front
-                    } else {
-                        free_cam.mode = .Ortho_Back
-                    }
-
-                    free_cam.camera.position.x = 0
-                    free_cam.camera.position.y = free_cam.ortho_size - .4
-                } else {
-                    free_cam.mode = .Perspective
-                }
             }
     }
 }
@@ -183,50 +181,46 @@ free_camera_input :: proc(free_cam: ^Free_Camera, ev : sapp.Event) {
 free_camera_update_3d :: proc(free_cam: ^Free_Camera, ctx: Game_Context, dt: f32) {
     if free_cam.mode == .Perspective {
         if (ctx.mouse.state[.Right] == .Pressed || ctx.mouse.state[.Right] == .Down) {
-            free_cam.yaw   -= ctx.mouse.delta.x * free_cam.look_speed
-            free_cam.pitch  = clamp(
-                free_cam.pitch - ctx.mouse.delta.y * free_cam.look_speed,
-                math.to_radians_f32(-89.9),
-                math.to_radians_f32( 89.9),
+            free_cam.mode_perspective.yaw   -= ctx.mouse.delta.x * free_cam.mode_perspective.look_speed
+            free_cam.mode_perspective.pitch  = clamp(
+                free_cam.mode_perspective.pitch - ctx.mouse.delta.y * free_cam.mode_perspective.look_speed,
+                math.to_radians_f32(-89.99),
+                math.to_radians_f32( 89.99),
             )
         }
 
         forward := [3]f32{
-            math.sin(free_cam.yaw),
+            math.sin(free_cam.mode_perspective.yaw),
             0,
-            math.cos(free_cam.yaw),
+            math.cos(free_cam.mode_perspective.yaw),
         }
         right := linalg.cross(forward, {0, 1, 0})
         
-        free_cam.position += (
+        free_cam.mode_perspective.position += (
             right * free_cam.move_direction.x + 
             {0, 1, 0} * free_cam.move_direction.y + 
             forward * free_cam.move_direction.z
         ) * free_cam.move_speed * dt
         
-        free_cam.camera.position   = free_cam.position 
+        free_cam.camera.position   = free_cam.mode_perspective.position 
         free_cam.camera.ortho_size = 0
         free_cam.camera.target     = free_cam.camera.position +
         {
-            math.cos(free_cam.pitch) * math.sin(free_cam.yaw), // x
-            math.sin(free_cam.pitch),                          // y
-            math.cos(free_cam.pitch) * math.cos(free_cam.yaw), // z
+            math.cos(free_cam.mode_perspective.pitch) * math.sin(free_cam.mode_perspective.yaw), // x
+            math.sin(free_cam.mode_perspective.pitch),                                           // y
+            math.cos(free_cam.mode_perspective.pitch) * math.cos(free_cam.mode_perspective.yaw),  // z
         }
     } else {
-        direction : f32 = free_cam.mode == .Ortho_Front ? 1 : -1
+        camera_right, camera_up, camera_foward := camera_basis(free_cam.camera, ctx.viewport)
         
-        if free_cam.camera.position.z * direction < 0 {
-            free_cam.camera.position.z *= -1
-        }
-
-        free_cam.camera.position += (
-            {1, 0, 0} * direction * free_cam.move_direction.x + 
-            {0, 1, 0} * free_cam.move_direction.z
+        free_cam.mode_orthogonal.position += (
+            camera_right * free_cam.move_direction.x + 
+            camera_up    * free_cam.move_direction.z
         ) * free_cam.move_speed * dt
 
-        free_cam.ortho_size        -= ctx.mouse.scroll.y * 2
-        free_cam.camera.ortho_size  = free_cam.ortho_size
-        free_cam.camera.target      = free_cam.camera.position + {0, 0, -direction}
-    }
-    
+        free_cam.mode_orthogonal.size -= ctx.mouse.scroll.y * 2
+        free_cam.camera.position       = free_cam.mode_orthogonal.position
+        free_cam.camera.ortho_size     = free_cam.mode_orthogonal.size
+        free_cam.camera.target         = free_cam.camera.position + free_cam.mode_orthogonal.direction
+    }    
 }

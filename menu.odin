@@ -536,11 +536,11 @@ menu_helper_calculate_footer_layout :: proc(
 
         // Two ends
         if item_index == 0 {
-            sizing.x = PercentOffset{.5, -mid_btn_total_width * .5}
+            sizing.x = Percent_Offset{.5, -mid_btn_total_width * .5}
             anchor      = { element = {0, 1},   parent = {0, 1} }
             text_anchor = { element = {1, .5},  parent = {1, .5} }
         } else if item_index == item_count - 1 {
-            sizing.x = PercentOffset{.5, -mid_btn_total_width * .5}
+            sizing.x = Percent_Offset{.5, -mid_btn_total_width * .5}
             anchor      = { element = {1, 1}, parent = {1, 1} }
             text_anchor = { element = {0, .5},  parent = {0, .5} }
         } else {

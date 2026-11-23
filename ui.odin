@@ -68,7 +68,7 @@ ui_slot :: proc(layout: ^Ui_Layout, main_size: f32) -> Ui_Slot {
     return { size = size, anchor = anchor }
 }
 
-ui_layout_text :: proc(
+ui_push_layout_text :: proc(
     ui        : ^Ui,
     layout    : ^Ui_Layout,
     text      : string,
@@ -92,7 +92,7 @@ ui_layout_text :: proc(
     return rect
 }
 
-Sizing :: union {Fixed, Percent, PercentOffset}
+Sizing :: union {Fixed, Percent, Percent_Offset}
 
 Fixed :: f32
 
@@ -105,7 +105,7 @@ Percent :: struct {
     value : f32,
 }
 
-PercentOffset :: struct {
+Percent_Offset :: struct {
     value  : f32,
     offset : f32,
 }
@@ -123,6 +123,10 @@ Ui_Icon :: enum u8 {
     Up_Arrow,
     Down_Arrow,
     Tick,
+    Snap,
+    Reset,
+    Undo,
+    Redo,
 }
 
 Font :: struct {
@@ -173,6 +177,10 @@ ui_icon_files : [Ui_Icon][]byte = {
     .Plus        = #load("assets/images/plus.png"),
     .Minus       = #load("assets/images/minus.png"),
     .Tick        = #load("assets/images/tick.png"),
+    .Snap        = #load("assets/images/snap.png"),
+    .Reset       = #load("assets/images/reset.png"),
+    .Undo        = #load("assets/images/undo.png"),
+    .Redo        = #load("assets/images/redo.png"),
 }
 
 Ui_Keys :: enum u8 {
@@ -559,7 +567,7 @@ ui_push_rect :: proc(
             ele_rect.z = size
         case Percent:
             ele_rect.z = container.z * size.value
-        case PercentOffset:
+        case Percent_Offset:
             ele_rect.z = container.z * size.value + size.offset
     }
 
@@ -568,7 +576,7 @@ ui_push_rect :: proc(
             ele_rect.w = size
         case Percent:
             ele_rect.w = container.w * size.value
-        case PercentOffset:
+        case Percent_Offset:
             ele_rect.w = container.w * size.value + size.offset 
     }
 
@@ -673,6 +681,58 @@ ui_push_label_button :: proc(
             anchor = {
                 element = {.5, .5},
                 parent  = {.5, .5 },
+            },
+            color  = disabled ? hsv(0, 0, .6) : hsv(0, 0, 1)
+        )
+    }
+    clicked &= !disabled
+    return
+}
+
+
+ui_push_label_button_with_icon :: proc(
+    ui       : ^Ui,
+    id       : Ui_Id,
+    text     : string,
+    icon     : Ui_Icon,
+    slot     : Ui_Slot,
+    disabled : bool = false,
+) -> (rect : [4]f32, clicked: bool) {
+    rect, clicked = ui_push_rect(
+        ui          = ui,
+        sizing      = { slot.size.x, slot.size.y },
+        anchor      = slot.anchor,
+        color       = hsv(0, 0, .3),
+        interactive = {
+            id            = id,
+            hovered_color = hsv(0, 0, .35),
+            held_color    = hsv(0, 0, .28),
+        },
+    )
+
+    ui_push_container(ui, rect)
+    {
+        defer ui_pop_container(ui)
+        
+        ui_push_rect(
+            ui     = ui,
+            sizing = { 32, 32 },
+            anchor = {
+                element = {0, .5},
+                parent  = {0, .5 },
+                offset  = {4, 0}
+            },
+            icon   = icon,
+            color  = disabled ? hsv(0, 0, .6) : hsv(0, 0, 1)
+        )
+
+        ui_push_text(
+            ui     = ui,
+            text   = text,
+            anchor = {
+                element = {0, .5},
+                parent  = {0, .5 },
+                offset  = {32 + 8, 0}
             },
             color  = disabled ? hsv(0, 0, .6) : hsv(0, 0, 1)
         )
