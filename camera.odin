@@ -151,7 +151,7 @@ free_camera_init_default :: proc(free_cam: ^Free_Camera, viewport : ^Viewport) {
 }
 
 free_camera_input :: proc(free_cam: ^Free_Camera, ev : sapp.Event) {
-    if (ev.modifiers & sapp.MODIFIER_CTRL != 0 || ev.modifiers & sapp.MODIFIER_SHIFT != 0) {
+    if ev.modifiers & sapp.MODIFIER_CTRL != 0 {
         return
     }
     #partial switch ev.type {
@@ -170,8 +170,8 @@ free_camera_input :: proc(free_cam: ^Free_Camera, ev : sapp.Event) {
                 case .S: free_cam.move_direction.z = 0
                 case .A: free_cam.move_direction.x = 0
                 case .D: free_cam.move_direction.x = 0
-                case .E: free_cam.move_direction.y = 0
-                case .Q, .SPACE: free_cam.move_direction.y = 0
+                case .Q: free_cam.move_direction.y = 0
+                case .E, .SPACE: free_cam.move_direction.y = 0
             }
     }
 }

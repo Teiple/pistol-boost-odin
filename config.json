@@ -16,10 +16,10 @@
 		"sound_volume": 0.29999992
 	},
 	"editor": {
-		"grid_size": 0.125,
+		"grid_size": 0.5,
 		"view_mode": "Perspective",
 		"next_platform": "Box",
-		"lock_z": false,
+		"lock_z": true,
 		"snap_to_grid": true
 	}
 }

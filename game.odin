@@ -10,8 +10,8 @@ VIEWPORT_BASE_WIDTH  :: 960
 VIEWPORT_BASE_HEIGHT :: 540
 GAME_VERSION         :: "0.0.0"
 GAME_STARTUP_SCENE   :: 
-	Scene_Editor{}
-	// Scene_Main_Menu{}
+	// Scene_Editor{}
+	Scene_Main_Menu{}
 
 Game :: struct {
 	viewport   : Viewport,
@@ -116,6 +116,8 @@ game_update :: proc(unscaled_dt : f32) {
 	if cbs.draw_3d != nil do cbs.draw_3d(&game.scene, ctx, &game.renderer)
 	ui_draw(&game.ui, &game.viewport)
 	
+	if cbs.end_frame != nil do cbs.end_frame(&game.scene, ctx)
+
 	renderer_end(&game.renderer)
 	viewport_end(&game.viewport)
 	ui_end(&game.ui, &game.viewport)

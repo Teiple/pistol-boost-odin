@@ -9,11 +9,11 @@ Arena_Geometry :: struct {
 }
 
 Arena :: struct {
-	body   : b3.BodyId,
+	body       : b3.BodyId,
     geometries : [dynamic]Arena_Geometry
 }
 
-arena_init :: proc(arena: ^Arena, physics: ^Physics, allocator := context.allocator) {
+arena_init :: proc(arena: ^Arena, physics: ^Physics, platforms: []Platform, allocator := context.allocator) {
     arena.geometries = make([dynamic]Arena_Geometry, allocator = allocator)
 
 	body_def := b3.DefaultBodyDef()
@@ -21,17 +21,7 @@ arena_init :: proc(arena: ^Arena, physics: ^Physics, allocator := context.alloca
 	body_def.position = {0, 0, 0}
 	arena.body = b3.CreateBody(physics.world, body_def)
 
-	platforms := [?]struct{ size : [3]f32, position : [3]f32 } {
-		{size = {12.0, 0.4, 2.0}, position = {0,   -1.0, 0}},
-		{size = {0.4,  8.0, 2.0}, position = {-6.0, 3.0, 0}},
-		{size = {0.4,  8.0, 2.0}, position = {6.0,  3.0, 0}},
-		{size = {12.0, 0.4, 2.0}, position = {0,    7.0, 0}},
-		{size = {3.0,  0.3, 2.0}, position = {-2.5, 1.5, 0}},
-		{size = {3.0,  0.3, 2.0}, position = {2.5,  3.5, 0}},
-	}
-	
-
-	for p in platforms {
+	for &p in platforms {
 		half      := p.size * 0.5
 		box_hull  := b3.MakeBoxHull(half.x, half.y, half.z)
 		shape_def := b3.DefaultShapeDef()
@@ -42,16 +32,18 @@ arena_init :: proc(arena: ^Arena, physics: ^Physics, allocator := context.alloca
             {.Player_Physics, .Enemy_Physics}
         )
 
+        platform_position := p.origin + p.size * .5
+
 		_ = b3.CreateTransformedHullShape(
             arena.body,
 			shape_def,
 			&box_hull.base,
-			{p = p.position, q = 1},
+			{p = platform_position, q = 1},
 			{1, 1, 1},
 		)
 
         append(&arena.geometries, {
-            position = p.position,
+            position = platform_position,
             mesh     = mesh_create_box(p.size * .5)
         })
 	}

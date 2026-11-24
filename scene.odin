@@ -34,6 +34,7 @@ Scene_Callbacks :: struct($T: typeid) where
 	init      : proc(scene : T, ctx : Game_Context),
 	update_3d : proc(scene : T, ctx : Game_Context, dt : f32),
 	update_ui : proc(scene : T, ctx : Game_Context),
+	end_frame : proc(scene : T, ctx : Game_Context),
 	draw_3d   : proc(scene : T, ctx : Game_Context, renderer : ^Renderer),
 	input_3d  : proc(scene : T, ctx : Game_Context, ev : sapp.Event),
 	input_ui  : proc(scene : T, ctx : Game_Context, ev : sapp.Event),

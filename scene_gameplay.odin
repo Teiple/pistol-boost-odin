@@ -14,7 +14,8 @@ Scene_Gameplay :: struct {
     menu_stack    : Menu_Stack,
     player        : Player,
     arena         : Arena,
-    debug_draw    : Debug_Draw,    
+    debug_draw    : Debug_Draw,
+    platforms     : [dynamic]Platform
 }
 
 SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
@@ -30,8 +31,15 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
 
         viewport_set_clear_color(ctx.viewport, hsv(140, 0.4, 0.2))
 
-        arena_init(&scene.arena, &scene.physics)
         debug_draw_init(&scene.debug_draw)
+
+        // platforms, loaded := editor_load_map_platforms()
+        // if !loaded {
+        //     panic("Cannot load map!")
+        // }
+        // scene.platforms = platforms
+
+        arena_init(&scene.arena, &scene.physics, scene.platforms[:])
     },
     destroy = proc(scene : ^Scene_Gameplay, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)
@@ -46,6 +54,8 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
             mesh_destroy(&m)
         }
         delete(scene.meshes)
+
+        delete(scene.platforms)
     },
     update_ui = proc(scene : ^Scene_Gameplay, ctx : Game_Context) {
         if menu_stack_active(&scene.menu_stack) do ui_capture_input(ctx.ui)
@@ -84,7 +94,7 @@ SCENE_GAMEPLAY_CALLBACKS : Scene_Callbacks(^Scene_Gameplay) : {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     input_ui = proc(scene : ^Scene_Gameplay, ctx : Game_Context, ev : sapp.Event) {
-        if menu_stack_active(&scene.menu_stack) && ev.type == .KEY_DOWN && ev.key_code == .ESCAPE
+        if !menu_stack_active(&scene.menu_stack) && ev.type == .KEY_DOWN && ev.key_code == .ESCAPE
         {
             menu_stack_request_push(&scene.menu_stack, Pause_Menu{})
         }

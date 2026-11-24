@@ -571,13 +571,15 @@ debug_draw_push_wire_platform_slope :: proc(
     append(&draw.modes[.Lines].indices,  ..indices[:])
 }
 
+Debug_Grid_Axis :: enum u8 {X, Y, Z}
+
 debug_draw_push_grid :: proc(
     draw       : ^Debug_Draw,
     unit       : f32    = 1,
     size       : f32    = 10,
     axis_color : [4]f32 = {.1, .1, .1 , 1},
     sub_color  : [4]f32 = {.2, .2, .2, 1},
-    planes     : bit_set[enum {X, Y, Z}] = {.Y},
+    planes     : bit_set[Debug_Grid_Axis; u8] = {.Y},
 ) {
     assert(draw.active)
 
