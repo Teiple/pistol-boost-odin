@@ -20,23 +20,13 @@ MAP_DIR       :: "."
 MAP_FILE      :: "map.pbmp"
 MAP_FILE_PATH := MAP_DIR + "/" + MAP_FILE
 
+// Stole from ravn scene saving
 MAP_SAVE_MAGIC   :: (u32('p') << 0) | (u32('b') << 8) | (u32('m') << 16) | (u32('p') << 24)
 MAP_SAVE_VERSION :: 0
 
 Range :: struct {
     offset : u32,
     length : u32,
-}
-
-Editor_View_Mode :: enum {
-    Perspective,
-    Ortho_Front,
-    Ortho_Back,
-}  
-
-Editor_Snapshot :: struct {
-    platforms : []Platform,
-    selected  : Maybe(i32),
 }
 
 Editor_Map_Save_Header :: struct {
@@ -48,10 +38,22 @@ Editor_Map_Save_Header :: struct {
     selected  : Maybe(i32),
 }
 
-Editor_Map :: struct {
+Editor_Map_Save :: struct {
     platforms : []Platform,
     free_cam  : Free_Camera,
     selected  : Maybe(i32),
+}
+
+Editor_View_Mode :: enum {
+    Perspective,
+    Ortho_Front,
+    Ortho_Back,
+}  
+
+Editor_Snapshot :: struct {
+    platforms        : []Platform,
+    selection_set    : []i32,
+    selection_leader : Maybe(i32),
 }
 
 Editor_Region :: enum u8 {
@@ -98,9 +100,8 @@ Scene_Editor :: struct {
     platforms         : [dynamic]Platform,
 
     selection : struct {
-        current : Maybe(i32),
-        is_new  : bool,
-        pending : Pending_Action(i32),
+        set     : [dynamic]i32,
+        leader  : Maybe(i32),
     },
 
     input : struct {
@@ -141,6 +142,28 @@ Scene_Editor :: struct {
     frame_actions  : bit_set[Editor_Frame_Action; u16],
 }
 
+editor_selection_contains :: proc(scene : ^Scene_Editor, #any_int index : int) -> bool {
+    for i in scene.selection.set {
+        if int(i) == index do return true
+    }
+    return false
+}
+
+editor_selection_clear :: proc(scene : ^Scene_Editor) {
+    clear(&scene.selection.set)
+    scene.selection.leader = nil
+}
+
+editor_selection_toggle :: proc(scene : ^Scene_Editor, #any_int index : int) {
+    for &platform_index, set_index in scene.selection.set {
+        if int(set_index) == index {
+            unordered_remove(&scene.selection.set, set_index)
+            return
+        }
+    }
+    append(&scene.selection.set, i32(index))
+}
+
 editor_undo_init :: proc(scene : ^Scene_Editor, snapshot_allocator : runtime.Allocator) {
     scene.undo.stack_current      = -1
     scene.undo.saved_index        = 0
@@ -150,8 +173,9 @@ editor_undo_init :: proc(scene : ^Scene_Editor, snapshot_allocator : runtime.All
 
 editor_snapshot_make :: proc(scene : ^Scene_Editor) -> Editor_Snapshot {
     return {
-        platforms = slice.clone(scene.platforms[:], allocator = scene.undo.snapshot_allocator),
-        selected  = scene.selection.current,
+        platforms        = slice.clone(scene.platforms[:],     allocator = scene.undo.snapshot_allocator),
+        selection_set    = slice.clone(scene.selection.set[:], allocator = scene.undo.snapshot_allocator),
+        selection_leader = scene.selection.leader,
     }
 }
 
@@ -172,20 +196,10 @@ editor_push_snapshot :: proc(scene : ^Scene_Editor, skip_time_check := false) {
     scene.undo.last_undo_time = time.tick_now()
 }
 
-editor_restore_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot, skip_selection_pending := false) {
+editor_restore_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot) {
     delete(scene.platforms)
-    scene.platforms = slice.clone_to_dynamic(snapshot.platforms[:], allocator = context.allocator)
-    
-    if skip_selection_pending {
-        scene.selection.current = snapshot.selected
-        return
-    }
-
-    if snapshot.selected != nil {
-        pending_action_set(&scene.selection.pending, &scene.selection.current, snapshot.selected.?, forced = true)
-    } else {
-        pending_action_clear(&scene.selection.pending, forced = true)
-    }
+    scene.platforms     = slice.clone_to_dynamic(snapshot.platforms[:], allocator = context.allocator)
+    scene.selection.set = slice.clone_to_dynamic(snapshot.selection_set)
 }
 
 editor_undo :: proc(scene : ^Scene_Editor) {
@@ -232,7 +246,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
     update_ui = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         ui := ctx.ui
 
-        show_inspector := scene.selection.current != nil
+        show_inspector := len(scene.selection.set) == 1
 
         // FPS counter
         ui_push_text(
@@ -384,6 +398,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
         // Inspector
         if show_inspector {
+            current_selection := scene.selection.set[0]
+
             inspector_rect, _ := ui_push_rect(
                 ui     = ui,
                 sizing = { INSPECTOR_WIDTH, Percent_Offset{1, -STATUS_BAR_HEIGHT}},
@@ -397,9 +413,9 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
                 layout := ui_layout_begin(ui, .Vertical, pad = 8, gap = 8)
 
-                platform := &scene.platforms[scene.selection.current.?]
+                platform := &scene.platforms[current_selection]
                 
-                ui_push_layout_text(ui, &layout, fmt.tprintf("Index %03d", scene.selection.current.?))
+                ui_push_layout_text(ui, &layout, fmt.tprintf("Index %03d", current_selection))
 
                 if new_value, changed := editor_property_vector3(
                     ui     = ui,
@@ -482,7 +498,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             ray_direction = ray_direction,
                             box_origin    = platform.origin,
                             box_size      = platform.size,
-                        ); hit && (dist < min_select_dist || (dist == min_select_dist && i32(i) == scene.selection.current)) {
+                        ); hit && (dist < min_select_dist || (dist == min_select_dist && editor_selection_contains(scene, i))) {
                             min_select_dist = dist
                             closest_index   = i32(i)
                         }
@@ -510,8 +526,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
         if ctx.mouse.state[.Left] == .Pressed && editor_is_position_in_3d_region(ctx, ctx.mouse.position) {
             clicked_on_3d = true
-            scene.input.focused_region =
-                editor_is_position_in_3d_region(ctx, ctx.mouse.position) ? .Region_3D : .Region_Ui
+            scene.input.focused_region = editor_is_position_in_3d_region(ctx, ctx.mouse.position) ? .Region_3D : .Region_Ui
             clicked_platform = get_platform_under_cursor(scene, ctx)  
         }
 
@@ -525,7 +540,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         )
 
         for &platform, i in scene.platforms {
-            selected := scene.selection.current != nil && i32(i) == scene.selection.current.?
+            selected := editor_selection_contains(scene, i)
 
             switch &variant in platform.variant {
                 case Platform_Box:
@@ -552,10 +567,10 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         if clicked_on_3d && !editor_drag_state_active(scene, ctx) {
-            if clicked_platform == nil {
-                pending_action_clear(&scene.selection.pending)
+            if index, ok := clicked_platform.?; ok {
+                editor_selection_toggle(scene, index)
             } else {
-                pending_action_set(&scene.selection.pending, &scene.selection.current, clicked_platform.?)
+               editor_selection_clear(scene)
             }
         }
 
@@ -565,6 +580,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         debug_draw_3d(&scene.debug_draw, renderer)
     },
     end_frame = proc(scene : ^Scene_Editor, ctx : Game_Context) {
+        // Whether we should add an undo snapshot in end of frame or not
         push_snapshot := false
 
         // Update modifiers
@@ -584,29 +600,23 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             editor_redo(scene)
         } else
         // Handle deletion
-        if .Delete in scene.frame_actions {
-            if selected_index, ok := scene.selection.current.?; ok {
-                unordered_remove(&scene.platforms, scene.selection.current.?)
-                pending_action_clear(&scene.selection.pending, forced = true)
-                // This would change selection so undo push will do after selection is resolved
-                push_snapshot = true
+        if .Delete in scene.frame_actions && len(scene.selection.set) > 0 {
+            slice.reverse_sort(scene.selection.set[:])
+            for index in scene.selection.set {
+                unordered_remove(&scene.platforms, index)
             }
+            editor_selection_clear(scene)
+            push_snapshot = true
         } else
         // Handle deleting all platforms
         if .Delete_All in scene.frame_actions {
             clear(&scene.platforms)
-            if scene.selection.current != nil {
-                pending_action_clear(&scene.selection.pending, forced = true)
-            }
+            editor_selection_clear(scene)
             push_snapshot = true
         } else
         // Handle adding
         if .Add in scene.frame_actions {
             spawn_position : [3]f32   
-            if scene.selection.current != nil {
-                spawn_position = scene.platforms[scene.selection.current.?].origin +
-                    {0, scene.platforms[scene.selection.current.?].size.y, 0}
-            }
             switch ctx.settings.editor.next_platform {
                 case .Box:
                     append(&scene.platforms, {
@@ -644,15 +654,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             editor_save_map(scene)
         }
 
-        // Handle new selection
-        if selection_changed := pending_resolve(&scene.selection.pending, &scene.selection.current);
-            selection_changed && scene.selection.current != nil {
-            scene.selection.is_new = true
-            editor_drag_state_finish(scene, ctx)
-            // It's not worth wasting memory to save undo snapshot with only the selection change
-        } else {
-            scene.selection.is_new = false
-        }
+        // Selection now resolve directly
 
         if push_snapshot {
             editor_push_snapshot(scene)
@@ -1118,7 +1120,7 @@ editor_load_map :: proc(scene : ^Scene_Editor, ctx : Game_Context, allocator := 
 
     map_data, err := os.read_entire_file(MAP_FILE_PATH, allocator = allocator)
     defer delete(map_data, allocator = allocator)
-    
+
     if err != nil {
         fmt.eprintfln("Cannot read map file!")
         return
@@ -1127,16 +1129,16 @@ editor_load_map :: proc(scene : ^Scene_Editor, ctx : Game_Context, allocator := 
     header := cast(^Editor_Map_Save_Header)raw_data(map_data)
 
     if header.magic != MAP_SAVE_MAGIC {
-        fmt.eprintfln("Incorrect magic")
+        fmt.eprintfln("Incorrect magic!")
         return
     }
 
     if header.version != MAP_SAVE_VERSION {
-        fmt.eprintfln("Incorrect version")
+        fmt.eprintfln("Incorrect version!")
         return
     }
 
-    parsed_map := Editor_Map {
+    map_save := Editor_Map_Save {
         selected  = header.selected,
         free_cam  = header.free_cam,
         platforms = slice.reinterpret(
@@ -1148,12 +1150,12 @@ editor_load_map :: proc(scene : ^Scene_Editor, ctx : Game_Context, allocator := 
     // Do call editor_destroy_snapshot on this one, since the platforms point to the map_data
     // We will free map_data once the scope ends
     snapshot := Editor_Snapshot {
-        selected  = parsed_map.selected,
-        platforms = parsed_map.platforms,
+        selected  = map_save.selected,
+        platforms = map_save.platforms,
     }
 
-    editor_restore_snapshot(scene, snapshot, skip_selection_pending = true)
-    scene.free_cam = parsed_map.free_cam
+    editor_restore_snapshot(scene, snapshot)
+    scene.free_cam = map_save.free_cam
 
     return true
 }

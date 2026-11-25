@@ -2,22 +2,16 @@ package demo
 
 import "core:fmt"
 
-Struct1 :: struct {
-	position : [3]f32,
-	origin   : [3]f32,
-	type     : u8,
-}
-
-Struct2 :: struct #packed {
-	position : [3]f32,
-	origin   : [3]f32,
-	type     : u8,
-}
-
-Struct3 :: struct #packed {
-	using _ : Struct1
-}
-
 main :: proc() {
-	fmt.println(size_of(Struct1), size_of(Struct2), size_of(Struct3))
+	arr : [dynamic]i32
+	append(&arr, 5)
+	append(&arr, 2)
+	append(&arr, 4)
+	append(&arr, 8)
+
+	for _, index in arr {
+		ordered_remove(&arr, index)
+	}
+
+	fmt.println(arr)
 }
