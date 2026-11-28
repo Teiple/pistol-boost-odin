@@ -315,7 +315,7 @@ pick_box_face_multi :: proc(
             box_origin    = platforms[index].origin,
             box_size      = platforms[index].size,
         ); hit && dist < best_dist {
-            dist       = best_dist
+            best_dist  = dist 
             pick_index = index
             pick_face  = face
         }

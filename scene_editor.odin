@@ -10,11 +10,12 @@ import "core:math"
 import "base:intrinsics"
 import sapp "sokol-odin/sokol/app"
 
-INSPECTOR_WIDTH      :: 250
-STATUS_BAR_HEIGHT    :: 50
-UNDO_TIMEOUT         :: 300 * time.Millisecond
-SAVED_MARKER_TIMEOUT :: 1   * time.Second
-UNDO_MAX_STEPS       :: 24
+INSPECTOR_WIDTH         :: 250
+STATUS_BAR_HEIGHT       :: 50
+UNDO_TIMEOUT            :: 300 * time.Millisecond
+SAVED_MARKER_TIMEOUT    :: 1   * time.Second
+DUPLICATE_NOTIF_TIMEOUT :: 1   * time.Second
+UNDO_MAX_STEPS          :: 24
 
 MAP_DIR       :: "."
 MAP_FILE      :: "map.pbmp"
@@ -83,7 +84,8 @@ Editor_Frame_Action :: enum u8 {
     Duplicate,
     Undo, Redo,
     Save,
-    Delete_All
+    Delete_All,
+    Select_All,
 }
 
 Editor_Settings :: struct {
@@ -157,8 +159,10 @@ Scene_Editor :: struct {
         saved_index        : int,
     },
 
-    last_save_time : time.Tick, 
-    frame_actions  : bit_set[Editor_Frame_Action; u16],
+    last_save_time      : time.Tick, 
+    last_dup_time : time.Tick, 
+    last_dup_count      : i32, 
+    frame_actions       : bit_set[Editor_Frame_Action; u16],
 }
 
 editor_selection_contains :: proc(scene : ^Scene_Editor, index : i32) -> bool {
@@ -181,10 +185,35 @@ editor_selection_toggle :: proc(scene : ^Scene_Editor, index : i32) {
     for &sel_index, set_index in scene.selection.set {
         if sel_index == index {
             unordered_remove(&scene.selection.set, set_index)
+            // if delete the leader move the leader index elsewhere 
+            if sel_index == scene.selection.leader {
+                scene.selection.leader = len(scene.selection.set) == 0 ? nil : scene.selection.set[0]
+            }
             return
         }
     }
     append(&scene.selection.set, index)
+    if len(scene.selection.set) == 1 {
+        scene.selection.leader = index
+    }
+
+    scene.selection.new_counter = 2
+}
+
+editor_selection_select_all :: proc(scene : ^Scene_Editor) {
+    if len(scene.platforms) == 0 do return
+
+    prev_leader := scene.selection.leader
+    editor_selection_clear(scene)
+    for _, index in scene.platforms {
+        append(&scene.selection.set, i32(index))
+    }
+    if prev_leader != nil {
+        scene.selection.leader = prev_leader
+    } else {
+        scene.selection.leader = scene.selection.set[0]
+    }
+
     scene.selection.new_counter = 2
 }
 
@@ -215,10 +244,9 @@ editor_push_snapshot :: proc(scene : ^Scene_Editor, skip_time_check := false) {
     scene.undo.stack_max = scene.undo.stack_current
 
     resolved_index := scene.undo.stack_current % len(scene.undo.stack)
-    delete(scene.undo.stack[resolved_index].platforms, allocator = scene.undo.snapshot_allocator)
+    editor_destroy_snapshot(scene.undo.stack[resolved_index], allocator = scene.undo.snapshot_allocator)
 
     scene.undo.stack[resolved_index] = snapshot
-
     scene.undo.last_undo_time = time.tick_now()
 }
 
@@ -303,9 +331,17 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             ui_push_text(
                 ui     = ui,
                 text   = "Saved!",
-                anchor = { offset = { 8, 0} }
+                anchor = { offset = { 8, 0} },
             )
-        } 
+        }
+
+        if time.tick_diff(scene.last_dup_time, time.tick_now()) < DUPLICATE_NOTIF_TIMEOUT {
+            ui_push_text(
+                ui     = ui,
+                text   = fmt.tprintf("Duplicated %v %v", scene.last_dup_count, scene.last_dup_count > 1 ? "items" : "item"),
+                anchor = { offset = { 8, 32 } },
+            )
+        }
 
         // Status bar
         status_bar_rect, _ := ui_push_rect(
@@ -338,17 +374,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                 },
                 value   = ctx.settings.editor.view_mode,
             ); changed {
-                switch new_value {
-                    case .Perspective:
-                        scene.free_cam.mode = .Perspective
-                    case .Ortho_Front:
-                        scene.free_cam.mode = .Orthogonal
-                        scene.free_cam.mode_orthogonal.direction = {0, 0, -1}
-                    case .Ortho_Back:
-                        scene.free_cam.mode = .Orthogonal
-                        scene.free_cam.mode_orthogonal.direction = {0, 0,  1}
-                }
-                ctx.settings.editor.view_mode = new_value
+                editor_switch_view_mode(scene, ctx, new_value)
             }
 
             ui_push_checkbox(
@@ -652,7 +678,21 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         } else
         // Handle adding
         if .Add in scene.frame_actions {
-            spawn_position : [3]f32   
+            spawn_position : [3]f32 = 0
+            spawn_size     : [3]f32 : 1
+
+            if len(scene.selection.set) > 0 {
+                spawn_position = min(f32)
+                // find highest point above current selection set as a spawn point 
+                for index in scene.selection.set {
+                    point := scene.platforms[index].origin + scene.platforms[index].size
+                    if point.y > spawn_position.y {
+                        spawn_position = point
+                    }
+                }
+                spawn_position.xz -= spawn_size.xz                                
+            }
+
             switch ctx.settings.editor.next_platform {
                 case .Box:
                     append(&scene.platforms, {
@@ -669,21 +709,32 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                         }
                     })
             }
+
             // We can technically push snapshot directly now but let go with a standard
             push_snapshot = true
         } else
         // Handle duplication
         if .Duplicate in scene.frame_actions && len(scene.selection.set) > 0 {
-            sel_remove_to  := len(scene.selection.set)
-
-            // Loop through all of the selected platforms, duplicate them in placen and then select them
-            for index in scene.selection.set {
-                append(&scene.platforms,     scene.platforms[index])
-                append(&scene.selection.set, cast(i32)len(scene.platforms) - 1)
+            prev_leader := scene.selection.leader.?
+            prev_leader_set_index := -1
+            // Loop through all of the selected platforms, duplicate them in place and then select them
+            for index, i in scene.selection.set {
+                append(&scene.platforms, scene.platforms[index])
+                scene.selection.set[i] = cast(i32)len(scene.platforms) - 1
+                if index == prev_leader {
+                    prev_leader_set_index  = i 
+                }
             }
-
-            // Remove old selection
-            remove_range(&scene.selection.set, 0, sel_remove_to)
+            scene.selection.leader = scene.selection.set[prev_leader_set_index] 
+            
+            scene.last_dup_count  = cast(i32)len(scene.selection.set)
+            scene.last_dup_time   = time.tick_now()
+            
+            push_snapshot = true
+        } else
+        // Handle special selection
+        if .Select_All in scene.frame_actions {
+            editor_selection_select_all(scene)
         } else
         // Handle saving
         if .Save in scene.frame_actions {
@@ -692,7 +743,6 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         // Selection now resolve directly
-
         if push_snapshot {
             editor_push_snapshot(scene)
         }
@@ -743,30 +793,25 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         }
 
         if ev.type == .KEY_DOWN && ev.key_code == .V {
-            free_cam := &scene.free_cam
-            if free_cam.mode == .Perspective {
-                free_cam.mode = .Orthogonal
+            view_mode := ctx.settings.editor.view_mode
+            if view_mode == .Perspective {
                 if (ctx.camera.target - ctx.camera.position).z < 0 {
-                    free_cam.mode_orthogonal.direction = { 0, 0, -1}
-                    ctx.settings.editor.view_mode      = .Ortho_Front
+                    view_mode = .Ortho_Front
                 } else {
-                    free_cam.mode_orthogonal.direction = { 0, 0, 1}
-                    ctx.settings.editor.view_mode      = .Ortho_Back
+                    view_mode = .Ortho_Back
                 }
-                free_cam.mode_orthogonal.position.z  = -free_cam.mode_orthogonal.direction.z * 10
-                free_cam.mode_orthogonal.position.xy = get_centroid_of_platforms(scene.platforms[:], scene.selection.set[:]).xy
             } else {
-                free_cam.mode                 = .Perspective
-                ctx.settings.editor.view_mode = .Perspective
+                view_mode = .Perspective
             }
+            editor_switch_view_mode(scene, ctx, view_mode)
         }
 
         if ctrl && ev.type == .KEY_DOWN && ev.key_code == .S {
             scene.frame_actions += { .Save }
         }
 
-        if ctrl && shift && ev.type == .KEY_DOWN && ev.key_code == .A {
-            scene.frame_actions += { .Add }
+        if ctrl && ev.type == .KEY_DOWN && ev.key_code == .A {
+            scene.frame_actions += { .Add } if shift else { .Select_All } 
         }
 
         if ctrl && shift && ev.type == .KEY_DOWN && ev.key_code == .DELETE {
@@ -775,6 +820,20 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
         free_camera_input(&scene.free_cam, ev)
     },
+}
+
+editor_switch_view_mode :: proc(scene : ^Scene_Editor, ctx : Game_Context, view_mode : Editor_View_Mode) {
+    switch view_mode {
+        case .Ortho_Back, .Ortho_Front:
+            dir : f32 = view_mode == .Ortho_Front ? -1 : 1
+            scene.free_cam.mode = .Orthogonal
+            scene.free_cam.mode_orthogonal.direction = { 0, 0, dir}
+            scene.free_cam.mode_orthogonal.position.z  = -dir * 10
+            scene.free_cam.mode_orthogonal.position.xy = get_centroid_of_platforms(scene.platforms[:], scene.selection.set[:]).xy            
+        case .Perspective:
+            scene.free_cam.mode = .Perspective
+    }
+    ctx.settings.editor.view_mode = view_mode
 }
 
 editor_drag_state_update :: proc(scene : ^Scene_Editor, ctx : Game_Context, clicked_platform : Maybe(i32), clicked_on_3d : bool) {
