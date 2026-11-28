@@ -35,13 +35,19 @@ Editor_Map_Save_Header :: struct {
 
     platforms : Range,
     free_cam  : Free_Camera,
-    selected  : Maybe(i32),
+    selection : struct {
+        set    : Range,
+        leader : Maybe(i32),
+    },
 }
 
 Editor_Map_Save :: struct {
     platforms : []Platform,
     free_cam  : Free_Camera,
-    selected  : Maybe(i32),
+    selection : struct {
+        set    : []i32,
+        leader : Maybe(i32) 
+    },
 }
 
 Editor_View_Mode :: enum {
@@ -51,9 +57,11 @@ Editor_View_Mode :: enum {
 }  
 
 Editor_Snapshot :: struct {
-    platforms        : []Platform,
-    selection_set    : []i32,
-    selection_leader : Maybe(i32),
+    platforms : []Platform,
+    selection : struct {
+        set    : []i32,
+        leader : Maybe(i32),
+    }
 }
 
 Editor_Region :: enum u8 {
@@ -94,14 +102,21 @@ DEFAULT_EDITOR_SETTINGS : Editor_Settings : {
     snap_to_grid  = true,
 }
 
+Face_Extend_Target :: struct {
+    initial_origin   : [3]f32,
+    initial_size     : [3]f32,
+    index            : i32,
+}
+
 Scene_Editor :: struct {
     debug_draw        : Debug_Draw, 
     free_cam          : Free_Camera,
     platforms         : [dynamic]Platform,
 
     selection : struct {
-        set     : [dynamic]i32,
-        leader  : Maybe(i32),
+        set         : [dynamic]i32,
+        leader      : Maybe(i32),
+        new_counter : i8,
     },
 
     input : struct {
@@ -110,20 +125,24 @@ Scene_Editor :: struct {
     },
 
     drag_state : struct {
+        data : struct {
+            face_extend_targets : [dynamic]Face_Extend_Target,
+        },
+
         face_extend : struct {
-            extend_point     : [3]f32,
-            initial_origin   : [3]f32,
-            initial_size     : [3]f32,
-            initial_distance : f32,
-            extend_face      : Box_Face,
-            is_active        : bool,
-            has_delta        : bool,
+            targets           : []Face_Extend_Target,
+            initial_distance  : f32,
+            extend_face       : Box_Face,
+            extend_point      : [3]f32,
+            leader            : i32,
+
+            is_active         : bool,
+            has_delta         : bool,
         },
         move: struct {
             initial_offset   : [3]f32,
-            initial_origin   : [3]f32,
             initial_height   : f32,
-            vertical         : bool,
+            // vertical         : bool,
             is_active        : bool,
             has_delta        : bool,
         },
@@ -142,9 +161,9 @@ Scene_Editor :: struct {
     frame_actions  : bit_set[Editor_Frame_Action; u16],
 }
 
-editor_selection_contains :: proc(scene : ^Scene_Editor, #any_int index : int) -> bool {
-    for i in scene.selection.set {
-        if int(i) == index do return true
+editor_selection_contains :: proc(scene : ^Scene_Editor, index : i32) -> bool {
+    for sel_index in scene.selection.set {
+        if sel_index == index do return true
     }
     return false
 }
@@ -154,14 +173,19 @@ editor_selection_clear :: proc(scene : ^Scene_Editor) {
     scene.selection.leader = nil
 }
 
-editor_selection_toggle :: proc(scene : ^Scene_Editor, #any_int index : int) {
-    for &platform_index, set_index in scene.selection.set {
-        if int(set_index) == index {
+editor_selection_changed :: proc(scene : ^Scene_Editor) -> bool {
+    return scene.selection.new_counter == 1
+}
+
+editor_selection_toggle :: proc(scene : ^Scene_Editor, index : i32) {
+    for &sel_index, set_index in scene.selection.set {
+        if sel_index == index {
             unordered_remove(&scene.selection.set, set_index)
             return
         }
     }
-    append(&scene.selection.set, i32(index))
+    append(&scene.selection.set, index)
+    scene.selection.new_counter = 2
 }
 
 editor_undo_init :: proc(scene : ^Scene_Editor, snapshot_allocator : runtime.Allocator) {
@@ -173,9 +197,11 @@ editor_undo_init :: proc(scene : ^Scene_Editor, snapshot_allocator : runtime.All
 
 editor_snapshot_make :: proc(scene : ^Scene_Editor) -> Editor_Snapshot {
     return {
-        platforms        = slice.clone(scene.platforms[:],     allocator = scene.undo.snapshot_allocator),
-        selection_set    = slice.clone(scene.selection.set[:], allocator = scene.undo.snapshot_allocator),
-        selection_leader = scene.selection.leader,
+        platforms = slice.clone(scene.platforms[:],     allocator = scene.undo.snapshot_allocator),
+        selection =  {
+            set    = slice.clone(scene.selection.set[:], allocator = scene.undo.snapshot_allocator),
+            leader = scene.selection.leader,
+        }
     }
 }
 
@@ -196,10 +222,13 @@ editor_push_snapshot :: proc(scene : ^Scene_Editor, skip_time_check := false) {
     scene.undo.last_undo_time = time.tick_now()
 }
 
-editor_restore_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot) {
+editor_restore_snapshot :: proc(scene : ^Scene_Editor, snapshot : Editor_Snapshot, loc := #caller_location) {
     delete(scene.platforms)
-    scene.platforms     = slice.clone_to_dynamic(snapshot.platforms[:], allocator = context.allocator)
-    scene.selection.set = slice.clone_to_dynamic(snapshot.selection_set)
+    delete(scene.selection.set)
+
+    scene.platforms        = slice.clone_to_dynamic(snapshot.platforms,     allocator = context.allocator)
+    scene.selection.set    = slice.clone_to_dynamic(snapshot.selection.set, allocator = context.allocator)
+    scene.selection.leader = snapshot.selection.leader 
 }
 
 editor_undo :: proc(scene : ^Scene_Editor) {
@@ -233,6 +262,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         snapshot_allocator := context.allocator
         editor_load_map(scene, ctx)
         editor_undo_init(scene, snapshot_allocator = snapshot_allocator)
+        
+        scene.drag_state.data.face_extend_targets = make([dynamic]Face_Extend_Target, allocator = context.allocator)
     },
     destroy = proc(scene : ^Scene_Editor, ctx : Game_Context) {
         debug_draw_destroy(&scene.debug_draw)        
@@ -240,6 +271,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         for &snapshot in scene.undo.stack {
             editor_destroy_snapshot(snapshot, allocator = scene.undo.snapshot_allocator)
         }
+        delete(scene.selection.set)
+        delete(scene.drag_state.data.face_extend_targets)
 
         editor_exit()
     },
@@ -498,7 +531,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                             ray_direction = ray_direction,
                             box_origin    = platform.origin,
                             box_size      = platform.size,
-                        ); hit && (dist < min_select_dist || (dist == min_select_dist && editor_selection_contains(scene, i))) {
+                        ); hit && (dist < min_select_dist || (dist == min_select_dist && editor_selection_contains(scene, i32(i)))) {
                             min_select_dist = dist
                             closest_index   = i32(i)
                         }
@@ -525,9 +558,9 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         clicked_on_3d    : bool       = false
 
         if ctx.mouse.state[.Left] == .Pressed && editor_is_position_in_3d_region(ctx, ctx.mouse.position) {
-            clicked_on_3d = true
+            clicked_on_3d              = true
             scene.input.focused_region = editor_is_position_in_3d_region(ctx, ctx.mouse.position) ? .Region_3D : .Region_Ui
-            clicked_platform = get_platform_under_cursor(scene, ctx)  
+            clicked_platform           = get_platform_under_cursor(scene, ctx)  
         }
 
         debug_draw_push_grid(
@@ -540,7 +573,7 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
         )
 
         for &platform, i in scene.platforms {
-            selected := editor_selection_contains(scene, i)
+            selected := editor_selection_contains(scene, i32(i))
 
             switch &variant in platform.variant {
                 case Platform_Box:
@@ -568,9 +601,12 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 
         if clicked_on_3d && !editor_drag_state_active(scene, ctx) {
             if index, ok := clicked_platform.?; ok {
+                if scene.input.modifiers[.Ctrl] != .Down {
+                    editor_selection_clear(scene)
+                }
                 editor_selection_toggle(scene, index)
             } else {
-               editor_selection_clear(scene)
+                editor_selection_clear(scene)
             }
         }
 
@@ -637,16 +673,17 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             push_snapshot = true
         } else
         // Handle duplication
-        if .Duplicate in scene.frame_actions {
-            if selected_index, ok := scene.selection.current.?; ok {
-                duplicate_offset : [3]f32 : {0, 0, 0}
-                
-                platform := scene.platforms[selected_index]
-                platform.origin += duplicate_offset
-                scene.frame_actions += { .Duplicate }
-                append(&scene.platforms, platform)
-                pending_action_set(&scene.selection.pending, &scene.selection.current, i32(len(scene.platforms)) - 1)
+        if .Duplicate in scene.frame_actions && len(scene.selection.set) > 0 {
+            sel_remove_to  := len(scene.selection.set)
+
+            // Loop through all of the selected platforms, duplicate them in placen and then select them
+            for index in scene.selection.set {
+                append(&scene.platforms,     scene.platforms[index])
+                append(&scene.selection.set, cast(i32)len(scene.platforms) - 1)
             }
+
+            // Remove old selection
+            remove_range(&scene.selection.set, 0, sel_remove_to)
         } else
         // Handle saving
         if .Save in scene.frame_actions {
@@ -660,6 +697,11 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
             editor_push_snapshot(scene)
         }
         
+        scene.selection.new_counter    -= 1
+        if scene.selection.new_counter < 0 {
+            scene.selection.new_counter = 0
+        }
+
         scene.frame_actions = {}
     },
     input_ui  =  proc(scene : ^Scene_Editor, ctx : Game_Context, ev : sapp.Event) {
@@ -711,22 +753,8 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
                     free_cam.mode_orthogonal.direction = { 0, 0, 1}
                     ctx.settings.editor.view_mode      = .Ortho_Back
                 }
-                free_cam.mode_orthogonal.position.z = -free_cam.mode_orthogonal.direction.z * 10
-            
-                if scene.selection.current != nil {
-                    selected := scene.platforms[scene.selection.current.?]
-                    centroid := selected.origin + selected.size * .5
-                    free_cam.mode_orthogonal.position.xy = centroid.xy
-                } else {
-                    centroid : [3]f32
-                    for &p in scene.platforms {
-                        centroid += p.origin + p.size * .5
-                    }
-                    if len(scene.platforms) > 0 {
-                        centroid /= cast(f32)len(scene.platforms)
-                    }
-                    free_cam.mode_orthogonal.position.xy = centroid.xy
-                }
+                free_cam.mode_orthogonal.position.z  = -free_cam.mode_orthogonal.direction.z * 10
+                free_cam.mode_orthogonal.position.xy = get_centroid_of_platforms(scene.platforms[:], scene.selection.set[:]).xy
             } else {
                 free_cam.mode                 = .Perspective
                 ctx.settings.editor.view_mode = .Perspective
@@ -750,11 +778,10 @@ SCENE_EDITOR_CALLBACKS : Scene_Callbacks(^Scene_Editor) : {
 }
 
 editor_drag_state_update :: proc(scene : ^Scene_Editor, ctx : Game_Context, clicked_platform : Maybe(i32), clicked_on_3d : bool) {
-    if scene.selection.current == nil {
+    if len(scene.selection.set)   == 0 {
         return
     }
-    platform := &scene.platforms[scene.selection.current.?]
-    
+
     // Face extend check 
     if !scene.drag_state.face_extend.is_active && scene.input.modifiers[.Shift] == .Down {
         ray_origin, ray_direction := viewport_get_mouse_world_ray(
@@ -763,49 +790,84 @@ editor_drag_state_update :: proc(scene : ^Scene_Editor, ctx : Game_Context, clic
             ctx.mouse.position
         )
 
-        face := pick_box_face(
+        lead_index, lead_face := pick_box_face_multi(
             ray_origin    = ray_origin,
             ray_direction = ray_direction,
-            box_origin    = platform.origin,
-            box_size      = platform.size,
+            platforms     = scene.platforms[:],
+            indices       = scene.selection.set[:],
         )
 
-        quad := get_box_quad_by_face(
-            box_origin = platform.origin,
-            box_size   = platform.size,
-            face       = face,
-            offset     = .01
+        clear(&scene.drag_state.data.face_extend_targets)
+
+        pick_face_extend_targets(
+            lead_index = lead_index, 
+            lead_face  = lead_face,
+
+            platforms  = scene.platforms[:],
+            indices    = scene.selection.set[:],
+        
+            targets    = &scene.drag_state.data.face_extend_targets,  
         )
-        center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4    
-    
-        debug_draw_push_quad(
-            draw    = &scene.debug_draw,
-            points  = quad,
-            color   = hsv(40),
-            overlay = true,
-        )
+
+        lead_face_center : [3]f32
+        for target in scene.drag_state.data.face_extend_targets {
+            quad := get_box_quad_by_face(
+                box_origin = scene.platforms[target.index].origin,
+                box_size   = scene.platforms[target.index].size,
+                face       = lead_face,
+                offset     = .01
+            )
+            
+            if target.index == lead_index {
+                lead_face_center = (quad[0] + quad[1] + quad[2] + quad[3]) / 4
+            }
+        
+            debug_draw_push_quad(
+                draw    = &scene.debug_draw,
+                points  = quad,
+                color   = hsv(40),
+                overlay = true,
+            )
+        }
 
         if clicked_on_3d {
             if dist, ok := ray_to_line(
-                ray_origin       = ray_origin,
-                ray_direction    = ray_direction,
-                line_point       = center,
-                line_direction   = box_face_normals[face],
+                ray_origin     = ray_origin,
+                ray_direction  = ray_direction,
+                line_point     = lead_face_center,
+                line_direction = box_face_normals[lead_face],
             ); ok {
                 scene.drag_state.face_extend = {
                     is_active        = true,
-                    extend_point     = center, 
-                    extend_face      = face,
-                    initial_size     = platform.size,
-                    initial_origin   = platform.origin,
                     initial_distance = dist,
+                    extend_face      = lead_face,
+                    extend_point     = lead_face_center,
+                    targets          = scene.drag_state.data.face_extend_targets[:],
                 }
             }
         }
     }
 
+    
     // Face extend run
     if scene.drag_state.face_extend.is_active && ctx.mouse.state[.Left] == .Down {
+        // Draw current extending faces
+        for target in scene.drag_state.face_extend.targets {
+            quad := get_box_quad_by_face(
+                box_origin = scene.platforms[target.index].origin,
+                box_size   = scene.platforms[target.index].size,
+                face       = scene.drag_state.face_extend.extend_face,
+                offset     = .01
+            )
+            
+            debug_draw_push_quad(
+                draw    = &scene.debug_draw,
+                points  = quad,
+                color   = hsv(50),
+                overlay = true,
+            )
+        }
+
         ray_origin, ray_direction := viewport_get_mouse_world_ray(
             ctx.viewport,
             ctx.camera,
@@ -825,101 +887,100 @@ editor_drag_state_update :: proc(scene : ^Scene_Editor, ctx : Game_Context, clic
         if can_extend {
             min_size := MIN_PLATFORM_SIZE
 
-            extend_index   := box_face_normal_indices[scene.drag_state.face_extend.extend_face]
-            initial_origin := scene.drag_state.face_extend.initial_origin
-            initial_size   := scene.drag_state.face_extend.initial_size
+            extend_index := box_face_normal_indices[scene.drag_state.face_extend.extend_face]
+            
+            for target in scene.drag_state.face_extend.targets {
+                initial_origin := target.initial_origin
+                initial_size   := target.initial_size
 
-            prev_origin := platform.origin
-            prev_size   := platform.size
+                platform       := &scene.platforms[target.index]
+                prev_origin    := platform.origin
+                prev_size      := platform.size
 
-            if extend_direction[extend_index] > 0 {
-                current_face_pos := initial_origin[extend_index] + initial_size[extend_index] + extend_distance
-                if ctx.settings.editor.snap_to_grid {
-                    current_face_pos = linalg.round(current_face_pos / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
+                if extend_direction[extend_index] > 0 {
+                    current_face_pos := initial_origin[extend_index] + initial_size[extend_index] + extend_distance
+                    if ctx.settings.editor.snap_to_grid {
+                        current_face_pos = linalg.round(current_face_pos / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
+                    }
+                    platform.origin = initial_origin
+                    platform.size   = initial_size
+                    platform.size[extend_index] = max(min_size[extend_index], current_face_pos - initial_origin[extend_index])
+                } else {
+                    fixed_opposite   := initial_origin[extend_index] + initial_size[extend_index]
+                    current_face_pos := initial_origin[extend_index] - extend_distance
+                    if ctx.settings.editor.snap_to_grid {
+                        current_face_pos = linalg.round(current_face_pos / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
+                    }
+                    current_face_pos = min(current_face_pos, fixed_opposite - min_size[extend_index])
+                    platform.origin  = initial_origin
+                    platform.origin[extend_index] = current_face_pos
+                    platform.size = initial_size
+                    platform.size[extend_index] = fixed_opposite - current_face_pos
                 }
-                platform.origin = initial_origin
-                platform.size   = initial_size
-                platform.size[extend_index] = max(min_size[extend_index], current_face_pos - initial_origin[extend_index])
-            } else {
-                fixed_opposite   := initial_origin[extend_index] + initial_size[extend_index]
-                current_face_pos := initial_origin[extend_index] - extend_distance
-                if ctx.settings.editor.snap_to_grid {
-                    current_face_pos = linalg.round(current_face_pos / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
-                }
-                current_face_pos = min(current_face_pos, fixed_opposite - min_size[extend_index])
-                platform.origin  = initial_origin
-                platform.origin[extend_index] = current_face_pos
-                platform.size = initial_size
-                platform.size[extend_index] = fixed_opposite - current_face_pos
+
+                // We don't compare to initial values here to match move state behavior, move state doesn't save intial values, just offsets
+                scene.drag_state.face_extend.has_delta |= platform.origin != prev_origin || platform.size != prev_size
             }
-
-            // We don't compare to initial values here to match move state behavior, move state doesn't save intial values, just offsets
-            scene.drag_state.face_extend.has_delta |= platform.origin != prev_origin || platform.size != prev_size
         }
-
-        // Draw current extending face
-        quad := get_box_quad_by_face(
-            box_origin = platform.origin,
-            box_size   = platform.size,
-            face       = scene.drag_state.face_extend.extend_face,
-            offset     = .01
-        )
-        center := (quad[0] + quad[1] + quad[2] + quad[3]) / 4    
-    
-        debug_draw_push_quad(
-            draw    = &scene.debug_draw,
-            points  = quad,
-            color   = hsv(40),
-            overlay = true,
-        )
     }
+    
 
     // Move check
     get_move_plane_normal :: proc(scene : ^Scene_Editor) -> [3]f32 {
         return scene.free_cam.mode == .Perspective ? {0, 1, 0} : -scene.free_cam.mode_orthogonal.direction
     }
 
-    if !scene.drag_state.face_extend.is_active {
-        hit := clicked_platform == scene.selection.current.?
-        hit |= ctx.mouse.state[.Left] == .Down && scene.selection.is_new
-        
-        if hit {
-            ray_origin, ray_direction := viewport_get_mouse_world_ray(
-                ctx.viewport,
-                ctx.camera,
-                ctx.mouse.position
-            )
+    get_lowest_in_selection :: proc(scene : ^Scene_Editor) -> i32 {
+        lowest_origin : [3]f32 = max(f32)
+        lowest_index  : i32    = 0
+        for index in scene.selection.set {
+            if scene.platforms[index].origin.y < lowest_origin.y {
+                lowest_origin = scene.platforms[index].origin
+                lowest_index  = index
+            }
+        }
+        return lowest_index
+    }
 
-            if point, ok := ray_plane_intersect(
-                ray_origin    = ray_origin,
-                ray_direction = ray_direction,
-                plane_normal  = get_move_plane_normal(scene), 
-                plane_point   = platform.origin, 
+    mouse_on_selection := clicked_platform != nil && editor_selection_contains(scene, clicked_platform.?) ||
+        (ctx.mouse.state[.Left] == .Down && editor_selection_changed(scene))
+
+    if !scene.drag_state.move.is_active && !scene.drag_state.face_extend.is_active && len(scene.selection.set) > 0 && mouse_on_selection {
+        ray_origin, ray_direction := viewport_get_mouse_world_ray(
+            ctx.viewport,
+            ctx.camera,
+            ctx.mouse.position
+        )
+
+        lowest_origin := scene.platforms[get_lowest_in_selection(scene)].origin
+
+        if point, ok := ray_plane_intersect(
+            ray_origin    = ray_origin,
+            ray_direction = ray_direction,
+            plane_normal  = get_move_plane_normal(scene), 
+            plane_point   = lowest_origin, 
+        ); ok {
+            scene.drag_state.move = {
+                is_active      = true,
+                initial_offset = point - lowest_origin,
+            }
+        }
+
+        if scene.input.modifiers[.Alt] == .Down {
+            if dist, ok := ray_to_line(
+                ray_origin     = ray_origin,
+                ray_direction  = ray_direction,
+                line_direction = {0, 1, 0}, 
+                line_point     = lowest_origin, 
             ); ok {
-                scene.drag_state.move = {
-                    is_active      = true,
-                    initial_offset = point - platform.origin,
-                    initial_origin = platform.origin,
-                }
+                point := lowest_origin + {0, 1, 0} * dist
+                
+                scene.drag_state.move.is_active      = true
+                scene.drag_state.move.initial_height = point.y - lowest_origin.y
             }
-
-            if scene.input.modifiers[.Alt] == .Down {
-                if dist, ok := ray_to_line(
-                    ray_origin     = ray_origin,
-                    ray_direction  = ray_direction,
-                    line_direction = {0, 1, 0}, 
-                    line_point     = platform.origin, 
-                ); ok {
-                    point := platform.origin + {0, 1, 0} * dist
-                    
-                    scene.drag_state.move.is_active      = true
-                    scene.drag_state.move.vertical       = true
-                    scene.drag_state.move.initial_height = point.y - platform.origin.y
-                }
-            }
-            
         }
     }
+
     
     // Move run
     if scene.drag_state.move.is_active && ctx.mouse.state[.Left] == .Down {                 
@@ -929,53 +990,79 @@ editor_drag_state_update :: proc(scene : ^Scene_Editor, ctx : Game_Context, clic
             mouse_position = ctx.mouse.position, 
         )
 
-        if scene.input.modifiers[.Alt] != .Down {
-            scene.drag_state.move.vertical = false
-        }
+        lowest_index := get_lowest_in_selection(scene)
 
-        if scene.input.modifiers[.Alt] == .Pressed || (scene.drag_state.move.vertical && scene.input.modifiers[.Alt] == .Down) {
+        if scene.input.modifiers[.Alt] == .Pressed || scene.input.modifiers[.Alt] == .Down {
             if dist, ok := ray_to_line(
                 ray_origin      = ray_origin,
                 ray_direction   = ray_direction,
-                line_point      = platform.origin,
+                line_point      = scene.platforms[lowest_index].origin,
                 line_direction  = {0, 1, 0},
             ); ok {
-                prev_origin := platform.origin
+                base_platform := &scene.platforms[lowest_index]
+                prev_origin   := base_platform.origin
+                move_vector   := base_platform.origin + {0, 1, 0} * dist
 
-                point := platform.origin + {0, 1, 0} * dist
                 if scene.input.modifiers[.Alt] == .Pressed {
-                    scene.drag_state.move.vertical       = true
-                    scene.drag_state.move.initial_height = point.y - platform.origin.y
-                } else {
-                    platform.origin.y = point.y - scene.drag_state.move.initial_height
+                    scene.drag_state.move.initial_height = move_vector.y - base_platform.origin.y
+                }
+                else {
+                    base_platform.origin.y = move_vector.y - scene.drag_state.move.initial_height
                     if ctx.settings.editor.snap_to_grid {
-                        platform.origin.y = linalg.round(platform.origin.y / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
+                        base_platform.origin.y = linalg.round(base_platform.origin.y / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                     }
                 }
-                scene.drag_state.move.has_delta |= prev_origin != platform.origin
+
+                delta := base_platform.origin - prev_origin
+                
+                scene.drag_state.move.has_delta |= delta != 0
+
+                for index in scene.selection.set do if index != lowest_index {
+                    scene.platforms[index].origin += delta
+                }
             }
         } else {
+            if (scene.input.modifiers[.Alt] == .Released) {
+                if point, ok := ray_plane_intersect(
+                    ray_origin    = ray_origin,
+                    ray_direction = ray_direction,
+                    plane_normal  = get_move_plane_normal(scene), 
+                    plane_point   = scene.platforms[lowest_index].origin, 
+                ); ok {
+                    scene.drag_state.move.initial_offset = point - scene.platforms[lowest_index].origin
+                }
+            }
+
             move_plane_normal := get_move_plane_normal(scene)
             if point, ok := ray_plane_intersect(
                 ray_origin    = ray_origin,
                 ray_direction = ray_direction,
                 plane_normal  = move_plane_normal, 
-                plane_point   = platform.origin, 
+                plane_point   = scene.platforms[lowest_index].origin, 
             ); ok {
-                prev_origin := platform.origin
+                base_platform := &scene.platforms[lowest_index]
+                prev_origin   := base_platform.origin
                 
-                platform.origin = (1 - move_plane_normal) * (point - scene.drag_state.move.initial_offset) + 
-                    platform.origin * move_plane_normal
+                base_platform.origin = (1 - move_plane_normal) * (point - scene.drag_state.move.initial_offset) + base_platform.origin * move_plane_normal
+                
                 if ctx.settings.editor.snap_to_grid {
-                    platform.origin = linalg.round(platform.origin / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
+                    base_platform.origin = linalg.round(base_platform.origin / ctx.settings.editor.grid_size) * ctx.settings.editor.grid_size
                 }
                 if ctx.settings.editor.lock_z {
-                    platform.origin.z = scene.drag_state.move.initial_origin.z
+                    base_platform.origin.z = prev_origin.z
                 }
-                scene.drag_state.move.has_delta |= prev_origin != platform.origin
+
+                delta := base_platform.origin - prev_origin
+
+                scene.drag_state.move.has_delta |= delta != 0
+
+                for index in scene.selection.set do if index != lowest_index {
+                    scene.platforms[index].origin += delta
+                }
             }
         }
     }
+    
 }
 
 editor_drag_state_finish :: proc(scene : ^Scene_Editor, ctx : Game_Context) {
@@ -1081,27 +1168,32 @@ editor_save_map :: proc(scene : ^Scene_Editor, allocator := context.allocator) {
         }
     }
 
-    
     header := Editor_Map_Save_Header {
         magic     = MAP_SAVE_MAGIC,
         version   = MAP_SAVE_VERSION,
-        selected  = scene.selection.current,
         free_cam  = scene.free_cam,
         platforms = Range{},
+        selection = {
+            leader = scene.selection.leader,
+            set    = Range{},
+        }
     }
 
     offset := cast(u32)size_of(header)
 
-    platforms_bytes  := slice.to_bytes(scene.platforms[:])
-    header.platforms  = Range{ offset = offset, length = cast(u32)len(platforms_bytes)}
-    // For future data
-    offset           += header.platforms.length
-
+    platforms_bytes      := slice.to_bytes(scene.platforms[:])
+    header.platforms      = Range{ offset = offset, length = cast(u32)len(platforms_bytes)}
+    offset               += header.platforms.length
+    selection_set_bytes  := slice.to_bytes(scene.selection.set[:])
+    header.selection.set  = Range{ offset = offset, length = cast(u32)len(selection_set_bytes)}
+    offset               += header.selection.set.length
+    
     buf := make([dynamic]byte, allocator = allocator)
     defer delete(buf)
 
     append(&buf, ..slice.bytes_from_ptr(&header, size_of(header)))
     append(&buf, ..platforms_bytes)
+    append(&buf, ..selection_set_bytes)
 
     err := os.write_entire_file(MAP_FILE_PATH, buf[:])
     if err != nil {
@@ -1139,18 +1231,28 @@ editor_load_map :: proc(scene : ^Scene_Editor, ctx : Game_Context, allocator := 
     }
 
     map_save := Editor_Map_Save {
-        selected  = header.selected,
         free_cam  = header.free_cam,
         platforms = slice.reinterpret(
             []Platform,
             map_data[header.platforms.offset:][:header.platforms.length],
-        )
+        ),
+        selection = {
+            set    = slice.reinterpret(
+                []i32,
+                map_data[header.selection.set.offset:][:header.selection.set.length],
+            ),
+            leader = header.selection.leader, 
+        }
+
     }
 
     // Do call editor_destroy_snapshot on this one, since the platforms point to the map_data
     // We will free map_data once the scope ends
     snapshot := Editor_Snapshot {
-        selected  = map_save.selected,
+        selection = {
+            set    = map_save.selection.set,
+            leader = map_save.selection.leader,
+        },
         platforms = map_save.platforms,
     }
 
@@ -1161,7 +1263,8 @@ editor_load_map :: proc(scene : ^Scene_Editor, ctx : Game_Context, allocator := 
 }
 
 editor_destroy_snapshot :: proc(snapshot : Editor_Snapshot, allocator : runtime.Allocator) {
-    delete(snapshot.platforms, allocator = allocator)
+    delete(snapshot.platforms,     allocator = allocator)
+    delete(snapshot.selection.set, allocator = allocator)
 }
 
 editor_get_grid_axis :: proc(ctx : Game_Context) -> bit_set[Debug_Grid_Axis; u8] {

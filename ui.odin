@@ -720,22 +720,35 @@ ui_push_label_button_with_icon :: proc(
             anchor = {
                 element = {0, .5},
                 parent  = {0, .5 },
-                offset  = {4, 0}
+                offset  = {8, 0}
             },
             icon   = icon,
             color  = disabled ? hsv(0, 0, .6) : hsv(0, 0, 1)
         )
 
-        ui_push_text(
+        label_rect, _ := ui_push_rect(
             ui     = ui,
-            text   = text,
+            sizing = { Percent_Offset{1, -(32 + 8)} , Percent{1}},
             anchor = {
-                element = {0, .5},
-                parent  = {0, .5 },
                 offset  = {32 + 8, 0}
             },
-            color  = disabled ? hsv(0, 0, .6) : hsv(0, 0, 1)
         )
+
+        ui_push_container(ui, label_rect)
+        {
+            defer ui_pop_container(ui)
+            
+            ui_push_text(
+                ui     = ui,
+                text   = text,
+                anchor = {
+                    element = {.5, .5},
+                    parent  = {.5, .5 },
+                },
+                color = disabled ? hsv(0, 0, .6) : hsv(0, 0, 1)
+            )
+        }
+
     }
     clicked &= !disabled
     return

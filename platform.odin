@@ -7,7 +7,7 @@ MIN_PLATFORM_SIZE    :: [3]f32{ .1, .1, .1}
 
 Platform :: struct {
     origin  : [3]f32,
-    size    : [3]f32,
+    size    : [3]f32,    
     variant : Platform_Variant
 }
 
@@ -273,7 +273,7 @@ pick_box_face :: proc(
         box_size      = box_size,
     ); hit {
         return face
-    }
+    } 
 
     edges     := get_box_edges(box_origin, box_size)
     best_dist := max(f32)
@@ -285,7 +285,7 @@ pick_box_face :: proc(
 
         dot0 := linalg.dot(n0, ray_direction)
         dot1 := linalg.dot(n1, ray_direction)
-
+        // dot < 0 meaning facing towards the ray
         if (dot0 < 0) == (dot1 < 0) do continue
 
         dist := ray_segment_distance_sqr(ray_origin, ray_direction, edge.p0, edge.p1)
@@ -296,6 +296,82 @@ pick_box_face :: proc(
     }
 
     return best_face
+}
+
+pick_box_face_multi :: proc(
+    ray_origin    : [3]f32,
+    ray_direction : [3]f32,
+    platforms     : []Platform,
+    indices       : []i32,
+) -> (pick_index : i32, pick_face: Box_Face) {
+    pick_index = -1
+
+    // Check direct hit first
+    best_dist := max(f32)
+    for index in indices {
+        if dist, face, hit := ray_box_intersect(
+            ray_origin    = ray_origin,
+            ray_direction = ray_direction,
+            box_origin    = platforms[index].origin,
+            box_size      = platforms[index].size,
+        ); hit && dist < best_dist {
+            dist       = best_dist
+            pick_index = index
+            pick_face  = face
+        }
+    }
+
+    if pick_index >= 0 do return
+
+    best_dist = max(f32)
+    
+    for index in indices {
+        edges := get_box_edges(platforms[index].origin, platforms[index].size)
+        for edge in edges {
+            n0 := box_face_normals[edge.f0]
+            n1 := box_face_normals[edge.f1]
+
+            dot0 := linalg.dot(n0, ray_direction)
+            dot1 := linalg.dot(n1, ray_direction)
+            // dot < 0 meaning facing towards the ray
+            if (dot0 < 0) == (dot1 < 0) do continue
+
+            dist := ray_segment_distance_sqr(ray_origin, ray_direction, edge.p0, edge.p1)
+            if dist < best_dist {
+                best_dist  = dist
+                pick_index = index
+                pick_face  = edge.f0 if dot0 > dot1 else edge.f1
+            }
+        }
+    }
+
+    return
+}
+
+// Find all the coplanar faces
+pick_face_extend_targets :: proc(
+    lead_index : i32,
+    lead_face  : Box_Face,
+    platforms  : []Platform,
+    indices    : []i32,
+    targets    : ^[dynamic]Face_Extend_Target,
+) {
+    lead_normal       := box_face_normals       [lead_face]
+    lead_normal_index := box_face_normal_indices[lead_face]
+    lead_center       := platforms[lead_index].origin + platforms[lead_index].size * .5
+    lead_face_pos     := lead_center + lead_normal * platforms[lead_index].size * .5
+
+    for index in indices {
+        center        := platforms[index].origin + platforms[index].size * .5
+        face_position := center + lead_normal * platforms[index].size * .5
+        if abs(face_position[lead_normal_index] - lead_face_pos[lead_normal_index]) < 1e-8 {
+            append(targets, {
+                index          = index,
+                initial_origin = platforms[index].origin,
+                initial_size   = platforms[index].size,
+            })
+        }
+    }
 }
 
 get_box_quad_by_face :: proc(
@@ -343,4 +419,14 @@ snap_platform_to_grid :: proc(platform : ^Platform, grid_unit : f32) {
     platform.origin = linalg.round(platform.origin / grid_unit) * grid_unit
     platform.size   = linalg.round(platform.size / grid_unit) * grid_unit
     platform.size   = linalg.max(platform.size, MIN_PLATFORM_SIZE)
+}
+
+get_centroid_of_platforms :: proc(platforms : []Platform, indices : []i32) -> (centroid : [3]f32) {
+    if len(indices) == 0 do return
+
+    for index in indices {
+        centroid += platforms[index].origin + platforms[index].size * .5 
+    }
+    centroid /= cast(f32)len(indices) 
+    return
 }
