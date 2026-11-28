@@ -182,7 +182,7 @@ editor_selection_changed :: proc(scene : ^Scene_Editor) -> bool {
 }
 
 editor_selection_toggle :: proc(scene : ^Scene_Editor, index : i32) {
-    for &sel_index, set_index in scene.selection.set {
+    for sel_index, set_index in scene.selection.set {
         if sel_index == index {
             unordered_remove(&scene.selection.set, set_index)
             // if delete the leader move the leader index elsewhere 

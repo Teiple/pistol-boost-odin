@@ -3,24 +3,19 @@ package demo
 import "core:fmt"
 import "core:slice"
 
-Box :: struct {
-	origin : [3]f32,
-	size   : [3]f32,
-}
-
-Platform :: struct {
-	using _ : Box,
-	variant : int,
-}
 
 main :: proc() {
-	arr : [dynamic]Platform
-	append(&arr, {origin = 0, size = 1, variant = 2})
-	append(&arr, {origin = 0, size = 1, variant = 2})
-	append(&arr, {origin = 0, size = 1, variant = 2})
-	append(&arr, {origin = 0, size = 1, variant = 2})
+	arr : [dynamic]int
+	append(&arr, 1)
+	append(&arr, 2)
+	append(&arr, 4)
+	append(&arr, 6)
 
-	boxes := cast([]Box)arr[:]
-
-	fmt.println(boxes)
+	target := 2
+	for &val, i in arr {
+		if val == target {
+			unordered_remove(&arr, i) 
+			fmt.println(val)
+		}
+	}
 }
